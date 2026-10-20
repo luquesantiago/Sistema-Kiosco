@@ -6,6 +6,10 @@ import { ListaProductos } from '../admin/productos/ListaProductos.js';
 import { NuevoProducto } from '../admin/productos/NuevoProducto.js';
 import { Proveedores } from '../admin/Proveedores.js';
 import { Usuarios } from '../admin/Usuarios.js';
+import { IngresoMercaderia } from '../stock/IngresoMercaderia.js';
+import { DetalleIngreso, Ingresos } from '../stock/Ingresos.js';
+import { StockAdmin } from '../stock/StockAdmin.js';
+import { VentasSinSistema } from '../stock/VentasSinSistema.js';
 import { Venta } from '../pos/Venta.js';
 import { CambiarContrasena } from './CambiarContrasena.js';
 import { Ingresar } from './Ingresar.js';
@@ -19,6 +23,7 @@ export const rutas: RouteObject[] = [
     children: [
       { index: true, element: <RedireccionInicio /> },
       { path: 'venta', element: <Venta /> },
+      { path: 'stock/ingreso', element: <IngresoMercaderia /> },
       { path: 'cuenta/contrasena', element: <CambiarContrasena /> },
       {
         path: 'admin',
@@ -29,6 +34,10 @@ export const rutas: RouteObject[] = [
           { path: 'productos/nuevo', element: <NuevoProducto /> },
           { path: 'productos/aumento', element: <AumentoPrecios /> },
           { path: 'productos/:id', element: <FichaProducto /> },
+          { path: 'stock', element: <StockAdmin /> },
+          { path: 'stock/ventas-sin-sistema', element: <VentasSinSistema /> },
+          { path: 'stock/ingresos', element: <Ingresos /> },
+          { path: 'stock/ingresos/:id', element: <DetalleIngreso /> },
           { path: 'proveedores', element: <Proveedores /> },
           { path: 'usuarios', element: <Usuarios /> },
         ],

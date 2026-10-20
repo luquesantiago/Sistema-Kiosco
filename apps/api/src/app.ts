@@ -13,6 +13,7 @@ import { rutasAuth } from './modules/auth/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
 import { rutasProductos } from './modules/productos/rutas.js';
 import { rutasProveedores } from './modules/proveedores/rutas.js';
+import { rutasStock } from './modules/stock/rutas.js';
 import { rutasUsuarios } from './modules/usuarios/rutas.js';
 import { registrarSesion } from './plugins/sesion.js';
 
@@ -66,6 +67,7 @@ export async function crearApp({
       await api.register(rutasUsuarios, { prefix: '/usuarios', prisma });
       await api.register(rutasProveedores, { prefix: '/proveedores', prisma, ahora });
       await api.register(rutasProductos, { prefix: '/productos', prisma });
+      await api.register(rutasStock, { prefix: '/stock', prisma });
     },
     { prefix: '/api' },
   );

@@ -24,4 +24,6 @@ export const CODIGOS_ERROR = {
   contrasenaActualIncorrecta: 'CONTRASENA_ACTUAL_INCORRECTA',
   codigoExistente: 'CODIGO_EXISTENTE',
   proveedorInactivo: 'PROVEEDOR_INACTIVO',
+  productoNoEncontrado: 'PRODUCTO_NO_ENCONTRADO',
+  costoNoPermitido: 'COSTO_NO_PERMITIDO',
 } as const;

@@ -24,20 +24,22 @@ enum Rol {
 }
 
 model Usuario {
-  id               String         @id @default(uuid(7)) @db.Uuid
+  id               String              @id @default(uuid(7)) @db.Uuid
   nombre           String
   /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
-  usuario          String         @unique
-  contrasenaHash   String         @map("contrasena_hash")
+  usuario          String              @unique
+  contrasenaHash   String              @map("contrasena_hash")
   rol              Rol
-  activo           Boolean        @default(true)
-  intentosFallidos Int            @default(0) @map("intentos_fallidos")
-  bloqueadoHasta   DateTime?      @map("bloqueado_hasta") @db.Timestamptz
-  ultimoIngreso    DateTime?      @map("ultimo_ingreso") @db.Timestamptz
-  creadoEn         DateTime       @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn    DateTime       @updatedAt @map("actualizado_en") @db.Timestamptz
+  activo           Boolean             @default(true)
+  intentosFallidos Int                 @default(0) @map("intentos_fallidos")
+  bloqueadoHasta   DateTime?           @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso    DateTime?           @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn         DateTime            @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn    DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
   sesiones         Sesion[]
   cambiosPrecio    CambioPrecio[]
+  movimientosStock MovimientoStock[]
+  ingresos         IngresoMercaderia[]
 
   @@map("usuarios")
 }
@@ -71,39 +73,42 @@ enum OrigenCambioPrecio {
 }
 
 model Proveedor {
-  id            String      @id @default(uuid(7)) @db.Uuid
+  id            String              @id @default(uuid(7)) @db.Uuid
   nombre        String
   telefono      String?
   notas         String?
-  diasPedido    DiaSemana[] @map("dias_pedido")
-  diasEntrega   DiaSemana[] @map("dias_entrega")
-  activo        Boolean     @default(true)
-  creadoEn      DateTime    @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn DateTime    @updatedAt @map("actualizado_en") @db.Timestamptz
+  diasPedido    DiaSemana[]         @map("dias_pedido")
+  diasEntrega   DiaSemana[]         @map("dias_entrega")
+  activo        Boolean             @default(true)
+  creadoEn      DateTime            @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
   productos     Producto[]
+  ingresos      IngresoMercaderia[]
 
   @@map("proveedores")
 }
 
 model Producto {
-  id             String         @id @default(uuid(7)) @db.Uuid
+  id             String            @id @default(uuid(7)) @db.Uuid
   /// Sin espacios en los extremos. Varios productos pueden no tener código (NULL).
-  codigoBarras   String?        @unique @map("codigo_barras")
+  codigoBarras   String?           @unique @map("codigo_barras")
   nombre         String
   /// Nombre sin acentos, en minúsculas y con espacios colapsados, para buscar.
-  nombreBusqueda String         @map("nombre_busqueda")
-  precio         Decimal        @db.Decimal(12, 2)
-  costo          Decimal?       @db.Decimal(12, 2)
+  nombreBusqueda String            @map("nombre_busqueda")
+  precio         Decimal           @db.Decimal(12, 2)
+  costo          Decimal?          @db.Decimal(12, 2)
   /// Lo mueve el cambio `stock`; acá no se edita.
-  stockActual    Int            @default(0) @map("stock_actual")
-  stockMinimo    Int            @map("stock_minimo")
-  stockMaximo    Int            @map("stock_maximo")
-  proveedorId    String?        @map("proveedor_id") @db.Uuid
-  proveedor      Proveedor?     @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
-  activo         Boolean        @default(true)
-  creadoEn       DateTime       @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn  DateTime       @updatedAt @map("actualizado_en") @db.Timestamptz
+  stockActual    Int               @default(0) @map("stock_actual")
+  stockMinimo    Int               @map("stock_minimo")
+  stockMaximo    Int               @map("stock_maximo")
+  proveedorId    String?           @map("proveedor_id") @db.Uuid
+  proveedor      Proveedor?        @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  activo         Boolean           @default(true)
+  creadoEn       DateTime          @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn  DateTime          @updatedAt @map("actualizado_en") @db.Timestamptz
   cambiosPrecio  CambioPrecio[]
+  movimientos    MovimientoStock[]
+  itemsIngreso   ItemIngreso[]
 
   @@index([nombreBusqueda])
   @@index([proveedorId])
@@ -125,4 +130,73 @@ model CambioPrecio {
 
   @@index([productoId, creadoEn])
   @@map("cambios_precio")
+}
+
+enum TipoMovimiento {
+  compra
+  ajuste
+  venta
+  anulacion
+}
+
+enum MotivoAjuste {
+  rotura
+  vencimiento
+  robo
+  conteo
+  venta_sin_sistema
+  correccion
+  otro
+}
+
+/// Registro inmutable de cada cambio de stock. Solo `registrarMovimiento` los crea.
+model MovimientoStock {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  productoId      String             @map("producto_id") @db.Uuid
+  producto        Producto           @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  tipo            TipoMovimiento
+  /// Obligatorio cuando tipo = ajuste; vacío en los demás (lo valida el servicio).
+  motivo          MotivoAjuste?
+  /// Con signo: positiva suma, negativa resta.
+  cantidad        Int
+  stockResultante Int                @map("stock_resultante")
+  nota            String?
+  usuarioId       String             @map("usuario_id") @db.Uuid
+  usuario         Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  ingresoId       String?            @map("ingreso_id") @db.Uuid
+  ingreso         IngresoMercaderia? @relation(fields: [ingresoId], references: [id], onDelete: Restrict)
+  creadoEn        DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+
+  @@index([productoId, creadoEn])
+  @@index([ingresoId])
+  @@map("movimientos_stock")
+}
+
+model IngresoMercaderia {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  proveedorId String?           @map("proveedor_id") @db.Uuid
+  proveedor   Proveedor?        @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  usuarioId   String            @map("usuario_id") @db.Uuid
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  nota        String?
+  creadoEn    DateTime          @default(now()) @map("creado_en") @db.Timestamptz
+  items       ItemIngreso[]
+  movimientos MovimientoStock[]
+
+  @@index([creadoEn])
+  @@map("ingresos_mercaderia")
+}
+
+model ItemIngreso {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  ingresoId     String            @map("ingreso_id") @db.Uuid
+  ingreso       IngresoMercaderia @relation(fields: [ingresoId], references: [id], onDelete: Restrict)
+  productoId    String            @map("producto_id") @db.Uuid
+  producto      Producto          @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  cantidad      Int
+  /// Solo si lo cargó el admin.
+  costoUnitario Decimal?          @map("costo_unitario") @db.Decimal(12, 2)
+
+  @@index([ingresoId])
+  @@map("items_ingreso")
 }

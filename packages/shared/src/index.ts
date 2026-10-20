@@ -4,4 +4,5 @@ export * from './estado.js';
 export * from './montos.js';
 export * from './productos.js';
 export * from './proveedores.js';
+export * from './stock.js';
 export * from './usuarios.js';

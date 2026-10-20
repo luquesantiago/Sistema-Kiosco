@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { limpiarBase } from './base.js';
+import { limpiarBase, prismaTest } from './base.js';
 import { crearAppDePrueba, crearUsuarioDePrueba, ingresar, sesionDe } from './ayudas.js';
 
 /** Las únicas rutas de la API que se pueden usar sin sesión. */
 const RUTAS_ABIERTAS = ['POST /api/auth/ingresar', 'GET /api/health'];
 
 /** Módulos solo para el admin, salvo las rutas indicadas que también usa el empleado. */
-const PREFIJOS_ADMIN = ['/api/usuarios', '/api/proveedores', '/api/productos'];
-const RUTAS_DEL_EMPLEADO = ['GET /api/productos'];
+const PREFIJOS_ADMIN = ['/api/usuarios', '/api/proveedores', '/api/productos', '/api/stock'];
+const RUTAS_DEL_EMPLEADO = [
+  'GET /api/productos',
+  'POST /api/stock/ingresos',
+  'GET /api/stock/proveedores',
+];
 
 const ID_CUALQUIERA = '0198a5b0-0000-7000-8000-000000000000';
 
@@ -58,7 +62,7 @@ describe('acceso a la API según sesión', () => {
     expect(res.json().error.codigo).toBe('SIN_PERMISO');
   });
 
-  it('las rutas de usuarios, proveedores y productos son de admin, salvo la búsqueda', async () => {
+  it('usuarios, proveedores, productos y stock son de admin, salvo búsqueda e ingreso', async () => {
     const { app } = await crearAppDePrueba();
     await crearUsuarioDePrueba('juan');
     const cookies = await sesionDe(app, 'juan');
@@ -72,6 +76,9 @@ describe('acceso a la API según sesión', () => {
     expect(deAdmin.map(({ m, url }) => `${m} ${url}`)).toEqual(
       expect.arrayContaining([
         'GET /api/proveedores',
+        'POST /api/stock/ajustes',
+        'GET /api/stock/ingresos',
+        'GET /api/stock/productos/:id/movimientos',
         'POST /api/productos/aumento',
         'GET /api/productos/:id/historial-precios',
       ]),
@@ -88,6 +95,23 @@ describe('acceso a la API según sesión', () => {
 
     const busqueda = await app.inject({ method: 'GET', url: '/api/productos?q=x', cookies });
     expect(busqueda.statusCode).toBe(200);
+
+    const producto = await prismaTest.producto.create({
+      data: {
+        nombre: 'Agua',
+        nombreBusqueda: 'agua',
+        precio: '500',
+        stockMinimo: 0,
+        stockMaximo: 0,
+      },
+    });
+    const ingreso = await app.inject({
+      method: 'POST',
+      url: '/api/stock/ingresos',
+      cookies,
+      payload: { items: [{ productoId: producto.id, cantidad: 6 }] },
+    });
+    expect(ingreso.statusCode).toBe(201);
   });
 });
 

@@ -5,7 +5,9 @@ import { useSalir, useSesion } from './sesion.js';
 
 const ENLACES: { a: string; texto: string; roles: Rol[] }[] = [
   { a: '/venta', texto: 'Venta', roles: ['admin', 'empleado'] },
+  { a: '/stock/ingreso', texto: 'Ingreso de mercadería', roles: ['admin', 'empleado'] },
   { a: '/admin/productos', texto: 'Productos', roles: ['admin'] },
+  { a: '/admin/stock', texto: 'Stock', roles: ['admin'] },
   { a: '/admin/proveedores', texto: 'Proveedores', roles: ['admin'] },
   { a: '/admin/usuarios', texto: 'Usuarios', roles: ['admin'] },
   { a: '/cuenta/contrasena', texto: 'Mi contraseña', roles: ['admin', 'empleado'] },

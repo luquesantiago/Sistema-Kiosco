@@ -42,11 +42,16 @@
 
 ### Stock
 - La venta descuenta el stock automáticamente.
-- El ingreso de mercadería (compra a un proveedor) suma stock.
-- Los ajustes manuales (rotura, vencimiento, robo, conteo) requieren un motivo y solo los hace el admin.
+- **Ingreso de mercadería** (compra a un proveedor): lo cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre. El proveedor es opcional y se puede agregar una nota (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
+- **Costo en el ingreso:** opcional y **solo visible para el admin**, que ve el costo actual precargado. Si lo cambia, se actualiza el costo del producto y queda en el historial de precios. El empleado no ve ni carga costos.
+- Si se escanea un código que no está cargado, la pantalla avisa que lo tiene que cargar el admin, sin perder lo ya cargado.
+- **Ajustes manuales:** solo el admin, con un motivo obligatorio: rotura, vencimiento, robo, conteo, venta sin sistema, corrección u otro (con "otro" la nota es obligatoria).
+- **Conteo rápido:** el admin carga la cantidad contada y el sistema registra un ajuste por la diferencia (nada si coincide).
 - El stock **puede quedar negativo**: nunca bloquea una venta.
 - Cada cambio de stock queda como un movimiento (venta, compra, ajuste o anulación) con usuario y fecha; el stock actual del producto se actualiza en la misma operación que el movimiento.
+- Los movimientos **no se editan ni se borran**: un error se corrige con otro movimiento (por ejemplo, un ajuste con motivo "corrección").
 - El admin tiene una carga rápida para descontar varios productos de una vez, con motivo "venta sin sistema" (ver "Corte de internet o de luz").
+- El admin ve el historial de movimientos de cada producto y la lista de ingresos con su detalle.
 
 ### Ventas (POS)
 - Venta rápida escaneando con el lector de código de barras.

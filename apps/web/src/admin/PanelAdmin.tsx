@@ -4,6 +4,7 @@ import { EstadoSistema } from './EstadoSistema.js';
 const SECCIONES = [
   { a: '/admin/productos', titulo: 'Productos', detalle: 'Catálogo, precios e historial' },
   { a: '/admin/productos/aumento', titulo: 'Aumento de precios', detalle: 'Por porcentaje' },
+  { a: '/admin/stock', titulo: 'Stock', detalle: 'Ajustes, conteos, ingresos y movimientos' },
   { a: '/admin/proveedores', titulo: 'Proveedores', detalle: 'Contacto y días de pedido' },
   { a: '/admin/usuarios', titulo: 'Usuarios', detalle: 'Altas, roles y contraseñas' },
 ];
