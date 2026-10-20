@@ -3,7 +3,7 @@
 ## 1. Modelo de datos y migraciones
 
 - [x] 1.1 Agregar a `prisma/schema.prisma` el enum `Rol` y los modelos `Usuario` y `Sesion` según `design.md`, generar la migración `usuarios` con `prisma migrate dev` y agregar los scripts `db:migrate`/`db:deploy` (API y alias en la raíz); verificar que `pnpm db:migrate` crea las tablas `usuarios` y `sesiones` en la base de desarrollo
-- [ ] 1.2 Configurar en Vitest de la API un `globalSetup` que corre `prisma migrate deploy` sobre `kiosco_test`, la ayuda `limpiarBase()` y `fileParallelism: false`; verificar que los tests existentes de `estado-del-servicio` siguen pasando y que la CI aplica las migraciones
+- [x] 1.2 Configurar en Vitest de la API un `globalSetup` que corre `prisma migrate deploy` sobre `kiosco_test`, la ayuda `limpiarBase()` y `fileParallelism: false`; verificar que los tests existentes de `estado-del-servicio` siguen pasando y que la CI aplica las migraciones
 
 ## 2. Esquemas compartidos
 
