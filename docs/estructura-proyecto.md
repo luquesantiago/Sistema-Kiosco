@@ -7,21 +7,25 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ```
    [Celular admin] -------+
    (precios, dashboard)   |
-                          v
-   [PC kiosco] ------> SERVIDOR
+                          v  HTTPS
+   [PC kiosco] ------> VPS (Docker Compose)
    + lector código        |
-     de barras (USB)      +-- Aplicación (backend + frontend)
-   + impresora de         +-- Base de datos
-     tickets térmica      +-- WAHA (WhatsApp HTTP API)
-                          +-- Tareas programadas (aviso 12:00)
+     de barras (USB)      +-- caddy : proxy inverso + HTTPS (único puerto expuesto)
+   + impresora de         |     |
+     tickets térmica      |     v
+                          +-- app   : Fastify (API + build de React)
+                          |           + tarea programada (aviso 12:00)
+                          +-- db    : PostgreSQL        (red interna)
+                          +-- waha  : WhatsApp HTTP API (red interna)
                           |
             +-------------+--------------+
             v             v              v
          ARCA/AFIP    Mercado Pago    WhatsApp
-         (WSFE, CAE)  (API + webhook) (vía WAHA)
+         (WSFE, CAE)  (API + webhook) (vía waha)
 ```
 
 - **Lector de código de barras:** USB en modo teclado (HID). Escribe el código y un Enter en el campo activo, así que no necesita integración especial.
+- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md).
 - **Impresora:** térmica de tickets común (58 u 80 mm). Con factura electrónica **no hace falta impresora fiscal**.
 
 ## Módulos y dependencias
@@ -120,4 +124,24 @@ Tarea programada 12:00
 
 ## Estructura de carpetas
 
-**Pendiente**: se define junto con el [stack tecnológico](stack-tecnologico.md).
+Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)):
+
+```
+/
+├── apps/
+│   ├── api/                  # Backend Fastify (TypeScript)
+│   │   ├── prisma/           # schema.prisma y migraciones
+│   │   └── src/
+│   │       ├── modules/      # un módulo por dominio: usuarios, productos, proveedores, stock, ventas, caja...
+│   │       ├── integrations/ # clientes de ARCA, Mercado Pago y WAHA
+│   │       └── jobs/         # tareas programadas (aviso de reposición 12:00)
+│   └── web/                  # Frontend React + Vite
+│       └── src/
+│           ├── pos/          # pantalla de venta (escritorio, teclado y lector)
+│           └── admin/        # pantallas de admin y dashboard (responsive)
+├── packages/
+│   └── shared/               # esquemas Zod y tipos compartidos entre api y web
+├── infra/                    # docker-compose.yml, Caddyfile y scripts de backup
+├── docs/                     # documentación del proyecto
+└── openspec/                 # cambios y specs de OpenSpec
+```

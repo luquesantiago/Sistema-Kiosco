@@ -53,4 +53,4 @@ Cada etapa se trabaja como un cambio de OpenSpec (`/opsx:propose`).
 
 - [Estructura del proyecto](estructura-proyecto.md): módulos, arquitectura y modelo de datos.
 - [Requisitos y límites](requisitos-y-limites.md): qué hace, qué no hace y preguntas abiertas.
-- [Stack tecnológico](stack-tecnologico.md): decisiones técnicas (a definir).
+- [Stack tecnológico](stack-tecnologico.md): decisiones técnicas (TypeScript, Fastify, React + Vite, PostgreSQL + Prisma, Docker Compose).

@@ -27,7 +27,7 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 - [Visión general](docs/README.md)
 - [Estructura del proyecto](docs/estructura-proyecto.md)
 - [Requisitos y límites](docs/requisitos-y-limites.md)
-- [Stack tecnológico](docs/stack-tecnologico.md) (a definir)
+- [Stack tecnológico](docs/stack-tecnologico.md): TypeScript, Fastify, React + Vite, PostgreSQL + Prisma y Docker Compose
 
 ## Metodología
 
