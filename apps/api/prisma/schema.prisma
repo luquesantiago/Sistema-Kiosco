@@ -1,0 +1,19 @@
+// Esquema de la base de datos del kiosco.
+//
+// Convenciones (aplican desde el primer modelo):
+// - IDs: String @id @default(uuid(7)) @db.Uuid  (UUID v7, ordenables por fecha).
+// - Montos: Decimal @db.Decimal(12, 2), nunca Float.
+// - Cantidades y stock: Int (no hay productos por peso).
+// - Fechas: DateTime @db.Timestamptz, guardadas en UTC; se convierten a hora
+//   de Argentina al mostrar y al agrupar reportes.
+// - Modelos y campos en español (PascalCase / camelCase), con @@map / @map a
+//   tablas y columnas en snake_case.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
