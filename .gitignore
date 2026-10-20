@@ -1,0 +1,24 @@
+# Entorno y secretos (credenciales ARCA, Mercado Pago, WAHA)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+
+# Configuración local de Claude Code
+.claude/settings.local.json
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dependencias y builds
+node_modules/
+dist/
+build/
+__pycache__/
+*.log
