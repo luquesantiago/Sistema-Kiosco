@@ -13,9 +13,8 @@ const { config } = resultado;
 const prisma = crearPrisma(config.DATABASE_URL);
 
 const app = await crearApp({
-  verificarBase: async () => {
-    await prisma.$queryRaw`SELECT 1`;
-  },
+  prisma,
+  cookieSegura: config.NODE_ENV === 'production',
   // Tanto src/ (dev) como dist/ (build) están un nivel debajo de apps/api.
   webDist: fileURLToPath(new URL('../../web/dist/', import.meta.url)),
   logger:

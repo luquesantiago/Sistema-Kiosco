@@ -10,9 +10,23 @@ export function respuestaNoEncontrado(url: string): ErrorApi {
   return errorApi(CODIGOS_ERROR.noEncontrado, `No existe la ruta ${url.split('?')[0]}.`);
 }
 
+/** Error de negocio que se responde tal cual con su código HTTP. */
+export class ErrorHttp extends Error {
+  constructor(
+    readonly status: number,
+    readonly codigo: string,
+    mensaje: string,
+  ) {
+    super(mensaje);
+  }
+}
+
 /** Traduce cualquier error al formato común `{ error: { codigo, mensaje } }`. */
 export function registrarManejoDeErrores(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof ErrorHttp) {
+      return reply.status(error.status).send(errorApi(error.codigo, error.message));
+    }
     if (hasZodFastifySchemaValidationErrors(error) || error.validation) {
       return reply
         .status(400)

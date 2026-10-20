@@ -57,10 +57,22 @@ pnpm db:up
 ```
 
 ```bash
+pnpm db:migrate
+```
+
+Aplica las migraciones a la base de desarrollo. Hay que repetirlo cada vez que se agregan migraciones nuevas.
+
+```bash
+pnpm --filter api usuarios:crear-admin --usuario admin --nombre "Tu nombre"
+```
+
+Crea el primer admin; la contraseña se pide por consola sin mostrarla. Sin ese admin nadie puede entrar a la web. Los demás usuarios los crea el admin desde **Usuarios**.
+
+```bash
 pnpm dev
 ```
 
-`pnpm dev` levanta la API en `http://localhost:3000` y la web en `http://localhost:5173`. La página de inicio muestra si la API y la base de datos responden.
+`pnpm dev` levanta la API en `http://localhost:3000` y la web en `http://localhost:5173`. Ingresá con el admin: el panel de administración muestra si la API y la base de datos responden.
 
 Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la web con `API_PORT` igual a ese puerto. Si el 5173 está ocupado, Vite elige el siguiente libre y lo muestra en la consola.
 
@@ -74,6 +86,9 @@ Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la
 | `pnpm format` | Formatea el código con Prettier |
 | `pnpm build` / `pnpm start` | Build de producción; la API sirve la web desde el mismo puerto |
 | `pnpm db:up` / `pnpm db:down` | Levanta o detiene PostgreSQL de desarrollo (ver [`infra/`](infra/README.md)) |
+| `pnpm db:migrate` | Crea y aplica migraciones en desarrollo (`prisma migrate dev`) |
+| `pnpm db:deploy` | Aplica las migraciones pendientes sin crear nuevas (`prisma migrate deploy`) |
+| `pnpm --filter api usuarios:crear-admin` | Crea un usuario admin desde la consola |
 
 ## Documentación
 

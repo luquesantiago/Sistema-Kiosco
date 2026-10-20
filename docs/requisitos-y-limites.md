@@ -7,6 +7,15 @@
 - El empleado puede abrir y cerrar su turno, vender, cobrar y **anular ventas del día** (ver Ventas).
 - El empleado **no** puede editar precios, borrar ventas, hacer ajustes de stock ni ver el dashboard completo.
 - Las acciones delicadas (anulaciones, descuentos, ajustes de stock, retiros de caja) quedan registradas con usuario y fecha.
+- **Ingreso** con usuario y contraseña. La contraseña tiene al menos 8 caracteres. Tras 5 intentos fallidos seguidos, el usuario queda bloqueado 15 minutos.
+- **Sesiones:** la del empleado dura **7 horas** desde el ingreso (un turno con margen); la del admin, **30 días**. Desactivar a un usuario, cambiarle el rol o restablecerle la contraseña cierra sus sesiones.
+- **Gestión de usuarios:**
+  - El admin crea usuarios, cambia nombre y rol, los desactiva o reactiva y restablece contraseñas.
+  - Los usuarios nunca se borran.
+  - Siempre queda al menos un admin activo, y un admin no puede desactivarse a sí mismo.
+  - Cada usuario puede cambiar su propia contraseña.
+  - No hay recuperación de contraseña por email: la restablece el admin.
+- **Primer admin:** se crea con un comando de consola en el servidor.
 
 ### Productos y precios
 - Alta, baja y modificación de productos con código de barras, nombre, precio, costo, stock mínimo y stock máximo.

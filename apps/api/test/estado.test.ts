@@ -2,21 +2,21 @@ import { estadoServicioSchema } from '@kiosco/shared';
 import { afterAll, describe, expect, it } from 'vitest';
 import { crearApp } from '../src/app.js';
 import { crearPrisma } from '../src/db.js';
+import { prismaTest } from './base.js';
 
-const prisma = crearPrisma(process.env.DATABASE_URL!);
 // Puerto donde no escucha nada: la conexión se rechaza enseguida.
 const prismaCaido = crearPrisma('postgresql://kiosco:kiosco@127.0.0.1:1/kiosco_test');
 
 afterAll(async () => {
-  await prisma.$disconnect();
   await prismaCaido.$disconnect();
 });
 
 describe('GET /api/health', () => {
   it('responde 200 ok cuando la base responde', async () => {
     const app = await crearApp({
+      prisma: prismaTest,
       verificarBase: async () => {
-        await prisma.$queryRaw`SELECT 1`;
+        await prismaTest.$queryRaw`SELECT 1`;
       },
     });
     const res = await app.inject({ method: 'GET', url: '/api/health' });
@@ -29,6 +29,7 @@ describe('GET /api/health', () => {
 
   it('responde 503 degradado sin detalles internos cuando la base está caída', async () => {
     const app = await crearApp({
+      prisma: prismaTest,
       verificarBase: async () => {
         await prismaCaido.$queryRaw`SELECT 1`;
       },
@@ -42,7 +43,10 @@ describe('GET /api/health', () => {
   });
 
   it('responde antes de 3 segundos aunque la base no conteste', async () => {
-    const app = await crearApp({ verificarBase: () => new Promise<void>(() => {}) });
+    const app = await crearApp({
+      prisma: prismaTest,
+      verificarBase: () => new Promise<void>(() => {}),
+    });
     const inicio = Date.now();
     const res = await app.inject({ method: 'GET', url: '/api/health' });
 
@@ -52,7 +56,7 @@ describe('GET /api/health', () => {
   });
 
   it('no pide sesión', async () => {
-    const app = await crearApp({ verificarBase: async () => {} });
+    const app = await crearApp({ prisma: prismaTest, verificarBase: async () => {} });
     const res = await app.inject({ method: 'GET', url: '/api/health', cookies: {} });
     expect(res.statusCode).toBe(200);
   });
