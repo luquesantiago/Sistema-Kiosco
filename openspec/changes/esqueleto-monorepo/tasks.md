@@ -33,11 +33,11 @@
 
 - [x] 6.1 Verificar de punta a punta en local: `pnpm db:up`, `pnpm dev` y la página de inicio muestra la base como ok; con la base bajada (`pnpm db:down`) muestra el estado degradado
 - [x] 6.2 Verificar el modo producción en local: `pnpm build` y luego arrancar la API compilada con `NODE_ENV=production` sirve la web en `/` y la API en `/api/health` desde el mismo puerto
-- [ ] 6.3 Crear `.github/workflows/ci.yml` (Node 24, pnpm/action-setup, `pnpm install --frozen-lockfile`, lint, typecheck, test, build, con PostgreSQL 18 como service y `kiosco_test`); verificar que el workflow corre en verde en GitHub en la rama del cambio
+- [x] 6.3 Crear `.github/workflows/ci.yml` (Node 24, pnpm/action-setup, `pnpm install --frozen-lockfile`, lint, typecheck, test, build, con PostgreSQL 18 como service y `kiosco_test`); verificar que el workflow corre en verde en GitHub en la rama del cambio
 
 ## 7. Documentación
 
-- [ ] 7.1 Actualizar `README.md`: estado "en desarrollo (Etapa 1)", requisitos (Node 24, Corepack/pnpm, Docker) y los comandos para levantar el proyecto (`pnpm install`, `pnpm db:up`, `pnpm dev`, `pnpm test`); verificar siguiendo los pasos desde un clon limpio
+- [x] 7.1 Actualizar `README.md`: estado "en desarrollo (Etapa 1)", requisitos (Node 24, Corepack/pnpm, Docker) y los comandos para levantar el proyecto (`pnpm install`, `pnpm db:up`, `pnpm dev`, `pnpm test`); verificar siguiendo los pasos desde un clon limpio
 - [x] 7.2 Actualizar las etapas en `README.md` y `docs/README.md`: la Etapa 1 se divide en los cambios `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`; la Etapa 2 (Caja) es la puesta en marcha e incluye deploy, backups, WAHA y el envío de notificaciones pendientes; la Etapa 4 solo agrega el aviso de reposición; verificar que ambos archivos dicen lo mismo
 - [x] 7.3 Marcar como resueltas en `docs/requisitos-y-limites.md` las preguntas abiertas, con la respuesta acordada, y llevar las respuestas a los requisitos correspondientes; verificar que las preguntas restantes (modalidad de Mercado Pago, fiado, número de WhatsApp, notas de crédito) siguen abiertas. Respuestas:
   - Sin conexión: no hay modo sin conexión. Durante un corte el empleado anota en papel; después el admin descuenta el stock de lo vendido (ajuste con motivo "venta sin sistema", varios productos de una vez) y registra el total cobrado como ingreso de caja (Etapa 2).
