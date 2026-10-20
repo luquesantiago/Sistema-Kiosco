@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
+    // e2e/ es de Playwright (pnpm e2e).
+    include: ['test/**/*.test.{ts,tsx}'],
   },
 });

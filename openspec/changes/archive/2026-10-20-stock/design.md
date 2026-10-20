@@ -73,7 +73,12 @@
 - **Se reutiliza** `GET /api/productos?q=` de `productos-y-proveedores`, que responde según el rol:
   - El empleado no recibe el costo, así que la pantalla no puede mostrarlo.
   - El admin sí lo recibe y lo usa para precargar el campo.
-- **No hace falta una ruta nueva.**
+- **No hace falta una ruta nueva** para buscar productos.
+
+### Proveedores en el ingreso
+- **Problema:** `GET /api/proveedores` es solo para el admin (spec `proveedores`), pero el empleado también elige el proveedor del ingreso.
+- **Decisión:** `GET /api/stock/proveedores`, para cualquier usuario con sesión, devuelve solo `{ id, nombre }` de los proveedores activos, ordenados por nombre. La lista completa (teléfono, días, notas) sigue siendo del admin.
+- **Más adelante:** el flujo de pedidos a proveedores (pedido del admin, verificación del empleado con faltantes y pago desde la caja) va en un cambio aparte.
 
 ### Web
 - **`/stock/ingreso`** (admin y empleado, en el menú de los dos como "Ingreso de mercadería"):

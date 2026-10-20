@@ -2,8 +2,8 @@ import { CODIGOS_ERROR, type ErrorApi } from '@kiosco/shared';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 
-export function errorApi(codigo: string, mensaje: string): ErrorApi {
-  return { error: { codigo, mensaje } };
+export function errorApi(codigo: string, mensaje: string, detalle?: unknown): ErrorApi {
+  return { error: detalle === undefined ? { codigo, mensaje } : { codigo, mensaje, detalle } };
 }
 
 export function respuestaNoEncontrado(url: string): ErrorApi {
@@ -16,6 +16,8 @@ export class ErrorHttp extends Error {
     readonly status: number,
     readonly codigo: string,
     mensaje: string,
+    /** Datos extra que necesita el cliente para resolver el error. */
+    readonly detalle?: unknown,
   ) {
     super(mensaje);
   }
@@ -25,7 +27,7 @@ export class ErrorHttp extends Error {
 export function registrarManejoDeErrores(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ErrorHttp) {
-      return reply.status(error.status).send(errorApi(error.codigo, error.message));
+      return reply.status(error.status).send(errorApi(error.codigo, error.message, error.detalle));
     }
     if (hasZodFastifySchemaValidationErrors(error) || error.validation) {
       return reply

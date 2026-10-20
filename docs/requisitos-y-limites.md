@@ -42,24 +42,36 @@
 
 ### Stock
 - La venta descuenta el stock automáticamente.
-- El ingreso de mercadería (compra a un proveedor) suma stock.
-- Los ajustes manuales (rotura, vencimiento, robo, conteo) requieren un motivo y solo los hace el admin.
+- **Ingreso de mercadería** (compra a un proveedor): lo cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre. El proveedor es opcional y se puede agregar una nota (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
+- **Costo en el ingreso:** opcional y **solo visible para el admin**, que ve el costo actual precargado. Si lo cambia, se actualiza el costo del producto y queda en el historial de precios. El empleado no ve ni carga costos.
+- Si se escanea un código que no está cargado, la pantalla avisa que lo tiene que cargar el admin, sin perder lo ya cargado.
+- **Ajustes manuales:** solo el admin, con un motivo obligatorio: rotura, vencimiento, robo, conteo, venta sin sistema, corrección u otro (con "otro" la nota es obligatoria).
+- **Conteo rápido:** el admin carga la cantidad contada y el sistema registra un ajuste por la diferencia (nada si coincide).
 - El stock **puede quedar negativo**: nunca bloquea una venta.
 - Cada cambio de stock queda como un movimiento (venta, compra, ajuste o anulación) con usuario y fecha; el stock actual del producto se actualiza en la misma operación que el movimiento.
+- Los movimientos **no se editan ni se borran**: un error se corrige con otro movimiento (por ejemplo, un ajuste con motivo "corrección").
 - El admin tiene una carga rápida para descontar varios productos de una vez, con motivo "venta sin sistema" (ver "Corte de internet o de luz").
+- El admin ve el historial de movimientos de cada producto y la lista de ingresos con su detalle.
 
 ### Ventas (POS)
-- Venta rápida escaneando con el lector de código de barras.
-- Modificar cantidades y quitar ítems antes de cobrar.
+- Venta rápida escaneando con el lector de código de barras: el campo de escaneo queda siempre listo y escanear de nuevo suma una unidad. Los productos sin código se buscan por nombre y se eligen con las flechas.
+- Ítem **"Varios"** con precio libre (y descripción opcional) para lo que no está cargado; no mueve stock.
+- Modificar cantidades y quitar ítems antes de cobrar. El carrito sobrevive a una recarga accidental de la página.
+- **Atajos de teclado** (siempre visibles al pie): F1 efectivo, F2 débito, F3 crédito, F4 Mercado Pago, F6 pago mixto, F7 "Varios", flechas para elegir un ítem, + y − para la cantidad, Supr para quitar, Ctrl+Supr para vaciar (con confirmación) y F9 para imprimir el ticket.
 - Medios de pago: **efectivo**, **débito**, **crédito** y **Mercado Pago**. Las transferencias se reciben por Mercado Pago y se registran con ese medio.
+- **Pago mixto:** el total se puede repartir entre varios medios (un pago por medio); no se confirma hasta que lo asignado sume exactamente el total.
+- **Vuelto opcional:** en efectivo, el empleado puede escribir con cuánto paga el cliente y ve el vuelto; si lo deja vacío, se cobra el total justo.
+- **Precios definidos por el servidor:** el precio de cada producto se toma del catálogo al registrar la venta. Si cambió mientras se armaba el carrito, la venta se rechaza, el carrito muestra los precios nuevos y se vuelve a cobrar.
+- Cada venta tiene un número correlativo, y la venta, sus pagos y el descuento de stock se guardan juntos o nada.
 - Con **Mercado Pago**: el sistema genera el cobro mediante la API de MP y **espera la confirmación del pago** antes de cerrar la venta (Etapa 5; antes se registra a mano).
 - No hay descuentos.
-- Impresión de un ticket o comprobante.
+- **Ticket solo a pedido:** después de cobrar (F9 o botón) o desde el detalle de una venta. Papel de 58 u 80 mm, con la leyenda "No válido como factura".
+- **Listado de ventas:** el empleado ve las del día; el admin, cualquier rango de fechas.
 - **Anulación de ventas:**
   - El empleado puede anular ventas del día (desde la Etapa 2, del turno abierto); las anteriores solo las anula el admin.
   - El motivo es obligatorio.
   - La venta queda en estado `anulada` y nunca se borra, y el stock se repone.
-  - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta.
+  - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta. En la Etapa 1 el aviso queda pendiente y el admin lo ve en "Avisos"; el envío por WhatsApp se suma en la Etapa 2.
 
 ### Caja y turnos
 - 2 turnos de 6 horas: de 7:00 a 13:00 y de 13:00 a 19:00.

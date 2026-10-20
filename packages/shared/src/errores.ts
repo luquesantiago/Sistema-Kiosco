@@ -5,6 +5,8 @@ export const errorApiSchema = z.object({
   error: z.object({
     codigo: z.string(),
     mensaje: z.string(),
+    /** Datos extra de algunos errores (por ejemplo, los precios actuales). */
+    detalle: z.unknown().optional(),
   }),
 });
 
@@ -24,4 +26,10 @@ export const CODIGOS_ERROR = {
   contrasenaActualIncorrecta: 'CONTRASENA_ACTUAL_INCORRECTA',
   codigoExistente: 'CODIGO_EXISTENTE',
   proveedorInactivo: 'PROVEEDOR_INACTIVO',
+  productoNoEncontrado: 'PRODUCTO_NO_ENCONTRADO',
+  costoNoPermitido: 'COSTO_NO_PERMITIDO',
+  productoNoDisponible: 'PRODUCTO_NO_DISPONIBLE',
+  preciosCambiaron: 'PRECIOS_CAMBIARON',
+  fueraDePlazo: 'FUERA_DE_PLAZO',
+  ventaYaAnulada: 'VENTA_YA_ANULADA',
 } as const;
