@@ -7,18 +7,38 @@
 - El empleado puede abrir y cerrar su turno, vender, cobrar y **anular ventas del día** (ver Ventas).
 - El empleado **no** puede editar precios, borrar ventas, hacer ajustes de stock ni ver el dashboard completo.
 - Las acciones delicadas (anulaciones, descuentos, ajustes de stock, retiros de caja) quedan registradas con usuario y fecha.
+- **Ingreso** con usuario y contraseña. La contraseña tiene al menos 8 caracteres. Tras 5 intentos fallidos seguidos, el usuario queda bloqueado 15 minutos.
+- **Sesiones:** la del empleado dura **7 horas** desde el ingreso (un turno con margen); la del admin, **30 días**. Desactivar a un usuario, cambiarle el rol o restablecerle la contraseña cierra sus sesiones.
+- **Gestión de usuarios:**
+  - El admin crea usuarios, cambia nombre y rol, los desactiva o reactiva y restablece contraseñas.
+  - Los usuarios nunca se borran.
+  - Siempre queda al menos un admin activo, y un admin no puede desactivarse a sí mismo.
+  - Cada usuario puede cambiar su propia contraseña.
+  - No hay recuperación de contraseña por email: la restablece el admin.
+- **Primer admin:** se crea con un comando de consola en el servidor.
 
 ### Productos y precios
-- Alta, baja y modificación de productos con código de barras, nombre, precio, costo, stock mínimo y stock máximo.
+- Alta, modificación y desactivación de productos con código de barras, nombre, precio de venta, costo (opcional), stock mínimo, stock máximo y proveedor (opcional, uno por producto). Los productos nunca se borran.
+- El stock actual se muestra pero no se edita en la ficha: lo mueven las ventas, los ingresos y los ajustes (ver Stock).
 - El admin puede **cambiar precios desde el celular**.
-- Búsqueda por código de barras y por nombre.
-- El código de barras es **opcional**: los productos sin código (golosinas sueltas, cargas) se buscan por nombre. Para lo que no está cargado existe un ítem **"Varios"** con precio libre.
+- Búsqueda por código de barras exacto (lo que manda el lector) y por parte del nombre, sin distinguir mayúsculas ni acentos.
+- El **empleado no ve el costo ni el proveedor** de los productos, y solo encuentra los activos.
+- El código de barras es **opcional** y, cuando existe, **único**: los productos sin código (golosinas sueltas, cargas) se buscan por nombre. Para lo que no está cargado existe un ítem **"Varios"** con precio libre.
+- **Alta rápida:** si el admin escanea un código que no está cargado, puede crear el producto con ese código ya completo.
+- **Historial de precios:** cada cambio de precio o de costo queda registrado con usuario, fecha, valores anterior y nuevo, y origen (manual o aumento masivo). El admin lo ve en la ficha del producto.
+- **Aumento masivo por porcentaje:**
+  - El admin aplica un porcentaje (de -50% a +200%) a los productos activos de un proveedor o a todos.
+  - El precio nuevo se redondea hacia arriba a $1, $10, $50 o $100, y nunca queda en cero.
+  - Opcionalmente se aplica el mismo porcentaje al costo, con dos decimales y sin redondeo.
+  - Antes de confirmar se ve una vista previa con el precio actual y el nuevo. Se aplica todo junto o nada.
 - No hay productos por peso: cantidades y stock son números enteros.
 
 ### Proveedores
 - Cada proveedor tiene varios productos asociados.
-- Cada proveedor tiene un **día de toma de pedido** y un **día de entrega** fijos.
-- Los pedidos también se pueden hacer por teléfono en cualquier momento, así que el sistema muestra el teléfono del proveedor.
+- Cada proveedor tiene **días de toma de pedido** y **días de entrega**, que pueden ser varios por semana o ninguno.
+- La lista de proveedores marca cuáles **toman pedido hoy** (según la hora de Argentina) y los muestra primero.
+- Los pedidos también se pueden hacer por teléfono en cualquier momento, así que el sistema muestra el teléfono del proveedor como enlace para llamar desde el celular.
+- Los proveedores no se borran: se desactivan. Un proveedor desactivado no se puede asignar a productos, pero sus productos conservan la asociación.
 
 ### Stock
 - La venta descuenta el stock automáticamente.

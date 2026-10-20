@@ -60,8 +60,9 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | Entidad | Campos principales | Relaciones |
 |---|---|---|
 | **Usuario** | nombre, usuario, contraseña (hash), rol (admin/empleado), activo | Turno, Venta |
-| **Proveedor** | nombre, teléfono, día de toma de pedido, día de entrega, notas | Productos |
-| **Producto** | código de barras (opcional, único si existe), nombre, precio de venta, costo, stock actual (puede ser negativo), stock mínimo, stock máximo, activo | Proveedor (uno) |
+| **Proveedor** | nombre, teléfono, notas, días de toma de pedido (lista de `DiaSemana`), días de entrega (lista de `DiaSemana`), activo | Productos |
+| **Producto** | código de barras (opcional, único si existe), nombre, nombre de búsqueda (sin acentos ni mayúsculas), precio de venta, costo (opcional), stock actual (puede ser negativo, empieza en 0), stock mínimo, stock máximo, activo | Proveedor (uno, opcional), CambiosPrecio |
+| **CambioPrecio** | producto, usuario, precio anterior y nuevo, costo anterior y nuevo, origen (manual/aumento_masivo), fecha | Producto, Usuario |
 | **MovimientoStock** | producto, tipo (venta/compra/ajuste/anulacion), cantidad, motivo, usuario, fecha | Producto, Usuario |
 | **Turno** | usuario, apertura (fecha, monto inicial), cierre (fecha, monto contado), diferencia | Usuario, Ventas, MovimientosCaja |
 | **MovimientoCaja** | turno, tipo (retiro/ingreso/gasto), monto, motivo, usuario | Turno |
