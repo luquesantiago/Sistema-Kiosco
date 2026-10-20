@@ -6,7 +6,13 @@ import { crearAppDePrueba, crearUsuarioDePrueba, ingresar, sesionDe } from './ay
 const RUTAS_ABIERTAS = ['POST /api/auth/ingresar', 'GET /api/health'];
 
 /** Módulos solo para el admin, salvo las rutas indicadas que también usa el empleado. */
-const PREFIJOS_ADMIN = ['/api/usuarios', '/api/proveedores', '/api/productos', '/api/stock'];
+const PREFIJOS_ADMIN = [
+  '/api/usuarios',
+  '/api/proveedores',
+  '/api/productos',
+  '/api/stock',
+  '/api/notificaciones',
+];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
   'POST /api/stock/ingresos',
@@ -62,7 +68,7 @@ describe('acceso a la API según sesión', () => {
     expect(res.json().error.codigo).toBe('SIN_PERMISO');
   });
 
-  it('usuarios, proveedores, productos y stock son de admin, salvo búsqueda e ingreso', async () => {
+  it('los módulos de admin responden 403 al empleado, salvo búsqueda e ingreso', async () => {
     const { app } = await crearAppDePrueba();
     await crearUsuarioDePrueba('juan');
     const cookies = await sesionDe(app, 'juan');
@@ -76,6 +82,7 @@ describe('acceso a la API según sesión', () => {
     expect(deAdmin.map(({ m, url }) => `${m} ${url}`)).toEqual(
       expect.arrayContaining([
         'GET /api/proveedores',
+        'GET /api/notificaciones',
         'POST /api/stock/ajustes',
         'GET /api/stock/ingresos',
         'GET /api/stock/productos/:id/movimientos',
@@ -137,5 +144,42 @@ describe('contraseñas nunca expuestas', () => {
       expect(res.statusCode).toBeLessThan(300);
       expect(res.body).not.toMatch(/contrasena|argon2|clave-/i);
     }
+  });
+});
+
+describe('ventas para admin y empleado', () => {
+  it('el empleado puede vender, listar y anular', async () => {
+    const { app } = await crearAppDePrueba();
+    await crearUsuarioDePrueba('juan');
+    const cookies = await sesionDe(app, 'juan');
+    const producto = await prismaTest.producto.create({
+      data: {
+        nombre: 'Agua',
+        nombreBusqueda: 'agua',
+        precio: '500',
+        stockMinimo: 0,
+        stockMaximo: 0,
+      },
+    });
+
+    const venta = await app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies,
+      payload: {
+        items: [{ productoId: producto.id, cantidad: 1 }],
+        pagos: [{ medio: 'efectivo', monto: '500' }],
+        totalEsperado: '500',
+      },
+    });
+    const lista = await app.inject({ method: 'GET', url: '/api/ventas', cookies });
+    const anulacion = await app.inject({
+      method: 'POST',
+      url: `/api/ventas/${venta.json().id}/anular`,
+      cookies,
+      payload: { motivo: 'prueba' },
+    });
+
+    expect([venta.statusCode, lista.statusCode, anulacion.statusCode]).toEqual([201, 200, 200]);
   });
 });

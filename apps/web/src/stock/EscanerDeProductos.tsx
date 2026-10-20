@@ -1,5 +1,5 @@
 import type { ProductoVenta } from '@kiosco/shared';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { ErrorDeApi, pedir } from '../api/cliente.js';
 
 interface Props<P extends ProductoVenta> {
@@ -8,6 +8,10 @@ interface Props<P extends ProductoVenta> {
   /** Para quien no puede crear productos: qué hacer si el código no existe. */
   avisoInexistente: string;
   etiqueta?: string;
+  /** Para que la pantalla devuelva el foco al campo después de un diálogo. */
+  campoRef?: RefObject<HTMLInputElement | null>;
+  /** Se llama cuando el código no existe (por ejemplo, para un sonido). */
+  alNoEncontrar?: () => void;
 }
 
 /**
@@ -19,8 +23,11 @@ export function EscanerDeProductos<P extends ProductoVenta>({
   alElegir,
   avisoInexistente,
   etiqueta = 'Escaneá o buscá un producto',
+  campoRef,
+  alNoEncontrar,
 }: Props<P>) {
-  const campo = useRef<HTMLInputElement>(null);
+  const campoPropio = useRef<HTMLInputElement>(null);
+  const campo = campoRef ?? campoPropio;
   const [texto, setTexto] = useState('');
   const [resultados, setResultados] = useState<{ consulta: string; productos: P[] } | null>(null);
   const [indice, setIndice] = useState(0);
@@ -53,6 +60,7 @@ export function EscanerDeProductos<P extends ProductoVenta>({
         setResultados(null);
         setAviso(`No existe un producto con "${consulta}". ${avisoInexistente}`);
         setTexto('');
+        alNoEncontrar?.();
       }
     } catch (error) {
       setAviso(error instanceof ErrorDeApi ? error.message : 'No se pudo buscar el producto.');

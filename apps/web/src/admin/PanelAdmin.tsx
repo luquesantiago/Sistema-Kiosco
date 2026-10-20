@@ -6,6 +6,8 @@ const SECCIONES = [
   { a: '/admin/productos/aumento', titulo: 'Aumento de precios', detalle: 'Por porcentaje' },
   { a: '/admin/stock', titulo: 'Stock', detalle: 'Ajustes, conteos, ingresos y movimientos' },
   { a: '/admin/proveedores', titulo: 'Proveedores', detalle: 'Contacto y días de pedido' },
+  { a: '/ventas', titulo: 'Ventas', detalle: 'Listado, detalle y anulaciones' },
+  { a: '/admin/avisos', titulo: 'Avisos', detalle: 'Anulaciones pendientes de aviso' },
   { a: '/admin/usuarios', titulo: 'Usuarios', detalle: 'Altas, roles y contraseñas' },
 ];
 

@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { Avisos } from '../admin/Avisos.js';
 import { PanelAdmin } from '../admin/PanelAdmin.js';
 import { AumentoPrecios } from '../admin/productos/AumentoPrecios.js';
 import { FichaProducto } from '../admin/productos/FichaProducto.js';
@@ -11,6 +12,7 @@ import { DetalleIngreso, Ingresos } from '../stock/Ingresos.js';
 import { StockAdmin } from '../stock/StockAdmin.js';
 import { VentasSinSistema } from '../stock/VentasSinSistema.js';
 import { Venta } from '../pos/Venta.js';
+import { DetalleVenta, Ventas } from '../ventas/Ventas.js';
 import { CambiarContrasena } from './CambiarContrasena.js';
 import { Ingresar } from './Ingresar.js';
 import { Layout, RedireccionInicio, RequiereRol } from './Layout.js';
@@ -23,6 +25,8 @@ export const rutas: RouteObject[] = [
     children: [
       { index: true, element: <RedireccionInicio /> },
       { path: 'venta', element: <Venta /> },
+      { path: 'ventas', element: <Ventas /> },
+      { path: 'ventas/:id', element: <DetalleVenta /> },
       { path: 'stock/ingreso', element: <IngresoMercaderia /> },
       { path: 'cuenta/contrasena', element: <CambiarContrasena /> },
       {
@@ -40,6 +44,7 @@ export const rutas: RouteObject[] = [
           { path: 'stock/ingresos/:id', element: <DetalleIngreso /> },
           { path: 'proveedores', element: <Proveedores /> },
           { path: 'usuarios', element: <Usuarios /> },
+          { path: 'avisos', element: <Avisos /> },
         ],
       },
       { path: '*', element: <Navigate to="/" replace /> },

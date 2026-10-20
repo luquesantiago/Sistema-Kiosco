@@ -12,6 +12,12 @@ export interface DatosMovimiento {
   nota?: string | null;
   usuarioId: string;
   ingresoId?: string | null;
+  ventaId?: string | null;
+  /**
+   * Solo para reponer lo ya vendido (anulación): el producto pudo
+   * desactivarse después de la venta y el stock igual tiene que volver.
+   */
+  permitirDesactivado?: boolean;
 }
 
 export const productoNoEncontrado = () =>
@@ -38,6 +44,8 @@ export async function registrarMovimiento(
     nota = null,
     usuarioId,
     ingresoId = null,
+    ventaId = null,
+    permitirDesactivado = false,
   }: DatosMovimiento,
 ): Promise<MovimientoStock> {
   if ((tipo === 'ajuste') !== (motivo !== null)) {
@@ -49,7 +57,7 @@ export async function registrarMovimiento(
 
   // updateMany no falla si no hay fila; así se distingue el producto inexistente o desactivado.
   const actualizados = await tx.producto.updateManyAndReturn({
-    where: { id: productoId, activo: true },
+    where: { id: productoId, ...(permitirDesactivado ? {} : { activo: true }) },
     data: { stockActual: { increment: cantidad } },
     select: { stockActual: true },
   });
@@ -66,6 +74,7 @@ export async function registrarMovimiento(
       nota,
       usuarioId,
       ingresoId,
+      ventaId,
     },
   });
 }

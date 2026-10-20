@@ -68,12 +68,13 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **ItemIngreso** | ingreso, producto, cantidad, costo unitario (opcional, solo si lo cargó el admin) | IngresoMercaderia, Producto |
 | **Turno** | usuario, apertura (fecha, monto inicial), cierre (fecha, monto contado), diferencia | Usuario, Ventas, MovimientosCaja |
 | **MovimientoCaja** | turno, tipo (retiro/ingreso/gasto), monto, motivo, usuario | Turno |
-| **Venta** | turno (opcional en la Etapa 1, obligatorio desde la Etapa 2), usuario, fecha, total, medio de pago (efectivo/debito/credito/mercado_pago), estado (pendiente/pagada/anulada), anulación (usuario, fecha, motivo) | Ítems, Pago MP, Factura |
-| **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción, cantidad, precio unitario | Venta, Producto |
+| **Venta** | número correlativo, usuario, fecha, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo); el turno se agrega en la Etapa 2 | Ítems, Pagos, MovimientosStock, Pago MP, Factura |
+| **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción (nombre al momento de vender), cantidad, precio unitario, subtotal | Venta, Producto |
+| **PagoVenta** | venta, medio (efectivo/debito/credito/mercado_pago), monto, monto recibido y vuelto (solo efectivo); uno por medio | Venta |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
+| **Notificacion** | tipo (anulacion_venta), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
 - **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
@@ -84,11 +85,12 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ### Venta
 
 ```
-Escanear productos --> Elegir medio de pago
+Escanear productos --> Elegir medio de pago (F1-F4) o pago mixto (F6)
                           |
           +---------------+-----------------+
           v                                 v
-     Efectivo / otro                  Mercado Pago
+  Efectivo / tarjeta / mixto           Mercado Pago
+  (efectivo: "paga con" y vuelto)
           |                                 |
           |                    Crear cobro en la API de MP
           |                                 |
@@ -105,8 +107,11 @@ Escanear productos --> Elegir medio de pago
    Factura si el            Factura C automática
    cliente la pide          (ARCA --> CAE)
           |                       |
-          +---------> Imprimir ticket / comprobante
+          +---------> Imprimir ticket solo si lo piden (F9)
 ```
+
+- Registrar la venta es una sola transacción: el servidor toma los precios del catálogo (si no coinciden con el total que vio el mostrador, responde `409` con los precios nuevos), valida que los pagos sumen el total, calcula el vuelto, guarda la venta con sus ítems y pagos, y descuenta el stock con un movimiento `venta` por producto.
+- Anular también es una sola transacción: la venta pasa a `anulada` (solo si estaba `pagada`), el stock vuelve con movimientos `anulacion` y queda un aviso pendiente para el admin.
 
 ### Turno de caja
 

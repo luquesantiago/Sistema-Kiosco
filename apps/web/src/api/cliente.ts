@@ -6,6 +6,8 @@ export class ErrorDeApi extends Error {
     readonly status: number,
     readonly codigo: string,
     mensaje: string,
+    /** Datos extra de algunos errores (por ejemplo, los precios actuales). */
+    readonly detalle?: unknown,
   ) {
     super(mensaje);
   }
@@ -38,11 +40,15 @@ export async function pedir<T>(metodo: Metodo, ruta: string, cuerpo?: unknown): 
   if (res.ok) return datos as T;
 
   const error = errorApiSchema.safeParse(datos);
-  const { codigo, mensaje } = error.success
+  const { codigo, mensaje, detalle } = error.success
     ? error.data.error
-    : { codigo: 'ERROR', mensaje: 'Ocurrió un error inesperado. Intentá de nuevo.' };
+    : {
+        codigo: 'ERROR',
+        mensaje: 'Ocurrió un error inesperado. Intentá de nuevo.',
+        detalle: undefined,
+      };
   if (res.status === 401 && codigo === 'NO_AUTENTICADO') {
     alNoAutenticado();
   }
-  throw new ErrorDeApi(res.status, codigo, mensaje);
+  throw new ErrorDeApi(res.status, codigo, mensaje, detalle);
 }

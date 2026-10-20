@@ -40,6 +40,8 @@ model Usuario {
   cambiosPrecio    CambioPrecio[]
   movimientosStock MovimientoStock[]
   ingresos         IngresoMercaderia[]
+  ventas           Venta[]             @relation("VentasVendidas")
+  ventasAnuladas   Venta[]             @relation("VentasAnuladas")
 
   @@map("usuarios")
 }
@@ -109,6 +111,7 @@ model Producto {
   cambiosPrecio  CambioPrecio[]
   movimientos    MovimientoStock[]
   itemsIngreso   ItemIngreso[]
+  itemsVenta     ItemVenta[]
 
   @@index([nombreBusqueda])
   @@index([proveedorId])
@@ -165,10 +168,13 @@ model MovimientoStock {
   usuario         Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   ingresoId       String?            @map("ingreso_id") @db.Uuid
   ingreso         IngresoMercaderia? @relation(fields: [ingresoId], references: [id], onDelete: Restrict)
+  ventaId         String?            @map("venta_id") @db.Uuid
+  venta           Venta?             @relation(fields: [ventaId], references: [id], onDelete: Restrict)
   creadoEn        DateTime           @default(now()) @map("creado_en") @db.Timestamptz
 
   @@index([productoId, creadoEn])
   @@index([ingresoId])
+  @@index([ventaId])
   @@map("movimientos_stock")
 }
 
@@ -199,4 +205,95 @@ model ItemIngreso {
 
   @@index([ingresoId])
   @@map("items_ingreso")
+}
+
+enum MedioPago {
+  efectivo
+  debito
+  credito
+  mercado_pago
+}
+
+enum EstadoVenta {
+  pagada
+  anulada
+}
+
+enum TipoNotificacion {
+  anulacion_venta
+}
+
+enum EstadoNotificacion {
+  pendiente
+  enviada
+  error
+}
+
+/// Sin turno todavía: la Etapa 2 agrega turnoId con su migración.
+model Venta {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  /// Número legible para tickets y conversaciones ("la venta 120").
+  numero          Int               @unique @default(autoincrement())
+  usuarioId       String            @map("usuario_id") @db.Uuid
+  usuario         Usuario           @relation("VentasVendidas", fields: [usuarioId], references: [id], onDelete: Restrict)
+  total           Decimal           @db.Decimal(12, 2)
+  estado          EstadoVenta       @default(pagada)
+  creadaEn        DateTime          @default(now()) @map("creada_en") @db.Timestamptz
+  anuladaEn       DateTime?         @map("anulada_en") @db.Timestamptz
+  anuladaPorId    String?           @map("anulada_por_id") @db.Uuid
+  anuladaPor      Usuario?          @relation("VentasAnuladas", fields: [anuladaPorId], references: [id], onDelete: Restrict)
+  motivoAnulacion String?           @map("motivo_anulacion")
+  items           ItemVenta[]
+  pagos           PagoVenta[]
+  movimientos     MovimientoStock[]
+
+  @@index([creadaEn])
+  @@map("ventas")
+}
+
+model ItemVenta {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ventaId        String    @map("venta_id") @db.Uuid
+  venta          Venta     @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  /// Vacío para el ítem "Varios".
+  productoId     String?   @map("producto_id") @db.Uuid
+  producto       Producto? @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  /// Nombre del producto al momento de vender (o la descripción de "Varios").
+  descripcion    String
+  cantidad       Int
+  precioUnitario Decimal   @map("precio_unitario") @db.Decimal(12, 2)
+  subtotal       Decimal   @db.Decimal(12, 2)
+
+  @@index([ventaId])
+  @@map("items_venta")
+}
+
+model PagoVenta {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ventaId       String    @map("venta_id") @db.Uuid
+  venta         Venta     @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  medio         MedioPago
+  monto         Decimal   @db.Decimal(12, 2)
+  /// Solo para efectivo, si el empleado escribió con cuánto pagó el cliente.
+  montoRecibido Decimal?  @map("monto_recibido") @db.Decimal(12, 2)
+  vuelto        Decimal?  @db.Decimal(12, 2)
+
+  @@unique([ventaId, medio])
+  @@map("pagos_venta")
+}
+
+/// Aviso para el admin; el envío por WhatsApp (WAHA) llega en la Etapa 2.
+model Notificacion {
+  id        String             @id @default(uuid(7)) @db.Uuid
+  tipo      TipoNotificacion
+  /// Por ahora siempre "admin".
+  destino   String
+  texto     String
+  estado    EstadoNotificacion @default(pendiente)
+  creadaEn  DateTime           @default(now()) @map("creada_en") @db.Timestamptz
+  enviadaEn DateTime?          @map("enviada_en") @db.Timestamptz
+  error     String?
+
+  @@index([creadaEn])
+  @@map("notificaciones")
 }

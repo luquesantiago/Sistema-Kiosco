@@ -1,4 +1,5 @@
 export * from './busqueda.js';
+export * from './decimales.js';
 export * from './errores.js';
 export * from './estado.js';
 export * from './montos.js';
@@ -6,3 +7,4 @@ export * from './productos.js';
 export * from './proveedores.js';
 export * from './stock.js';
 export * from './usuarios.js';
+export * from './ventas.js';

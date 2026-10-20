@@ -46,10 +46,10 @@ export function renderApp(ruta: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   configurarAlNoAutenticado(() => queryClient.setQueryData(CLAVE_SESION, null));
   const router = createMemoryRouter(rutas, { initialEntries: [ruta] });
-  render(
+  const { unmount } = render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return { router };
+  return { router, desmontar: unmount };
 }

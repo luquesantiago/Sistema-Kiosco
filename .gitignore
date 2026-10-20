@@ -23,5 +23,9 @@ build/
 __pycache__/
 *.log
 
+# Resultados de Playwright
+test-results/
+playwright-report/
+
 # Cliente de Prisma generado
 apps/api/src/generated/
