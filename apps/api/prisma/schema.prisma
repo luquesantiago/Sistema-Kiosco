@@ -17,3 +17,39 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Rol {
+  admin
+  empleado
+}
+
+model Usuario {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  nombre           String
+  /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
+  usuario          String    @unique
+  contrasenaHash   String    @map("contrasena_hash")
+  rol              Rol
+  activo           Boolean   @default(true)
+  intentosFallidos Int       @default(0) @map("intentos_fallidos")
+  bloqueadoHasta   DateTime? @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso    DateTime? @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn         DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn    DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+  sesiones         Sesion[]
+
+  @@map("usuarios")
+}
+
+model Sesion {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// SHA-256 del token de la cookie; el token nunca se guarda.
+  tokenHash String   @unique @map("token_hash")
+  usuarioId String   @map("usuario_id") @db.Uuid
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  creadaEn  DateTime @default(now()) @map("creada_en") @db.Timestamptz
+  expiraEn  DateTime @map("expira_en") @db.Timestamptz
+
+  @@index([usuarioId])
+  @@map("sesiones")
+}

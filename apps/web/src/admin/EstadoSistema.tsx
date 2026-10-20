@@ -16,7 +16,7 @@ function Indicador({ nombre, ok }: { nombre: string; ok: boolean }) {
   );
 }
 
-export function Inicio() {
+export function EstadoSistema() {
   const { data, isPending, isError } = useQuery({
     queryKey: ['estado'],
     queryFn: obtenerEstado,
@@ -24,8 +24,8 @@ export function Inicio() {
   });
 
   return (
-    <main className="mx-auto max-w-md p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Kiosco</h1>
+    <section className="rounded-lg bg-white p-4 shadow">
+      <h2 className="mb-2 text-lg font-semibold">Estado del sistema</h2>
       {isPending && <p>Consultando el estado del sistema…</p>}
       {isError && <p className="text-red-700">No se pudo conectar con la API.</p>}
       {data && (
@@ -34,6 +34,6 @@ export function Inicio() {
           <Indicador nombre="Base de datos" ok={data.baseDeDatos === 'ok'} />
         </ul>
       )}
-    </main>
+    </section>
   );
 }

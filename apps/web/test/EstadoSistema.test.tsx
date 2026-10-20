@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { Inicio } from '../src/app/Inicio.js';
+import { EstadoSistema } from '../src/admin/EstadoSistema.js';
 
 function simularHealth(status: number, cuerpo: unknown) {
   vi.stubGlobal(
@@ -10,19 +10,19 @@ function simularHealth(status: number, cuerpo: unknown) {
   );
 }
 
-function renderInicio() {
+function renderEstado() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <Inicio />
+      <EstadoSistema />
     </QueryClientProvider>,
   );
 }
 
-describe('Inicio', () => {
+describe('EstadoSistema', () => {
   it('muestra API y base ok', async () => {
     simularHealth(200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() });
-    renderInicio();
+    renderEstado();
 
     expect(await screen.findByText('API ok')).toBeInTheDocument();
     expect(screen.getByText('Base de datos ok')).toBeInTheDocument();
@@ -34,7 +34,7 @@ describe('Inicio', () => {
       baseDeDatos: 'error',
       hora: new Date().toISOString(),
     });
-    renderInicio();
+    renderEstado();
 
     expect(await screen.findByText('Base de datos con error')).toBeInTheDocument();
   });
@@ -44,7 +44,7 @@ describe('Inicio', () => {
       'fetch',
       vi.fn(async () => new Response('Bad Gateway', { status: 502 })),
     );
-    renderInicio();
+    renderEstado();
 
     expect(await screen.findByText('No se pudo conectar con la API.')).toBeInTheDocument();
   });

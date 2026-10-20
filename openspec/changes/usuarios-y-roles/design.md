@@ -41,7 +41,7 @@
 
 ### Autorización con un plugin y `preHandler`
 - **Plugin `sesion`** (`src/plugins/sesion.ts`): decora el request con `usuario: UsuarioSesion | null`. En un hook `onRequest` lee la cookie, busca la sesión vigente con su usuario activo y la carga.
-- **Ayudas para las rutas:** `requiereSesion` y `requiereRol('admin')`, que se usan como `preHandler`:
+- **Ayudas para las rutas:** `requiereSesion` y `requiereRol('admin')`, que se usan como hook `preValidation` y no como `preHandler`. Fastify valida el body antes del `preHandler`, así que un pedido sin sesión y con datos inválidos recibiría `400` en vez de `401`; el test de rutas protegidas lo detectó al implementar. Sin usuario o con otro rol:
   - Sin usuario → `401 NO_AUTENTICADO`.
   - Con un rol distinto → `403 SIN_PERMISO`.
 - **Rutas abiertas:** solo `POST /api/auth/ingresar` y `GET /api/health` no llevan `preHandler`. Se agrega un test que recorre las rutas registradas y verifica que todas las demás bajo `/api` exigen sesión, para que ningún cambio futuro deje una ruta abierta por olvido.
