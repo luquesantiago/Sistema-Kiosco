@@ -28,7 +28,7 @@
 
 - [x] 4.1 Configurar Playwright en `apps/web/e2e/` (Chromium, `webServer` con la API compilada en el puerto 3100 contra `kiosco_test`, `globalSetup` que migra, limpia y siembra un admin, un empleado y productos con contraseñas al azar) y el script `pnpm --filter web e2e`; verificar que corre en local
 - [x] 4.2 Escribir el test del flujo crítico (ingresar como empleado, escanear con repetido, F1 con vuelto, verificar la venta y el stock, anular con motivo, verificar el stock repuesto y el aviso como admin, y que F1 a F4 no disparan acciones del navegador); verificar que pasa en local
-- [ ] 4.3 Agregar a la CI un job de e2e que instala Chromium y corre `pnpm --filter web e2e` con PostgreSQL como service; verificar que el job pasa en GitHub
+- [x] 4.3 Agregar a la CI un job de e2e que instala Chromium y corre `pnpm --filter web e2e` con PostgreSQL como service; verificar que el job pasa en GitHub
 
 ## 5. Verificación manual y documentación
 
