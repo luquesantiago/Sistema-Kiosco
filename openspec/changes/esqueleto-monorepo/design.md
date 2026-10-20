@@ -82,6 +82,16 @@
 - [Windows: fin de línea, rutas y scripts de shell] → `.gitattributes` con `* text=auto eol=lf`, Prettier con `endOfLine: "lf"` y scripts solo con comandos de Node/pnpm. La CI corre en Linux, así que también detecta lo que solo funciona en Windows.
 - [Puerto 5432 ocupado por un PostgreSQL local] → el puerto del host se puede cambiar con una variable en el Compose de desarrollo y en `DATABASE_URL`.
 
+## Ajustes durante la implementación
+
+- **ESLint 10** en lugar de 9: al instalar, npm marca ESLint 9 como deprecado. `typescript-eslint` 8 y `eslint-plugin-react-hooks` 7 ya soportan la 10.
+- **TypeScript 5.9**: `typescript-eslint` 8 todavía no soporta TypeScript 7.
+- **Desarrollo de la API con `node --watch --import tsx`** en lugar de `tsx watch`: en Windows, `tsx watch` lanzado por `pnpm --parallel` queda colgado sin arrancar el servidor. El watch nativo de Node con el loader de tsx funciona igual y sin ese problema.
+- **Puerto del proxy configurable:** el proxy de Vite usa `API_PORT` (por defecto 3000), que tiene que coincidir con `PORT` de la API, por si el 3000 está ocupado por otro proyecto.
+- **Prisma 7 genera el cliente sin modelos**, así que el plan B no hizo falta.
+- **`corepack enable` en Windows** necesita una terminal de administrador cuando Node está instalado en `Program Files`. La alternativa sin admin es `corepack enable --install-directory "%APPDATA%\npm"`, una carpeta que ya está en el PATH del usuario. Queda documentado en el README.
+- **Prettier no formatea Markdown** (`*.md` en `.prettierignore`), para no reformatear la documentación escrita a mano.
+
 ## Open Questions
 
 - Ninguna que cambie el alcance. La versión exacta de cada dependencia se fija al instalar (la última estable dentro de las versiones mayores de arriba) y queda en `pnpm-lock.yaml`.

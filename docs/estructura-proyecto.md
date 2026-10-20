@@ -25,7 +25,7 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ```
 
 - **Lector de código de barras:** USB en modo teclado (HID). Escribe el código y un Enter en el campo activo, así que no necesita integración especial.
-- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md).
+- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). El Compose de producción (con `caddy` y `waha`) se arma en la Etapa 2, con la puesta en marcha. Durante la Etapa 1 solo existe el Compose de desarrollo de [`infra/`](../infra/README.md), con PostgreSQL.
 - **Impresora:** térmica de tickets común (58 u 80 mm). Con factura electrónica **no hace falta impresora fiscal**.
 
 ## Módulos y dependencias
@@ -61,17 +61,20 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 |---|---|---|
 | **Usuario** | nombre, usuario, contraseña (hash), rol (admin/empleado), activo | Turno, Venta |
 | **Proveedor** | nombre, teléfono, día de toma de pedido, día de entrega, notas | Productos |
-| **Producto** | código de barras, nombre, precio de venta, costo, stock actual, stock mínimo, stock máximo, activo | Proveedor (uno) |
-| **MovimientoStock** | producto, tipo (venta/compra/ajuste), cantidad, motivo, usuario, fecha | Producto, Usuario |
+| **Producto** | código de barras (opcional, único si existe), nombre, precio de venta, costo, stock actual (puede ser negativo), stock mínimo, stock máximo, activo | Proveedor (uno) |
+| **MovimientoStock** | producto, tipo (venta/compra/ajuste/anulacion), cantidad, motivo, usuario, fecha | Producto, Usuario |
 | **Turno** | usuario, apertura (fecha, monto inicial), cierre (fecha, monto contado), diferencia | Usuario, Ventas, MovimientosCaja |
 | **MovimientoCaja** | turno, tipo (retiro/ingreso/gasto), monto, motivo, usuario | Turno |
-| **Venta** | turno, usuario, fecha, total, medio de pago, estado (pendiente/pagada/anulada) | Ítems, Pago MP, Factura |
-| **ItemVenta** | venta, producto, cantidad, precio unitario | Venta, Producto |
+| **Venta** | turno (opcional en la Etapa 1, obligatorio desde la Etapa 2), usuario, fecha, total, medio de pago (efectivo/debito/credito/mercado_pago), estado (pendiente/pagada/anulada), anulación (usuario, fecha, motivo) | Ítems, Pago MP, Factura |
+| **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción, cantidad, precio unitario | Venta, Producto |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
+| **Notificacion** | destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
 
-> Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
+- Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
+- **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
+- **Notificacion:** la Etapa 1 solo las crea como pendientes (por ejemplo, al anular una venta). El envío por WAHA se suma en la Etapa 2, con la puesta en marcha.
 
 ## Flujos principales
 

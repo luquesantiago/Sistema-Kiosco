@@ -22,3 +22,6 @@ dist/
 build/
 __pycache__/
 *.log
+
+# Cliente de Prisma generado
+apps/api/src/generated/

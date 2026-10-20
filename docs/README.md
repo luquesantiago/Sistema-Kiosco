@@ -27,7 +27,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 2. **Proveedores:** cada proveedor trae varios productos y tiene un día de toma de pedido y un día de entrega.
 3. **Stock:** ingresos por compra, egresos por venta y ajustes registrados.
 4. **Usuarios y roles:** admin y empleado.
-5. **Ventas (POS):** venta rápida con el lector, con medios de pago efectivo, Mercado Pago y otros.
+5. **Ventas (POS):** venta rápida con el lector, con medios de pago efectivo, débito, crédito y Mercado Pago (transferencias).
 6. **Caja y turnos:** apertura, cierre, arqueo, retiros y diferencias por empleado.
 7. **Dashboard:** ventas, productos más vendidos, ingresos y egresos.
 8. **Reposición:** recomendaciones agrupadas por proveedor y aviso diario por WhatsApp.
@@ -37,17 +37,27 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 
 ```
 1. Base: productos, proveedores, stock, usuarios/roles, venta con lector
+   (solo desarrollo; no se usa en el kiosco todavía)
         |
-2. Caja: turnos, apertura/cierre, arqueo, retiros
+2. Caja + puesta en marcha: turnos, apertura/cierre, arqueo, retiros;
+   deploy en el VPS, backups, WAHA y envío de avisos pendientes
         |
 3. Dashboard: ventas, top productos, ingresos/egresos
         |
-4. Reposición + aviso diario por WhatsApp (WAHA)
+4. Reposición + aviso diario de las 12:00 por WhatsApp
         |
 5. Facturación electrónica ARCA + integración Mercado Pago
 ```
 
-Cada etapa se trabaja como un cambio de OpenSpec (`/opsx:propose`).
+Cada etapa se trabaja con uno o más cambios de OpenSpec (`/opsx:propose`). La Etapa 1 se divide en 5 cambios, en este orden:
+
+1. `esqueleto-monorepo`: monorepo, base de datos de desarrollo, chequeo de estado y CI.
+2. `usuarios-y-roles`: login, sesiones, roles y gestión de usuarios.
+3. `productos-y-proveedores`: alta, baja y modificación, búsqueda por código y por nombre.
+4. `stock`: movimientos, ingreso de mercadería, ajustes y carga de ventas hechas sin sistema.
+5. `venta-pos`: venta con lector, cobro, ticket y anulación.
+
+**WAHA se adelanta a la Etapa 2.** El primer día real ya hace falta avisar las anulaciones por WhatsApp. La Etapa 4 solo agrega el contenido del aviso de reposición.
 
 ## Documentación
 

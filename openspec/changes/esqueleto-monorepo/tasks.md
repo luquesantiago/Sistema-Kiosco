@@ -2,37 +2,37 @@
 
 ## 1. Monorepo y herramientas base
 
-- [ ] 1.1 Crear `package.json` raíz (privado, `"type": "module"`, `packageManager` con pnpm 10, `engines.node` >= 24), `pnpm-workspace.yaml` (`apps/*`, `packages/*`), `.nvmrc`, `.gitattributes` (`* text=auto eol=lf`) y `tsconfig.base.json` estricto; verificar que `corepack enable` + `pnpm install` terminan sin errores en Windows
-- [ ] 1.2 Configurar ESLint 9 (config plana con `typescript-eslint`, `eslint-plugin-react-hooks` y `eslint-config-prettier`) y Prettier (`endOfLine: "lf"`) en la raíz, con scripts `lint` y `format`; verificar que `pnpm lint` pasa sobre el repo
-- [ ] 1.3 Agregar scripts raíz `dev`, `build`, `test`, `typecheck`, `db:up` y `db:down` usando solo comandos de pnpm/Node (sin sintaxis de bash); verificar que `pnpm run` los lista y que ninguno usa `rm`, `export` ni variables al estilo `VAR=x`
+- [x] 1.1 Crear `package.json` raíz (privado, `"type": "module"`, `packageManager` con pnpm 10, `engines.node` >= 24), `pnpm-workspace.yaml` (`apps/*`, `packages/*`), `.nvmrc`, `.gitattributes` (`* text=auto eol=lf`) y `tsconfig.base.json` estricto; verificar que `corepack enable` + `pnpm install` terminan sin errores en Windows
+- [x] 1.2 Configurar ESLint 10 (config plana con `typescript-eslint`, `eslint-plugin-react-hooks` y `eslint-config-prettier`) y Prettier (`endOfLine: "lf"`) en la raíz, con scripts `lint` y `format`; verificar que `pnpm lint` pasa sobre el repo
+- [x] 1.3 Agregar scripts raíz `dev`, `build`, `test`, `typecheck`, `db:up` y `db:down` usando solo comandos de pnpm/Node (sin sintaxis de bash); verificar que `pnpm run` los lista y que ninguno usa `rm`, `export` ni variables al estilo `VAR=x`
 
 ## 2. Paquete compartido
 
-- [ ] 2.1 Crear `packages/shared` (`@kiosco/shared`) con `exports` apuntando a `src/index.ts`, dependencia de Zod y el esquema/tipo de la respuesta del chequeo de estado (`estado`, `baseDeDatos`, `hora`) y del formato de error (`error.codigo`, `error.mensaje`); verificar con `pnpm --filter @kiosco/shared typecheck`
+- [x] 2.1 Crear `packages/shared` (`@kiosco/shared`) con `exports` apuntando a `src/index.ts`, dependencia de Zod y el esquema/tipo de la respuesta del chequeo de estado (`estado`, `baseDeDatos`, `hora`) y del formato de error (`error.codigo`, `error.mensaje`); verificar con `pnpm --filter @kiosco/shared typecheck`
 
 ## 3. Base de datos de desarrollo
 
-- [ ] 3.1 Crear `infra/docker-compose.dev.yml` con el servicio `db` (`postgres:18-alpine`, puerto publicado solo en `127.0.0.1`, puerto del host configurable, volumen con nombre) e `infra/db/init/01-test-db.sql` que crea `kiosco_test`; verificar que `pnpm db:up` levanta el contenedor y que existen las bases de desarrollo y `kiosco_test`
-- [ ] 3.2 Documentar en `infra/README.md` cómo levantar, bajar y resetear la base de desarrollo; verificar que los comandos escritos funcionan tal cual
+- [x] 3.1 Crear `infra/docker-compose.dev.yml` con el servicio `db` (`postgres:18-alpine`, puerto publicado solo en `127.0.0.1`, puerto del host configurable, volumen con nombre) e `infra/db/init/01-test-db.sql` que crea `kiosco_test`; verificar que `pnpm db:up` levanta el contenedor y que existen las bases de desarrollo y `kiosco_test`
+- [x] 3.2 Documentar en `infra/README.md` cómo levantar, bajar y resetear la base de desarrollo; verificar que los comandos escritos funcionan tal cual
 
 ## 4. API
 
-- [ ] 4.1 Crear `apps/api` con Fastify 5, `fastify-type-provider-zod`, tsx (dev) y tsup (build), separando `src/app.ts` (arma la instancia) de `src/server.ts` (escucha); verificar que `pnpm --filter api dev` arranca y escucha en el puerto configurado
-- [ ] 4.2 Implementar `src/config.ts` que valida `DATABASE_URL`, `PORT`, `NODE_ENV` y `LOG_LEVEL` con Zod y termina el proceso con código 1 nombrando la variable inválida; agregar `.env.example`; verificar con un test que una configuración sin `DATABASE_URL` es rechazada y que el mensaje no incluye valores de otras variables
-- [ ] 4.3 Configurar Prisma 7 (`prisma.config.ts`, `@prisma/adapter-pg`, `schema.prisma` sin modelos con las convenciones de IDs UUID v7, `Decimal(12,2)`, `Int` para cantidades, `Timestamptz` y nombres en español con `@@map` escritas como comentario) y `prisma generate` en `postinstall`; verificar que `pnpm install` genera el cliente (si falla sin modelos, aplicar el plan B de `design.md` y anotarlo)
-- [ ] 4.4 Agregar el manejo de errores común (`400 VALIDACION`, `404 NO_ENCONTRADO` para `/api/*`, `500 ERROR_INTERNO` con el detalle solo en el log) y verificar con tests de `app.inject()` que `GET /api/no-existe` responde `404` JSON con el formato de error
-- [ ] 4.5 Implementar `GET /api/health` en `src/modules/estado/` con `SELECT 1` y timeout de 2 s, según la spec `estado-del-servicio`; verificar con tests de integración contra `kiosco_test` los casos `200 ok`, base caída (`503 degradado`) y base colgada (responde en menos de 3 s)
-- [ ] 4.6 Servir el build de la web con `@fastify/static` y fallback a `index.html` para rutas que no empiezan con `/api` cuando existe `apps/web/dist`; verificar con un test que `/` devuelve HTML y `/api/no-existe` sigue devolviendo JSON
+- [x] 4.1 Crear `apps/api` con Fastify 5, `fastify-type-provider-zod`, tsx (dev) y tsup (build), separando `src/app.ts` (arma la instancia) de `src/server.ts` (escucha); verificar que `pnpm --filter api dev` arranca y escucha en el puerto configurado
+- [x] 4.2 Implementar `src/config.ts` que valida `DATABASE_URL`, `PORT`, `NODE_ENV` y `LOG_LEVEL` con Zod y termina el proceso con código 1 nombrando la variable inválida; agregar `.env.example`; verificar con un test que una configuración sin `DATABASE_URL` es rechazada y que el mensaje no incluye valores de otras variables
+- [x] 4.3 Configurar Prisma 7 (`prisma.config.ts`, `@prisma/adapter-pg`, `schema.prisma` sin modelos con las convenciones de IDs UUID v7, `Decimal(12,2)`, `Int` para cantidades, `Timestamptz` y nombres en español con `@@map` escritas como comentario) y `prisma generate` en `postinstall`; verificar que `pnpm install` genera el cliente (si falla sin modelos, aplicar el plan B de `design.md` y anotarlo)
+- [x] 4.4 Agregar el manejo de errores común (`400 VALIDACION`, `404 NO_ENCONTRADO` para `/api/*`, `500 ERROR_INTERNO` con el detalle solo en el log) y verificar con tests de `app.inject()` que `GET /api/no-existe` responde `404` JSON con el formato de error
+- [x] 4.5 Implementar `GET /api/health` en `src/modules/estado/` con `SELECT 1` y timeout de 2 s, según la spec `estado-del-servicio`; verificar con tests de integración contra `kiosco_test` los casos `200 ok`, base caída (`503 degradado`) y base colgada (responde en menos de 3 s)
+- [x] 4.6 Servir el build de la web con `@fastify/static` y fallback a `index.html` para rutas que no empiezan con `/api` cuando existe `apps/web/dist`; verificar con un test que `/` devuelve HTML y `/api/no-existe` sigue devolviendo JSON
 
 ## 5. Web
 
-- [ ] 5.1 Crear `apps/web` con React 19, Vite, React Router, TanStack Query y Tailwind CSS 4 (`@tailwindcss/vite`), con proxy de `/api` a `http://localhost:3000` y carpetas `src/app/`, `src/pos/` y `src/admin/`; verificar que `pnpm --filter web dev` abre la página sin errores en consola
-- [ ] 5.2 Crear la página de inicio que consulta `GET /api/health` con TanStack Query y muestra "API ok / base ok" o el error; verificar con un test de Vitest + Testing Library (jsdom, `fetch` simulado) los estados ok y degradado
+- [x] 5.1 Crear `apps/web` con React 19, Vite, React Router, TanStack Query y Tailwind CSS 4 (`@tailwindcss/vite`), con proxy de `/api` a `http://localhost:3000` y carpetas `src/app/`, `src/pos/` y `src/admin/`; verificar que `pnpm --filter web dev` abre la página sin errores en consola
+- [x] 5.2 Crear la página de inicio que consulta `GET /api/health` con TanStack Query y muestra "API ok / base ok" o el error; verificar con un test de Vitest + Testing Library (jsdom, `fetch` simulado) los estados ok y degradado
 
 ## 6. Integración y CI
 
-- [ ] 6.1 Verificar de punta a punta en local: `pnpm db:up`, `pnpm dev` y la página de inicio muestra la base como ok; con la base bajada (`pnpm db:down`) muestra el estado degradado
-- [ ] 6.2 Verificar el modo producción en local: `pnpm build` y luego arrancar la API compilada con `NODE_ENV=production` sirve la web en `/` y la API en `/api/health` desde el mismo puerto
+- [x] 6.1 Verificar de punta a punta en local: `pnpm db:up`, `pnpm dev` y la página de inicio muestra la base como ok; con la base bajada (`pnpm db:down`) muestra el estado degradado
+- [x] 6.2 Verificar el modo producción en local: `pnpm build` y luego arrancar la API compilada con `NODE_ENV=production` sirve la web en `/` y la API en `/api/health` desde el mismo puerto
 - [ ] 6.3 Crear `.github/workflows/ci.yml` (Node 24, Corepack, `pnpm install --frozen-lockfile`, lint, typecheck, test, build, con PostgreSQL 18 como service y `kiosco_test`); verificar que el workflow corre en verde en GitHub en la rama del cambio
 
 ## 7. Documentación

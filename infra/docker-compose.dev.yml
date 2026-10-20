@@ -1,0 +1,23 @@
+# Base de datos para desarrollo y tests. Solo escucha en la máquina local.
+name: kiosco-dev
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: kiosco
+      POSTGRES_PASSWORD: kiosco
+      POSTGRES_DB: kiosco
+    ports:
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kiosco -d kiosco']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  db-data:
