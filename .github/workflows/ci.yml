@@ -25,10 +25,12 @@ jobs:
       TEST_DATABASE_URL: postgresql://kiosco:kiosco@localhost:5432/kiosco_test
     steps:
       - uses: actions/checkout@v5
+      # Instala la versión de pnpm fijada en `packageManager`; setup-node la necesita para la caché.
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
-      - run: corepack enable
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check

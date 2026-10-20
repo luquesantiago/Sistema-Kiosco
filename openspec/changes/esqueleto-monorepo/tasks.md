@@ -33,7 +33,7 @@
 
 - [x] 6.1 Verificar de punta a punta en local: `pnpm db:up`, `pnpm dev` y la página de inicio muestra la base como ok; con la base bajada (`pnpm db:down`) muestra el estado degradado
 - [x] 6.2 Verificar el modo producción en local: `pnpm build` y luego arrancar la API compilada con `NODE_ENV=production` sirve la web en `/` y la API en `/api/health` desde el mismo puerto
-- [ ] 6.3 Crear `.github/workflows/ci.yml` (Node 24, Corepack, `pnpm install --frozen-lockfile`, lint, typecheck, test, build, con PostgreSQL 18 como service y `kiosco_test`); verificar que el workflow corre en verde en GitHub en la rama del cambio
+- [ ] 6.3 Crear `.github/workflows/ci.yml` (Node 24, pnpm/action-setup, `pnpm install --frozen-lockfile`, lint, typecheck, test, build, con PostgreSQL 18 como service y `kiosco_test`); verificar que el workflow corre en verde en GitHub en la rama del cambio
 
 ## 7. Documentación
 
