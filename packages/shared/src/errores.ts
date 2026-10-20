@@ -22,4 +22,6 @@ export const CODIGOS_ERROR = {
   ultimoAdmin: 'ULTIMO_ADMIN',
   autoDesactivacion: 'NO_PUEDE_DESACTIVARSE',
   contrasenaActualIncorrecta: 'CONTRASENA_ACTUAL_INCORRECTA',
+  codigoExistente: 'CODIGO_EXISTENTE',
+  proveedorInactivo: 'PROVEEDOR_INACTIVO',
 } as const;

@@ -6,8 +6,8 @@ import { prismaTest } from './base.js';
 export const CONTRASENA = 'clave-segura-1';
 
 /** App de test con un reloj que se puede adelantar. */
-export async function crearAppDePrueba() {
-  let ahora = new Date('2026-10-20T12:00:00Z');
+export async function crearAppDePrueba(inicio = new Date('2026-10-20T12:00:00Z')) {
+  let ahora = inicio;
   const app = await crearApp({ prisma: prismaTest, ahora: () => ahora });
   return {
     app,

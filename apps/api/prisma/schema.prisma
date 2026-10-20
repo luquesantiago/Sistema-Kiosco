@@ -24,19 +24,20 @@ enum Rol {
 }
 
 model Usuario {
-  id               String    @id @default(uuid(7)) @db.Uuid
+  id               String         @id @default(uuid(7)) @db.Uuid
   nombre           String
   /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
-  usuario          String    @unique
-  contrasenaHash   String    @map("contrasena_hash")
+  usuario          String         @unique
+  contrasenaHash   String         @map("contrasena_hash")
   rol              Rol
-  activo           Boolean   @default(true)
-  intentosFallidos Int       @default(0) @map("intentos_fallidos")
-  bloqueadoHasta   DateTime? @map("bloqueado_hasta") @db.Timestamptz
-  ultimoIngreso    DateTime? @map("ultimo_ingreso") @db.Timestamptz
-  creadoEn         DateTime  @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn    DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+  activo           Boolean        @default(true)
+  intentosFallidos Int            @default(0) @map("intentos_fallidos")
+  bloqueadoHasta   DateTime?      @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso    DateTime?      @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn         DateTime       @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn    DateTime       @updatedAt @map("actualizado_en") @db.Timestamptz
   sesiones         Sesion[]
+  cambiosPrecio    CambioPrecio[]
 
   @@map("usuarios")
 }
@@ -52,4 +53,76 @@ model Sesion {
 
   @@index([usuarioId])
   @@map("sesiones")
+}
+
+enum DiaSemana {
+  lunes
+  martes
+  miercoles
+  jueves
+  viernes
+  sabado
+  domingo
+}
+
+enum OrigenCambioPrecio {
+  manual
+  aumento_masivo
+}
+
+model Proveedor {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  nombre        String
+  telefono      String?
+  notas         String?
+  diasPedido    DiaSemana[] @map("dias_pedido")
+  diasEntrega   DiaSemana[] @map("dias_entrega")
+  activo        Boolean     @default(true)
+  creadoEn      DateTime    @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn DateTime    @updatedAt @map("actualizado_en") @db.Timestamptz
+  productos     Producto[]
+
+  @@map("proveedores")
+}
+
+model Producto {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  /// Sin espacios en los extremos. Varios productos pueden no tener código (NULL).
+  codigoBarras   String?        @unique @map("codigo_barras")
+  nombre         String
+  /// Nombre sin acentos, en minúsculas y con espacios colapsados, para buscar.
+  nombreBusqueda String         @map("nombre_busqueda")
+  precio         Decimal        @db.Decimal(12, 2)
+  costo          Decimal?       @db.Decimal(12, 2)
+  /// Lo mueve el cambio `stock`; acá no se edita.
+  stockActual    Int            @default(0) @map("stock_actual")
+  stockMinimo    Int            @map("stock_minimo")
+  stockMaximo    Int            @map("stock_maximo")
+  proveedorId    String?        @map("proveedor_id") @db.Uuid
+  proveedor      Proveedor?     @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  activo         Boolean        @default(true)
+  creadoEn       DateTime       @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn  DateTime       @updatedAt @map("actualizado_en") @db.Timestamptz
+  cambiosPrecio  CambioPrecio[]
+
+  @@index([nombreBusqueda])
+  @@index([proveedorId])
+  @@map("productos")
+}
+
+model CambioPrecio {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  productoId     String             @map("producto_id") @db.Uuid
+  producto       Producto           @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  usuarioId      String             @map("usuario_id") @db.Uuid
+  usuario        Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  precioAnterior Decimal            @map("precio_anterior") @db.Decimal(12, 2)
+  precioNuevo    Decimal            @map("precio_nuevo") @db.Decimal(12, 2)
+  costoAnterior  Decimal?           @map("costo_anterior") @db.Decimal(12, 2)
+  costoNuevo     Decimal?           @map("costo_nuevo") @db.Decimal(12, 2)
+  origen         OrigenCambioPrecio
+  creadoEn       DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+
+  @@index([productoId, creadoEn])
+  @@map("cambios_precio")
 }

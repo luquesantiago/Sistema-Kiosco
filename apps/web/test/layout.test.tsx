@@ -10,12 +10,14 @@ describe('layout y menú por rol', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/venta'));
     const menu = screen.getByRole('navigation', { name: 'Principal' });
-    expect(within(menu).queryByRole('link', { name: 'Usuarios' })).not.toBeInTheDocument();
+    for (const nombre of ['Usuarios', 'Productos', 'Proveedores']) {
+      expect(within(menu).queryByRole('link', { name: nombre })).not.toBeInTheDocument();
+    }
     expect(within(menu).getByRole('link', { name: 'Venta' })).toBeInTheDocument();
     expect(within(menu).getByText('Juan Empleado')).toBeInTheDocument();
   });
 
-  it('el admin ve Usuarios y entra al panel de administración', async () => {
+  it('el admin ve Productos, Proveedores y Usuarios y entra al panel', async () => {
     simularApi({
       'GET /auth/sesion': [200, ADMIN],
       'GET /health': [200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() }],
@@ -24,7 +26,13 @@ describe('layout y menú por rol', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/admin'));
     const menu = screen.getByRole('navigation', { name: 'Principal' });
-    expect(within(menu).getByRole('link', { name: 'Usuarios' })).toBeInTheDocument();
+    for (const nombre of ['Usuarios', 'Productos', 'Proveedores']) {
+      expect(within(menu).getByRole('link', { name: nombre })).toBeInTheDocument();
+    }
+    const panel = screen.getByRole('main');
+    expect(
+      await within(panel).findByRole('link', { name: /Aumento de precios/ }),
+    ).toBeInTheDocument();
     expect(await screen.findByText('Base de datos ok')).toBeInTheDocument();
   });
 

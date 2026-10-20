@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { pedir } from '../api/cliente.js';
+import { MensajeError } from '../app/MensajeError.js';
 import { useSesion } from '../app/sesion.js';
 
 const CLAVE_USUARIOS = ['usuarios'] as const;
@@ -36,15 +37,6 @@ function formatearIngreso(fecha: string | null): string {
     dateStyle: 'short',
     timeStyle: 'short',
   });
-}
-
-function MensajeError({ error }: { error: Error | null }) {
-  if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-red-700">
-      {error.message}
-    </p>
-  );
 }
 
 function FormularioAlta({ alCerrar }: { alCerrar: () => void }) {
