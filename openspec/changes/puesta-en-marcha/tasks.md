@@ -16,7 +16,7 @@
   - `docker compose port db 5432` no devuelve nada.
   - Sin `DATABASE_URL`, la app no arranca y el log nombra la variable.
   - Si el proceso de la app termina (se simula con `exec app node -e "process.kill(1, 'SIGTERM')"`; un `kill` manual de Docker cuenta como detención pedida y no reinicia), el servicio vuelve solo.
-- [ ] 2.3 Agregar a la CI un job que construya la imagen, levante el Compose de producción con `DOMINIO=localhost` y verifique HTTPS, la redirección y que la base no publica puertos. Verificar que el job pasa en GitHub.
+- [x] 2.3 Agregar a la CI un job que construya la imagen, levante el Compose de producción con `DOMINIO=localhost` y verifique HTTPS, la redirección y que la base no publica puertos. Verificar que el job pasa en GitHub.
 
 ## 3. Deploy
 
