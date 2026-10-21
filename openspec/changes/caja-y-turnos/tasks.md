@@ -29,7 +29,7 @@
 
 ## 5. Pruebas de punta a punta, verificación y documentación
 
-- [ ] 5.1 Actualizar el e2e del mostrador para que abra el turno antes de vender, y agregar un flujo de cambio de turno: Ana vende en efectivo, registra un gasto y cierra con retiro; Juan ingresa, abre con el monto sugerido y vende; el admin ve los dos turnos con sus diferencias y los avisos de gasto y de cierre. Verificar que pasa en local y en la CI.
+- [x] 5.1 Actualizar el e2e del mostrador para que abra el turno antes de vender, y agregar un flujo de cambio de turno: Ana vende en efectivo, registra un gasto y cierra con retiro; Juan ingresa, abre con el monto sugerido y vende; el admin ve los dos turnos con sus diferencias y los avisos de gasto y de cierre. Verificar que pasa en local y en la CI.
 - [x] 5.2 Verificar en el navegador con la base de desarrollo, solo con el teclado: apertura con Enter, una venta en efectivo, F8 gasto, cierre con retiro, ingreso con otro empleado con el turno anterior abierto y cierre en su nombre, y el detalle del turno desde la vista móvil del admin.
 - [x] 5.3 Actualizar `docs/requisitos-y-limites.md` (caja: una sola caja, sugerido de apertura, cierre ciego, turno olvidado, permisos de movimientos, avisos; ventas: anulación del empleado limitada al turno) y `docs/estructura-proyecto.md` (modelo de `Turno`, `MovimientoCaja` y `Venta` con turno, y el flujo de turno con el cambio de las 13:00). Verificar que coinciden con las specs del cambio.
 
