@@ -10,7 +10,7 @@ const ESTADO: Record<EstadoNotificacion, { texto: string; clase: string }> = {
   error: { texto: 'Error al enviar', clase: 'bg-red-100 text-red-900' },
 };
 
-/** Avisos para el admin (por ahora, anulaciones). El envío por WhatsApp llega en la Etapa 2. */
+/** Avisos para el admin. El envío por WhatsApp llega con el cambio `envio-whatsapp`. */
 export function Avisos() {
   const {
     data: avisos,
@@ -25,8 +25,8 @@ export function Avisos() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Avisos</h1>
       <p className="text-slate-600">
-        Cada anulación de venta deja un aviso. Por ahora se ven acá; el envío por WhatsApp se suma
-        más adelante.
+        Las anulaciones, los gastos y retiros de los empleados y cada cierre de turno dejan un
+        aviso. Por ahora se ven acá; el envío por WhatsApp se suma más adelante.
       </p>
       {isPending && <p>Cargando avisos…</p>}
       <MensajeError error={error} />

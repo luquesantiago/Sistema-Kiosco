@@ -1,4 +1,5 @@
 export * from './busqueda.js';
+export * from './caja.js';
 export * from './decimales.js';
 export * from './errores.js';
 export * from './estado.js';

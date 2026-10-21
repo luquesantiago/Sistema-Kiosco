@@ -45,3 +45,31 @@ export async function sesionDe(app: App, usuario: string, contrasena = CONTRASEN
   }
   return { kiosco_sesion: cookie.value };
 }
+
+type Cookies = Awaited<ReturnType<typeof sesionDe>>;
+
+/** Abre un turno de caja con la sesión dada (por defecto con $0) y devuelve su id. */
+export async function abrirTurnoDePrueba(app: App, cookies: Cookies, montoInicial = '0') {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/caja/turnos',
+    cookies,
+    payload: { montoInicial },
+  });
+  if (res.statusCode !== 201) throw new Error(`No se pudo abrir el turno: ${res.body}`);
+  return res.json().turnoAbierto.id as string;
+}
+
+export function cerrarTurnoDePrueba(
+  app: App,
+  cookies: Cookies,
+  turnoId: string,
+  payload: Record<string, unknown> = { montoContado: '0' },
+) {
+  return app.inject({
+    method: 'POST',
+    url: `/api/caja/turnos/${turnoId}/cerrar`,
+    cookies,
+    payload,
+  });
+}

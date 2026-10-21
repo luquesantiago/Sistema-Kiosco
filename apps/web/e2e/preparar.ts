@@ -7,8 +7,8 @@ const carpetaApi = fileURLToPath(new URL('../../api/', import.meta.url));
 const sembrar = fileURLToPath(new URL('./sembrar.ts', import.meta.url));
 
 /**
- * Antes de los tests: migra la base de tests, la vacía y siembra un admin, un
- * empleado y productos. Las contraseñas se generan en cada corrida y llegan a
+ * Antes de los tests: migra la base de tests, la vacía y siembra un admin, dos
+ * empleados (con la misma contraseña) y productos. Las contraseñas se generan en cada corrida y llegan a
  * los tests por variables de entorno.
  */
 export default function preparar() {

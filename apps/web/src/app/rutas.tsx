@@ -6,6 +6,7 @@ import { FichaProducto } from '../admin/productos/FichaProducto.js';
 import { ListaProductos } from '../admin/productos/ListaProductos.js';
 import { NuevoProducto } from '../admin/productos/NuevoProducto.js';
 import { Proveedores } from '../admin/Proveedores.js';
+import { DetalleTurno, Turnos } from '../admin/Turnos.js';
 import { Usuarios } from '../admin/Usuarios.js';
 import { IngresoMercaderia } from '../stock/IngresoMercaderia.js';
 import { DetalleIngreso, Ingresos } from '../stock/Ingresos.js';
@@ -45,6 +46,8 @@ export const rutas: RouteObject[] = [
           { path: 'proveedores', element: <Proveedores /> },
           { path: 'usuarios', element: <Usuarios /> },
           { path: 'avisos', element: <Avisos /> },
+          { path: 'turnos', element: <Turnos /> },
+          { path: 'turnos/:id', element: <DetalleTurno /> },
         ],
       },
       { path: '*', element: <Navigate to="/" replace /> },

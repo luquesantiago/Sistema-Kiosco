@@ -66,19 +66,20 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **MovimientoStock** | producto, tipo (venta/compra/ajuste/anulacion), motivo (obligatorio en los ajustes: rotura/vencimiento/robo/conteo/venta_sin_sistema/correccion/otro), cantidad con signo, stock resultante, nota, usuario, fecha; inmutable | Producto, Usuario, IngresoMercaderia (opcional) |
 | **IngresoMercaderia** | proveedor (opcional), usuario, nota, fecha | Proveedor, Usuario, ItemsIngreso, MovimientosStock |
 | **ItemIngreso** | ingreso, producto, cantidad, costo unitario (opcional, solo si lo cargó el admin) | IngresoMercaderia, Producto |
-| **Turno** | usuario, apertura (fecha, monto inicial), cierre (fecha, monto contado), diferencia | Usuario, Ventas, MovimientosCaja |
-| **MovimientoCaja** | turno, tipo (retiro/ingreso/gasto), monto, motivo, usuario | Turno |
-| **Venta** | número correlativo, usuario, fecha, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo); el turno se agrega en la Etapa 2 | Ítems, Pagos, MovimientosStock, Pago MP, Factura |
+| **Turno** | responsable (quien abrió), apertura (fecha, monto sugerido, monto inicial contado), cierre (quién cerró, fecha, monto contado, retiro al cierre y motivo, esperado, diferencia, lo que quedó en caja); como máximo uno abierto | Usuario, Ventas, MovimientosCaja |
+| **MovimientoCaja** | turno, tipo (gasto/retiro/ingreso), monto, motivo, usuario, fecha; inmutable | Turno, Usuario |
+| **Venta** | número correlativo, usuario, fecha, turno, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo, turno abierto al anular) | Turno, Ítems, Pagos, MovimientosStock, Pago MP, Factura |
 | **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción (nombre al momento de vender), cantidad, precio unitario, subtotal | Venta, Producto |
 | **PagoVenta** | venta, medio (efectivo/debito/credito/mercado_pago), monto, monto recibido y vuelto (solo efectivo); uno por medio | Venta |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
 - **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
-- **Notificacion:** la Etapa 1 solo las crea como pendientes (por ejemplo, al anular una venta). El envío por WAHA se suma en la Etapa 2, con la puesta en marcha.
+- **Notificacion:** por ahora solo se crean como pendientes (al anular una venta, por un gasto o retiro de un empleado y al cerrar un turno). El envío por WAHA se suma con el cambio `envio-whatsapp` de la Etapa 2.
+- **Turno:** el esperado y la diferencia se guardan al cerrar, como foto del cierre. Un índice único parcial (`turnos_un_solo_abierto`) garantiza que haya un solo turno abierto.
 
 ## Flujos principales
 
@@ -116,10 +117,24 @@ Escanear productos --> Elegir medio de pago (F1-F4) o pago mixto (F6)
 ### Turno de caja
 
 ```
-Abrir turno (monto inicial) --> Ventas / retiros --> Cerrar turno
-                                                       |
-                                     Contar efectivo --+--> Diferencia
-                                                            (esperado vs contado)
+Abrir turno ------------------> Ventas, gastos, retiros --> Cerrar turno (ciego)
+(monto sugerido = lo que         (ingresos: solo admin)      contar efectivo
+ quedó; se corrige si                                         + retiro opcional
+ no coincide)                                                       |
+                                                                    v
+                                          Diferencia = contado - esperado (la ve el admin)
+                                          Quedó en caja = contado - retiro
+                                          Aviso de cierre al admin
+```
+
+Cambio de turno a las 13:00 (una sola PC):
+
+```
+A cierra su turno --> A cierra sesión --> B ingresa --> B abre con lo que quedó
+
+Si A se fue sin cerrar:
+B ingresa --> "El turno de A está abierto" --> B lo cierra contando la caja
+          --> queda registrado: responsable A, cerró B --> B abre su turno
 ```
 
 ### Aviso diario de reposición (12:00)

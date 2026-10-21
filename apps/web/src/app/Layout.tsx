@@ -11,6 +11,7 @@ const ENLACES: { a: string; texto: string; roles: Rol[] }[] = [
   { a: '/admin/stock', texto: 'Stock', roles: ['admin'] },
   { a: '/admin/proveedores', texto: 'Proveedores', roles: ['admin'] },
   { a: '/admin/usuarios', texto: 'Usuarios', roles: ['admin'] },
+  { a: '/admin/turnos', texto: 'Turnos', roles: ['admin'] },
   { a: '/admin/avisos', texto: 'Avisos', roles: ['admin'] },
   { a: '/cuenta/contrasena', texto: 'Mi contraseña', roles: ['admin', 'empleado'] },
 ];

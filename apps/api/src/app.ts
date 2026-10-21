@@ -10,6 +10,7 @@ import {
 import { registrarManejoDeErrores, respuestaNoEncontrado } from './errores.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rutasAuth } from './modules/auth/rutas.js';
+import { rutasCaja } from './modules/caja/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
 import { rutasProductos } from './modules/productos/rutas.js';
 import { rutasNotificaciones } from './modules/notificaciones/rutas.js';
@@ -71,6 +72,7 @@ export async function crearApp({
       await api.register(rutasProductos, { prefix: '/productos', prisma });
       await api.register(rutasStock, { prefix: '/stock', prisma });
       await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora });
+      await api.register(rutasCaja, { prefix: '/caja', prisma, ahora });
       await api.register(rutasNotificaciones, { prefix: '/notificaciones', prisma });
     },
     { prefix: '/api' },

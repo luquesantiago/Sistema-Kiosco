@@ -13,8 +13,8 @@ import { anularVenta, listarVentas, obtenerVenta, registrarVenta } from './servi
 
 const paramsId = z.object({ id: z.uuid() });
 
-// Admin y empleado venden, listan y anulan; el servicio aplica la regla de
-// "solo ventas de hoy" para el empleado.
+// Admin y empleado venden, listan y anulan; el servicio exige el turno abierto
+// y aplica las reglas del empleado (ventas de hoy, anulaciones de su turno).
 export const rutasVentas: FastifyPluginAsyncZod<{
   prisma: PrismaClient;
   ahora: () => Date;
@@ -27,7 +27,7 @@ export const rutasVentas: FastifyPluginAsyncZod<{
     async (request, reply) =>
       reply
         .status(201)
-        .send(await registrarVenta(prisma, request.body, usuarioActual(request).id, ahora())),
+        .send(await registrarVenta(prisma, request.body, usuarioActual(request), ahora())),
   );
 
   app.get(

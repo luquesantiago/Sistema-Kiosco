@@ -112,7 +112,7 @@ export type ListadoVentasQuery = z.input<typeof listadoVentasQuerySchema>;
 
 export const VENTAS_POR_PAGINA = 50;
 
-const referenciaSchema = z.object({ id: z.uuid(), nombre: z.string() });
+export const referenciaSchema = z.object({ id: z.uuid(), nombre: z.string() });
 
 export const ventaResumenSchema = z.object({
   id: z.uuid(),
@@ -155,12 +155,20 @@ export const preciosActualesSchema = z.array(
 );
 export type PreciosActuales = z.infer<typeof preciosActualesSchema>;
 
+export const TIPOS_NOTIFICACION = [
+  'anulacion_venta',
+  'gasto_caja',
+  'retiro_caja',
+  'cierre_turno',
+] as const;
+export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
+
 export const ESTADOS_NOTIFICACION = ['pendiente', 'enviada', 'error'] as const;
 export type EstadoNotificacion = (typeof ESTADOS_NOTIFICACION)[number];
 
 export const notificacionSchema = z.object({
   id: z.uuid(),
-  tipo: z.enum(['anulacion_venta']),
+  tipo: z.enum(TIPOS_NOTIFICACION),
   destino: z.string(),
   texto: z.string(),
   estado: z.enum(ESTADOS_NOTIFICACION),

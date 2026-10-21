@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { limpiarBase, prismaTest } from './base.js';
-import { crearAppDePrueba, crearUsuarioDePrueba, ingresar, sesionDe } from './ayudas.js';
+import {
+  abrirTurnoDePrueba,
+  cerrarTurnoDePrueba,
+  crearAppDePrueba,
+  crearUsuarioDePrueba,
+  ingresar,
+  sesionDe,
+} from './ayudas.js';
 
 /** Las únicas rutas de la API que se pueden usar sin sesión. */
 const RUTAS_ABIERTAS = ['POST /api/auth/ingresar', 'GET /api/health'];
@@ -12,11 +19,17 @@ const PREFIJOS_ADMIN = [
   '/api/productos',
   '/api/stock',
   '/api/notificaciones',
+  '/api/caja',
 ];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
   'POST /api/stock/ingresos',
   'GET /api/stock/proveedores',
+  'GET /api/caja/estado',
+  'POST /api/caja/turnos',
+  'POST /api/caja/turnos/:id/cerrar',
+  'GET /api/caja/movimientos',
+  'POST /api/caja/movimientos',
 ];
 
 const ID_CUALQUIERA = '0198a5b0-0000-7000-8000-000000000000';
@@ -148,7 +161,7 @@ describe('contraseñas nunca expuestas', () => {
 });
 
 describe('ventas para admin y empleado', () => {
-  it('el empleado puede vender, listar y anular', async () => {
+  it('el empleado puede abrir su turno, vender, listar, anular, mover la caja y cerrar', async () => {
     const { app } = await crearAppDePrueba();
     await crearUsuarioDePrueba('juan');
     const cookies = await sesionDe(app, 'juan');
@@ -161,6 +174,7 @@ describe('ventas para admin y empleado', () => {
         stockMaximo: 0,
       },
     });
+    const turnoId = await abrirTurnoDePrueba(app, cookies);
 
     const venta = await app.inject({
       method: 'POST',
@@ -180,6 +194,16 @@ describe('ventas para admin y empleado', () => {
       payload: { motivo: 'prueba' },
     });
 
-    expect([venta.statusCode, lista.statusCode, anulacion.statusCode]).toEqual([201, 200, 200]);
+    const gasto = await app.inject({
+      method: 'POST',
+      url: '/api/caja/movimientos',
+      cookies,
+      payload: { tipo: 'gasto', monto: '100', motivo: 'Hielo' },
+    });
+    const cierre = await cerrarTurnoDePrueba(app, cookies, turnoId);
+
+    expect([venta, lista, anulacion, gasto, cierre].map((r) => r.statusCode)).toEqual([
+      201, 200, 200, 201, 200,
+    ]);
   });
 });

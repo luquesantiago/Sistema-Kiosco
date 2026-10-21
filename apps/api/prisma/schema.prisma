@@ -42,6 +42,9 @@ model Usuario {
   ingresos         IngresoMercaderia[]
   ventas           Venta[]             @relation("VentasVendidas")
   ventasAnuladas   Venta[]             @relation("VentasAnuladas")
+  turnosAbiertos   Turno[]             @relation("TurnosAbiertos")
+  turnosCerrados   Turno[]             @relation("TurnosCerrados")
+  movimientosCaja  MovimientoCaja[]
 
   @@map("usuarios")
 }
@@ -221,6 +224,9 @@ enum EstadoVenta {
 
 enum TipoNotificacion {
   anulacion_venta
+  gasto_caja
+  retiro_caja
+  cierre_turno
 }
 
 enum EstadoNotificacion {
@@ -229,25 +235,32 @@ enum EstadoNotificacion {
   error
 }
 
-/// Sin turno todavía: la Etapa 2 agrega turnoId con su migración.
 model Venta {
-  id              String            @id @default(uuid(7)) @db.Uuid
+  id               String            @id @default(uuid(7)) @db.Uuid
   /// Número legible para tickets y conversaciones ("la venta 120").
-  numero          Int               @unique @default(autoincrement())
-  usuarioId       String            @map("usuario_id") @db.Uuid
-  usuario         Usuario           @relation("VentasVendidas", fields: [usuarioId], references: [id], onDelete: Restrict)
-  total           Decimal           @db.Decimal(12, 2)
-  estado          EstadoVenta       @default(pagada)
-  creadaEn        DateTime          @default(now()) @map("creada_en") @db.Timestamptz
-  anuladaEn       DateTime?         @map("anulada_en") @db.Timestamptz
-  anuladaPorId    String?           @map("anulada_por_id") @db.Uuid
-  anuladaPor      Usuario?          @relation("VentasAnuladas", fields: [anuladaPorId], references: [id], onDelete: Restrict)
-  motivoAnulacion String?           @map("motivo_anulacion")
-  items           ItemVenta[]
-  pagos           PagoVenta[]
-  movimientos     MovimientoStock[]
+  numero           Int               @unique @default(autoincrement())
+  usuarioId        String            @map("usuario_id") @db.Uuid
+  usuario          Usuario           @relation("VentasVendidas", fields: [usuarioId], references: [id], onDelete: Restrict)
+  total            Decimal           @db.Decimal(12, 2)
+  estado           EstadoVenta       @default(pagada)
+  creadaEn         DateTime          @default(now()) @map("creada_en") @db.Timestamptz
+  anuladaEn        DateTime?         @map("anulada_en") @db.Timestamptz
+  anuladaPorId     String?           @map("anulada_por_id") @db.Uuid
+  anuladaPor       Usuario?          @relation("VentasAnuladas", fields: [anuladaPorId], references: [id], onDelete: Restrict)
+  motivoAnulacion  String?           @map("motivo_anulacion")
+  /// Turno en que se registró. Nullable solo por las ventas de desarrollo previas a la caja.
+  turnoId          String?           @map("turno_id") @db.Uuid
+  turno            Turno?            @relation("VentasDelTurno", fields: [turnoId], references: [id], onDelete: Restrict)
+  /// Turno abierto al anular: de su caja sale la devolución en efectivo. Vacío si no había turno.
+  anulacionTurnoId String?           @map("anulacion_turno_id") @db.Uuid
+  anulacionTurno   Turno?            @relation("AnulacionesDelTurno", fields: [anulacionTurnoId], references: [id], onDelete: Restrict)
+  items            ItemVenta[]
+  pagos            PagoVenta[]
+  movimientos      MovimientoStock[]
 
   @@index([creadaEn])
+  @@index([turnoId])
+  @@index([anulacionTurnoId])
   @@map("ventas")
 }
 
@@ -282,7 +295,61 @@ model PagoVenta {
   @@map("pagos_venta")
 }
 
-/// Aviso para el admin; el envío por WhatsApp (WAHA) llega en la Etapa 2.
+/// Turno de la única caja del kiosco. Como máximo uno abierto a la vez: lo
+/// garantiza el índice único parcial `turnos_un_solo_abierto` (WHERE cerrado_en
+/// IS NULL), agregado a mano en la migración `caja` porque Prisma no lo expresa.
+model Turno {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  /// Responsable del turno.
+  abiertoPorId       String           @map("abierto_por_id") @db.Uuid
+  abiertoPor         Usuario          @relation("TurnosAbiertos", fields: [abiertoPorId], references: [id], onDelete: Restrict)
+  abiertoEn          DateTime         @map("abierto_en") @db.Timestamptz
+  /// Lo que quedó en caja al cerrar el turno anterior ($0 en el primero).
+  montoSugerido      Decimal          @map("monto_sugerido") @db.Decimal(12, 2)
+  /// Lo que contó quien abrió; la diferencia de apertura es montoInicial - montoSugerido.
+  montoInicial       Decimal          @map("monto_inicial") @db.Decimal(12, 2)
+  /// Puede ser otro usuario si el responsable se fue sin cerrar.
+  cerradoPorId       String?          @map("cerrado_por_id") @db.Uuid
+  cerradoPor         Usuario?         @relation("TurnosCerrados", fields: [cerradoPorId], references: [id], onDelete: Restrict)
+  cerradoEn          DateTime?        @map("cerrado_en") @db.Timestamptz
+  montoContado       Decimal?         @map("monto_contado") @db.Decimal(12, 2)
+  retiroCierre       Decimal?         @map("retiro_cierre") @db.Decimal(12, 2)
+  motivoRetiroCierre String?          @map("motivo_retiro_cierre")
+  /// Foto del cierre: no cambia aunque después se anule una venta del turno.
+  esperado           Decimal?         @db.Decimal(12, 2)
+  diferencia         Decimal?         @db.Decimal(12, 2)
+  quedoEnCaja        Decimal?         @map("quedo_en_caja") @db.Decimal(12, 2)
+  ventas             Venta[]          @relation("VentasDelTurno")
+  anulaciones        Venta[]          @relation("AnulacionesDelTurno")
+  movimientos        MovimientoCaja[]
+
+  @@index([abiertoEn])
+  @@map("turnos")
+}
+
+enum TipoMovimientoCaja {
+  gasto
+  retiro
+  ingreso
+}
+
+/// Plata que entra o sale del cajón fuera de las ventas. Inmutable.
+model MovimientoCaja {
+  id        String             @id @default(uuid(7)) @db.Uuid
+  turnoId   String             @map("turno_id") @db.Uuid
+  turno     Turno              @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  tipo      TipoMovimientoCaja
+  monto     Decimal            @db.Decimal(12, 2)
+  motivo    String
+  usuarioId String             @map("usuario_id") @db.Uuid
+  usuario   Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  creadoEn  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+
+  @@index([turnoId, creadoEn])
+  @@map("movimientos_caja")
+}
+
+/// Aviso para el admin; el envío por WhatsApp (WAHA) llega con el cambio `envio-whatsapp`.
 model Notificacion {
   id        String             @id @default(uuid(7)) @db.Uuid
   tipo      TipoNotificacion

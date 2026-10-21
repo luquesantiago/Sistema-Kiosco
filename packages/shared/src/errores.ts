@@ -32,4 +32,8 @@ export const CODIGOS_ERROR = {
   preciosCambiaron: 'PRECIOS_CAMBIARON',
   fueraDePlazo: 'FUERA_DE_PLAZO',
   ventaYaAnulada: 'VENTA_YA_ANULADA',
+  sinTurnoAbierto: 'SIN_TURNO_ABIERTO',
+  turnoDeOtro: 'TURNO_DE_OTRO',
+  turnoYaAbierto: 'TURNO_YA_ABIERTO',
+  turnoYaCerrado: 'TURNO_YA_CERRADO',
 } as const;
