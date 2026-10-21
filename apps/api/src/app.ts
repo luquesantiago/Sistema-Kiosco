@@ -31,6 +31,8 @@ export interface OpcionesApp {
   ahora?: () => Date;
   /** Cookie de sesión solo por HTTPS (producción). */
   cookieSegura?: boolean;
+  /** Detrás del proxy (Caddy en producción): la IP del cliente sale de X-Forwarded-For. */
+  trustProxy?: boolean;
 }
 
 export interface RutaRegistrada {
@@ -47,8 +49,9 @@ export async function crearApp({
   logger = false,
   ahora = () => new Date(),
   cookieSegura = false,
+  trustProxy = false,
 }: OpcionesApp) {
-  const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({ logger, trustProxy }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registrarManejoDeErrores(app);

@@ -20,7 +20,11 @@ export const rutasEstado: FastifyPluginAsyncZod<{ verificarBase: VerificarBase }
 ) => {
   app.get(
     '/health',
-    { schema: { response: { 200: estadoServicioSchema, 503: estadoServicioSchema } } },
+    {
+      // El healthcheck de Docker lo llama cada 10 s: sin log por pedido.
+      logLevel: 'warn',
+      schema: { response: { 200: estadoServicioSchema, 503: estadoServicioSchema } },
+    },
     async (request, reply) => {
       let baseOk = true;
       try {

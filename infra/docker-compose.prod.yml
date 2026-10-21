@@ -1,0 +1,110 @@
+# Producción (ver el runbook en infra/README.md). Se instala y actualiza con
+# ./infra/deploy.sh, que además aplica las migraciones. Un
+# `docker compose -f infra/docker-compose.prod.yml up -d` solo sirve para
+# volver a levantar una instalación que ya está migrada.
+#
+# Las variables vienen de infra/.env (copiado de infra/.env.example, nunca
+# versionado). Solo Caddy publica puertos: la app y la base quedan en la red
+# interna del Compose.
+name: kiosco
+
+x-zona-horaria: &zona-horaria
+  TZ: America/Argentina/Buenos_Aires
+
+# Logs con tamaño máximo: sin esto crecen sin límite.
+x-logs: &logs
+  driver: local
+  options:
+    max-size: 10m
+    max-file: '5'
+
+x-url-base: &url-base postgresql://kiosco:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en infra/.env}@db:5432/kiosco
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    logging: *logs
+    ports:
+      # Los puertos se pueden cambiar solo para probar en una PC con 80 y 443 ocupados.
+      - '${PUERTO_HTTP:-80}:80'
+      - '${PUERTO_HTTPS:-443}:443'
+      - '${PUERTO_HTTPS:-443}:443/udp'
+    environment:
+      <<: *zona-horaria
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en infra/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados: si se pierden, Let's Encrypt los vuelve a emitir.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    image: kiosco-app:actual
+    build:
+      context: ..
+      target: runtime
+      args:
+        VITE_NOMBRE_KIOSCO: ${NOMBRE_KIOSCO:-Kiosco}
+        VITE_ANCHO_TICKET: ${ANCHO_TICKET:-80}
+    restart: unless-stopped
+    logging: *logs
+    environment:
+      <<: *zona-horaria
+      DATABASE_URL: *url-base
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Aplica las migraciones; lo corre deploy.sh con `run --rm migrate`.
+  migrate:
+    image: kiosco-migrate:actual
+    build:
+      context: ..
+      target: migrate
+    profiles: [herramientas]
+    logging: *logs
+    environment:
+      <<: *zona-horaria
+      DATABASE_URL: *url-base
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    logging: *logs
+    environment:
+      <<: *zona-horaria
+      POSTGRES_USER: kiosco
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en infra/.env}
+      POSTGRES_DB: kiosco
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # Por TCP: mientras initdb corre, el servidor temporal solo escucha en el
+      # socket y la app (que entra por TCP) todavía no se puede conectar.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U kiosco -d kiosco']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

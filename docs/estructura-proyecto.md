@@ -25,7 +25,7 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ```
 
 - **Lector de código de barras:** USB en modo teclado (HID). Escribe el código y un Enter en el campo activo, así que no necesita integración especial.
-- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). El Compose de producción (con `caddy` y `waha`) se arma en la Etapa 2, con la puesta en marcha. Durante la Etapa 1 solo existe el Compose de desarrollo de [`infra/`](../infra/README.md), con PostgreSQL.
+- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). En [`infra/`](../infra/README.md) están el Compose de desarrollo (PostgreSQL) y el de producción (`caddy`, `app` y `db`; `waha` se suma con `envio-whatsapp`), con los scripts de deploy, backup y restauración y el runbook del servidor.
 - **Impresora:** térmica de tickets común (58 u 80 mm). Con factura electrónica **no hace falta impresora fiscal**.
 
 ## Módulos y dependencias

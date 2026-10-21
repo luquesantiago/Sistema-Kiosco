@@ -1,0 +1,7 @@
+# Proxy HTTPS. Caddy pide y renueva el certificado de Let's Encrypt para
+# DOMINIO y redirige HTTP a HTTPS solo. Con DOMINIO=localhost usa su propia
+# autoridad de certificación (para probar en una PC o en la CI).
+{$DOMINIO} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

@@ -18,7 +18,7 @@
 | WhatsApp | **WAHA** (WhatsApp HTTP API) | Llamadas HTTP directas dentro de la red de Docker Compose |
 | Lector de código de barras | USB en modo HID (teclado) | No requiere drivers ni integración |
 | Impresora | Térmica de tickets (58 u 80 mm), no fiscal | `window.print()` con estilos para papel de ticket |
-| Infraestructura | **VPS + Docker Compose** | Servicios `caddy`, `app`, `db`, `waha` |
+| Infraestructura | **VPS + Docker Compose** | Cloud Server de DonWeb (Argentina) con subdominio de DuckDNS. Servicios `caddy`, `app`, `db` y, con `envio-whatsapp`, `waha` |
 | Paquetes | **pnpm** con workspaces (monorepo) | Ver [estructura de carpetas](estructura-proyecto.md#estructura-de-carpetas) |
 | Calidad | ESLint + Prettier, **Vitest**, **Playwright** | |
 
@@ -61,13 +61,15 @@
 - El comprobante con CAE y QR de ARCA se define en la etapa de facturación.
 
 ### Hosting / infraestructura
-- Un **VPS** con **Docker Compose**:
+- Un **VPS** con **Docker Compose** (`infra/docker-compose.prod.yml`; el paso a paso está en [`infra/README.md`](../infra/README.md)):
   - `caddy`: proxy inverso con HTTPS automático (Let's Encrypt). Es el único servicio que expone puertos.
-  - `app`: Fastify + build de React.
+  - `app`: Fastify + build de React, en una imagen multi-etapa (`Dockerfile`) que se construye en el propio servidor.
   - `db`: PostgreSQL.
-  - `waha`: WhatsApp HTTP API, con la sesión persistida en un volumen.
-- Dominio con HTTPS, necesario para los webhooks de Mercado Pago.
-- **Backups:** `pg_dump` diario comprimido, copiado fuera del servidor (almacenamiento de objetos), con retención de 30 días.
+  - `waha`: WhatsApp HTTP API, con la sesión persistida en un volumen. Se suma con el cambio `envio-whatsapp`.
+- **Servidor:** Cloud Server de DonWeb en Argentina (2 vCPU, 4 GB, 30 GB), pago anual en pesos: sin percepciones por compra en dólares y con la menor latencia desde el kiosco.
+- **Dominio:** subdominio gratuito de DuckDNS apuntado a la IPv4 fija del servidor. El HTTPS también hace falta para los webhooks de Mercado Pago. Pasar a un dominio propio es cambiar `DOMINIO` y el DNS.
+- **Deploy:** manual, con `infra/deploy.sh` por SSH: backup, build, migraciones, verificación de `/api/health` y vuelta atrás si la versión nueva no queda sana.
+- **Backups:** `pg_dump` diario comprimido a las 03:00 con un timer de systemd (`infra/backup.sh`), subido a Google Drive con `rclone` (alcance `drive.file`). Se guardan 7 días en el servidor y 30 en Drive, y se restauran con `infra/restaurar.sh`.
 
 ### Calidad y operación
 - **pnpm** con workspaces.
@@ -88,7 +90,7 @@
 | ORM | Drizzle | Más liviano, pero menos maduro en migraciones |
 | Base de datos | SQLite | Más simple, pero peor para concurrencia y backups en caliente |
 | Autenticación | JWT | Revocar sesiones es más difícil y no hay clientes de terceros |
-| Tarea programada | Cron del sistema operativo | Queda fuera del código y del despliegue con Docker Compose |
+| Tarea programada | Cron del sistema operativo | Queda fuera del código y del despliegue con Docker Compose. Solo los backups usan un timer de systemd, porque corren fuera de la app |
 | Tarea programada | Cola tipo BullMQ | Requiere Redis; excesivo para una tarea diaria |
 | Facturación | `@afipsdk/afip.js` como opción principal | Depende de un servicio intermedio con token propio; queda como plan B |
 | Hosting | PaaS (Railway, Render) | WAHA necesita sesión persistente y un contenedor siempre encendido; en un VPS es más barato |
@@ -97,7 +99,7 @@
 
 Decisiones que no cambian la arquitectura y se toman más adelante:
 
-- [ ] Proveedor concreto de VPS y de almacenamiento para los backups.
+- [x] Proveedor concreto de VPS y de almacenamiento para los backups. → Cloud Server de DonWeb con DuckDNS, y backups en Google Drive (cambio `puesta-en-marcha`).
 - [ ] Canal de las alertas operativas (WhatsApp vía WAHA, email, etc.), a decidir en la Etapa 4.
 
 ## Criterios usados para decidir
