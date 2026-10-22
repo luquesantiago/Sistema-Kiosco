@@ -2,7 +2,7 @@
 
 Sistema de gestión para un kiosco familiar: ventas con lector de código de barras, stock por proveedor, control de caja por turno, avisos diarios de reposición por WhatsApp, facturación electrónica ARCA y dashboard de ventas.
 
-> **Estado:** en desarrollo (Etapa 1). Ya está el esqueleto del monorepo; las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
+> **Estado:** en desarrollo (Etapa 2). La Etapa 1 está terminada; ya hay caja por turno y falta instalar el sistema en el servidor. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
 
 ## Funcionalidades previstas
 
@@ -16,8 +16,11 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 
 ## Etapas
 
-1. Base, en 5 cambios: `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`. No se usa en el kiosco todavía.
-2. Caja y puesta en marcha: turnos, apertura, cierre y arqueo; deploy en el VPS, backups, WAHA y envío de avisos (por ejemplo, de anulaciones)
+1. ✅ **Base**, en 5 cambios: `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`. Terminada y unida a `main`.
+2. 🚧 **Caja y puesta en marcha** (rama `etapa-2`), en 3 cambios:
+   - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
+   - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño.
+   - ⏳ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre).
 3. Dashboard
 4. Reposición: aviso diario de las 12:00 por WhatsApp
 5. Facturación electrónica ARCA e integración con Mercado Pago
