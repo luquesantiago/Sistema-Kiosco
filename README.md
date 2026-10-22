@@ -2,13 +2,14 @@
 
 Sistema de gestión para un kiosco familiar: ventas con lector de código de barras, stock por proveedor, control de caja por turno, avisos diarios de reposición por WhatsApp, facturación electrónica ARCA y dashboard de ventas.
 
-> **Estado:** en desarrollo (Etapa 1). Ya está el esqueleto del monorepo; las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
+> **Estado:** en desarrollo. Las Etapas 1 y 2 están terminadas en código: hay ventas, stock, caja por turno y avisos al admin por WhatsApp. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
 
 ## Funcionalidades previstas
 
 - **Ventas (POS):** cobro rápido con lector de código de barras; efectivo, débito, crédito y Mercado Pago (integrado con su API).
 - **Stock y proveedores:** cada proveedor con sus productos, día de toma de pedido y día de entrega.
 - **Caja y turnos:** 2 turnos de 6 horas, apertura, cierre, arqueo y retiros por empleado.
+- **Avisos al admin por WhatsApp:** anulaciones, gastos y retiros de los empleados y el resumen de cada cierre de turno, desde un chip dedicado que se vincula por QR desde el sistema.
 - **Usuarios y roles:** admin y empleado.
 - **Dashboard:** ventas, productos más vendidos, ingresos y egresos (usable desde el celular).
 - **Reposición:** recomendaciones agrupadas por proveedor, enviadas por WhatsApp ([WAHA](https://waha.devlike.pro/)) todos los días a las 12:00.
@@ -16,8 +17,11 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 
 ## Etapas
 
-1. Base, en 5 cambios: `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`. No se usa en el kiosco todavía.
-2. Caja y puesta en marcha: turnos, apertura, cierre y arqueo; deploy en el VPS, backups, WAHA y envío de avisos (por ejemplo, de anulaciones)
+1. ✅ **Base**, en 5 cambios: `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`. Terminada y unida a `main`.
+2. 🚧 **Caja y puesta en marcha** (rama `etapa-2`), en 3 cambios. Todo el código está terminado; solo falta la instalación en el servidor:
+   - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
+   - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño. Se deja para cuando el sistema esté completo, así no se paga el servidor antes.
+   - ✅ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre), con vinculación del chip por QR desde **Administración → WhatsApp**. Probado con el chip.
 3. Dashboard
 4. Reposición: aviso diario de las 12:00 por WhatsApp
 5. Facturación electrónica ARCA e integración con Mercado Pago
@@ -28,7 +32,7 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 
 - [Node.js 24](https://nodejs.org/) (ver `.nvmrc`).
 - pnpm, activado con Corepack, que viene con Node.
-- [Docker](https://www.docker.com/) para la base de datos.
+- [Docker](https://www.docker.com/) para la base de datos (y WhatsApp, si se quieren probar los avisos).
 
 ### Activar pnpm
 
@@ -76,6 +80,8 @@ pnpm dev
 
 Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la web con `API_PORT` igual a ese puerto. Si el 5173 está ocupado, Vite elige el siguiente libre y lo muestra en la consola.
 
+Los avisos por WhatsApp son opcionales en desarrollo: sin WAHA quedan pendientes y se ven en **Avisos**. Para probarlos con el chip, ver [WhatsApp de desarrollo](infra/README.md#whatsapp-de-desarrollo).
+
 ### Comandos
 
 | Comando | Qué hace |
@@ -86,6 +92,7 @@ Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la
 | `pnpm format` | Formatea el código con Prettier |
 | `pnpm build` / `pnpm start` | Build de producción; la API sirve la web desde el mismo puerto |
 | `pnpm db:up` / `pnpm db:down` | Levanta o detiene PostgreSQL de desarrollo (ver [`infra/`](infra/README.md)) |
+| `pnpm whatsapp:up` / `pnpm whatsapp:down` | Levanta o detiene WhatsApp (WAHA) de desarrollo, para probar los avisos con el chip (ver [`infra/`](infra/README.md#whatsapp-de-desarrollo)) |
 | `pnpm db:migrate` | Crea y aplica migraciones en desarrollo (`prisma migrate dev`) |
 | `pnpm db:deploy` | Aplica las migraciones pendientes sin crear nuevas (`prisma migrate deploy`) |
 | `pnpm --filter api usuarios:crear-admin` | Crea un usuario admin desde la consola |

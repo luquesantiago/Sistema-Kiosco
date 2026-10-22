@@ -13,7 +13,8 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { MensajeError } from '../app/MensajeError.js';
 import { entradaAMonto, formatearPesos } from '../lib/montos.js';
 
-function Dialogo({
+/** Diálogo modal del mostrador: Esc lo cierra. */
+export function Dialogo({
   titulo,
   alCerrar,
   children,

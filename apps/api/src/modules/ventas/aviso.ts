@@ -1,20 +1,4 @@
-import { ZONA_ARGENTINA } from '../../lib/fechas.js';
-
-const pesos = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' });
-const fechaHora = new Intl.DateTimeFormat('es-AR', {
-  timeZone: ZONA_ARGENTINA,
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-/** "$ 1.800,00" con espacio común: Intl usa uno duro que WhatsApp muestra raro. */
-function formatearPesos(monto: string): string {
-  return pesos.format(Number(monto)).replace(/\s/g, ' ');
-}
+import { formatearFechaHora, formatearPesos } from '../../lib/formato.js';
 
 export interface DatosAvisoAnulacion {
   numero: number;
@@ -36,7 +20,7 @@ export function textoAvisoAnulacion({
 }: DatosAvisoAnulacion): string {
   return [
     `*Venta #${numero} anulada*`,
-    `Fecha y hora: ${fechaHora.format(anuladaEn).replace(',', '')}`,
+    `Fecha y hora: ${formatearFechaHora(anuladaEn)}`,
     `Anuló: ${anuladaPor}`,
     `Motivo: ${motivo}`,
     '',

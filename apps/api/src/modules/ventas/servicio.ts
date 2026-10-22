@@ -17,6 +17,7 @@ import type { z } from 'zod';
 import { ErrorHttp } from '../../errores.js';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { fechaEnArgentina, rangoDelDiaEnArgentina } from '../../lib/fechas.js';
+import { turnoAbiertoBloqueado, turnoParaOperar } from '../caja/servicio.js';
 import { registrarMovimiento } from '../stock/movimientos.js';
 import { textoAvisoAnulacion } from './aviso.js';
 
@@ -74,16 +75,17 @@ type Item = z.output<typeof ventaEntradaSchema>['items'][number];
 type ItemCatalogo = Extract<Item, { productoId: string }>;
 
 /**
- * Registra una venta con precios del catálogo, sus pagos y un movimiento
- * `venta` por producto, todo en una transacción. El mostrador no fija
- * precios: `totalEsperado` solo detecta que el empleado vio otro precio.
+ * Registra una venta en el turno abierto con precios del catálogo, sus pagos y
+ * un movimiento `venta` por producto, todo en una transacción. El mostrador no
+ * fija precios: `totalEsperado` solo detecta que el empleado vio otro precio.
  */
 export async function registrarVenta(
   prisma: PrismaClient,
   { items, pagos, totalEsperado }: z.output<typeof ventaEntradaSchema>,
-  usuarioId: string,
+  usuario: UsuarioSesion,
   ahora: Date,
 ): Promise<VentaDetalle> {
+  const usuarioId = usuario.id;
   // Agrupa los productos repetidos en la posición de su primera aparición.
   const agrupados: Item[] = [];
   const porProducto = new Map<string, ItemCatalogo>();
@@ -104,6 +106,7 @@ export async function registrarVenta(
 
   const id = await prisma.$transaction(
     async (tx) => {
+      const turno = await turnoParaOperar(tx, usuario);
       const productos = await tx.producto.findMany({
         where: { id: { in: [...porProducto.keys()] } },
         select: { id: true, nombre: true, precio: true, activo: true },
@@ -157,6 +160,7 @@ export async function registrarVenta(
       const venta = await tx.venta.create({
         data: {
           usuarioId,
+          turnoId: turno.id,
           total,
           creadaEn: ahora,
           items: { create: itemsData },
@@ -190,7 +194,7 @@ export async function registrarVenta(
 
 const fueraDePlazo = (mensaje: string) => new ErrorHttp(403, CODIGOS_ERROR.fueraDePlazo, mensaje);
 
-/** El empleado solo ve y anula ventas del día en hora de Argentina; el admin, cualquiera. */
+/** El empleado solo ve ventas del día en hora de Argentina; el admin, cualquiera. */
 function esDeHoy(venta: { creadaEn: Date }, ahora: Date): boolean {
   return fechaEnArgentina(venta.creadaEn) === fechaEnArgentina(ahora);
 }
@@ -259,8 +263,14 @@ export async function anularVenta(
     async (tx) => {
       const venta = await tx.venta.findUnique({ where: { id }, include: { items: true } });
       if (!venta) throw ventaNoEncontrada();
-      if (usuario.rol !== 'admin' && !esDeHoy(venta, ahora)) {
-        throw fueraDePlazo('Solo podés anular ventas de hoy. Pedile al admin que la anule.');
+      // La devolución en efectivo sale del turno abierto. El empleado solo
+      // anula ventas de su turno; el admin, cualquiera, haya turno o no.
+      const turno =
+        usuario.rol === 'admin'
+          ? await turnoAbiertoBloqueado(tx)
+          : await turnoParaOperar(tx, usuario);
+      if (usuario.rol !== 'admin' && venta.turnoId !== turno?.id) {
+        throw fueraDePlazo('Solo podés anular ventas de tu turno. Pedile al admin que la anule.');
       }
 
       const { count } = await tx.venta.updateMany({
@@ -270,6 +280,7 @@ export async function anularVenta(
           anuladaEn: ahora,
           anuladaPorId: usuario.id,
           motivoAnulacion: motivo,
+          anulacionTurnoId: turno?.id ?? null,
         },
       });
       if (count === 0) {

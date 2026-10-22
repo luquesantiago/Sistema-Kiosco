@@ -17,6 +17,8 @@
     "format:check": "prettier --check .",
     "db:up": "docker compose -f infra/docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f infra/docker-compose.dev.yml down",
+    "whatsapp:up": "docker compose -f infra/docker-compose.dev.yml --profile whatsapp up -d waha",
+    "whatsapp:down": "docker compose -f infra/docker-compose.dev.yml --profile whatsapp stop waha",
     "db:migrate": "pnpm --filter api db:migrate",
     "db:deploy": "pnpm --filter api db:deploy"
   },

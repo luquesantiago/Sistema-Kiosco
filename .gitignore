@@ -7,8 +7,10 @@
 *.crt
 *.p12
 
-# Configuración local de Claude Code
+# Configuración local de Claude Code (las skills y comandos de .claude/ sí van)
 .claude/settings.local.json
+.claude/launch.json
+.claude/worktrees/
 
 # Sistema operativo y editores
 .DS_Store
@@ -22,6 +24,11 @@ dist/
 build/
 __pycache__/
 *.log
+*.tsbuildinfo
+coverage/
+
+# Sesión de WhatsApp (WAHA) si se monta en una carpeta local
+.sessions/
 
 # Resultados de Playwright
 test-results/

@@ -10,6 +10,8 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { ErrorDeApi, pedir } from '../api/cliente.js';
+import { MensajeError } from '../app/MensajeError.js';
+import { useSesion } from '../app/sesion.js';
 import { formatearPesos } from '../lib/montos.js';
 import { EscanerDeProductos } from '../stock/EscanerDeProductos.js';
 import {
@@ -20,11 +22,19 @@ import {
   subtotal,
   totalCarrito,
 } from './carrito.js';
+import { CLAVE_ESTADO_CAJA, esErrorDeTurno, useEstadoCaja } from './estadoCaja.js';
+import { AbrirTurno, DialogoCaja, DialogoCerrarTurno, TurnoDeOtro } from './Caja.js';
 import { DialogoCobro, DialogoPagoMixto, DialogoVarios } from './Dialogos.js';
 import { sonarError } from './sonido.js';
 import { useImpresionTicket } from './Ticket.js';
 
-type Dialogo = { tipo: 'cobro'; medio: MedioPago } | { tipo: 'mixto' } | { tipo: 'varios' } | null;
+type Dialogo =
+  | { tipo: 'cobro'; medio: MedioPago }
+  | { tipo: 'mixto' }
+  | { tipo: 'varios' }
+  | { tipo: 'caja' }
+  | { tipo: 'cerrarTurno' }
+  | null;
 
 /** Atajos de la pantalla de venta; la barra del pie los muestra. */
 const ATAJOS_COBRO: Record<string, MedioPago> = {
@@ -41,6 +51,7 @@ const REFERENCIA_ATAJOS: [string, string][] = [
   ['F4', 'Mercado Pago'],
   ['F6', 'Pago mixto'],
   ['F7', 'Varios'],
+  ['F8', 'Caja'],
   ['↑ ↓', 'Elegir ítem'],
   ['+ −', 'Cantidad'],
   ['Supr', 'Quitar'],
@@ -50,8 +61,43 @@ const REFERENCIA_ATAJOS: [string, string][] = [
 
 let contadorVarios = 0;
 
-/** Punto de venta: lector + teclado, sin tocar el mouse. */
+/**
+ * Punto de venta. Sin turno abierto pide abrirlo; si el turno es de otro
+ * empleado, pide cerrarlo antes. El admin vende en el turno abierto de cualquiera.
+ */
 export function Venta() {
+  const { data: sesion } = useSesion();
+  const { data: estado, error } = useEstadoCaja();
+
+  if (error) return <MensajeError error={error} />;
+  if (!estado || !sesion) return <p>Cargando caja…</p>;
+  const turno = estado.turnoAbierto;
+  if (!turno) return <AbrirTurno montoSugerido={estado.montoSugerido} />;
+  if (!turno.esMio && sesion.rol !== 'admin') {
+    return <TurnoDeOtro turnoId={turno.id} responsable={turno.responsable} />;
+  }
+  return (
+    <PuntoDeVenta
+      turnoId={turno.id}
+      responsable={turno.responsable}
+      esMio={turno.esMio}
+      esAdmin={sesion.rol === 'admin'}
+    />
+  );
+}
+
+/** Lector + teclado, sin tocar el mouse. */
+function PuntoDeVenta({
+  turnoId,
+  responsable,
+  esMio,
+  esAdmin,
+}: {
+  turnoId: string;
+  responsable: { id: string; nombre: string };
+  esMio: boolean;
+  esAdmin: boolean;
+}) {
   const [carrito, despachar] = useReducer(reducirCarrito, undefined, cargarCarrito);
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   const [ultimaVenta, setUltimaVenta] = useState<VentaDetalle | null>(null);
@@ -79,6 +125,12 @@ export function Venta() {
       void queryClient.invalidateQueries({ queryKey: ['ventas'] });
     },
     onError: (error) => {
+      // El turno se cerró o cambió: la pantalla vuelve a pedir abrirlo, con el carrito intacto.
+      if (esErrorDeTurno(error)) {
+        setDialogo(null);
+        void queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_CAJA });
+        return;
+      }
       if (error instanceof ErrorDeApi && error.codigo === CODIGOS_ERROR.preciosCambiaron) {
         const precios = preciosActualesSchema.safeParse(error.detalle);
         if (precios.success) despachar({ tipo: 'actualizarPrecios', precios: precios.data });
@@ -92,7 +144,8 @@ export function Venta() {
     cobro.mutate({ items: itemsParaVenta(carrito), pagos, totalEsperado: total });
 
   const abrir = (nuevo: Exclude<Dialogo, null>) => {
-    if (nuevo.tipo !== 'varios' && vacio) {
+    const esCobro = nuevo.tipo === 'cobro' || nuevo.tipo === 'mixto';
+    if (esCobro && vacio) {
       setAviso('El carrito está vacío.');
       return;
     }
@@ -104,7 +157,7 @@ export function Venta() {
   useEffect(() => {
     const alPresionar = (e: KeyboardEvent) => {
       const medio = ATAJOS_COBRO[e.key];
-      const esAtajoF = medio !== undefined || e.key === 'F6' || e.key === 'F7' || e.key === 'F9';
+      const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9'].includes(e.key);
       if (dialogo !== null) {
         // El diálogo maneja Enter y Esc; las F no tienen que llegar al navegador (F1 = ayuda).
         if (esAtajoF) e.preventDefault();
@@ -115,10 +168,11 @@ export function Venta() {
         abrir({ tipo: 'cobro', medio });
         return;
       }
-      if (e.key === 'F6' || e.key === 'F7' || e.key === 'F9') {
+      if (['F6', 'F7', 'F8', 'F9'].includes(e.key)) {
         e.preventDefault();
         if (e.key === 'F6') abrir({ tipo: 'mixto' });
         if (e.key === 'F7') abrir({ tipo: 'varios' });
+        if (e.key === 'F8') abrir({ tipo: 'caja' });
         if (e.key === 'F9' && ultimaVenta) imprimir(ultimaVenta);
         return;
       }
@@ -161,6 +215,29 @@ export function Venta() {
 
   return (
     <section className="space-y-4 pb-28">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+        <span>
+          Turno de <strong>{responsable.nombre}</strong>
+        </span>
+        <span className="flex gap-2">
+          <button
+            type="button"
+            className="boton-secundario"
+            onClick={() => abrir({ tipo: 'caja' })}
+          >
+            Caja (F8)
+          </button>
+          <button
+            type="button"
+            className="boton-secundario"
+            disabled={!vacio}
+            title={vacio ? undefined : 'Cobrá o vaciá el carrito antes de cerrar el turno.'}
+            onClick={() => abrir({ tipo: 'cerrarTurno' })}
+          >
+            Cerrar turno
+          </button>
+        </span>
+      </div>
       <div className="rounded-lg bg-white p-4 shadow">
         <EscanerDeProductos<ProductoVenta>
           campoRef={campo}
@@ -281,6 +358,17 @@ export function Venta() {
 
       {dialogo?.tipo === 'cobro' && <DialogoCobro medio={dialogo.medio} {...propsCobro} />}
       {dialogo?.tipo === 'mixto' && <DialogoPagoMixto {...propsCobro} />}
+      {dialogo?.tipo === 'caja' && (
+        <DialogoCaja esAdmin={esAdmin} alCerrar={() => setDialogo(null)} />
+      )}
+      {dialogo?.tipo === 'cerrarTurno' && (
+        <DialogoCerrarTurno
+          turnoId={turnoId}
+          responsable={responsable}
+          esMio={esMio}
+          alCancelar={() => setDialogo(null)}
+        />
+      )}
       {dialogo?.tipo === 'varios' && (
         <DialogoVarios
           alCerrar={() => setDialogo(null)}

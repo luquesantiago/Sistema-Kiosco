@@ -4,6 +4,10 @@
  *
  *   pnpm --filter api usuarios:crear-admin --usuario ana --nombre "Ana Pérez"
  *
+ * En producción, compilado dentro del contenedor:
+ *
+ *   docker compose exec app node dist/cli/crear-admin.js --usuario ana --nombre "Ana Pérez"
+ *
  * La contraseña se pide dos veces sin mostrarla.
  */
 import { Writable } from 'node:stream';

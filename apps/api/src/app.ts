@@ -10,6 +10,7 @@ import {
 import { registrarManejoDeErrores, respuestaNoEncontrado } from './errores.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rutasAuth } from './modules/auth/rutas.js';
+import { rutasCaja } from './modules/caja/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
 import { rutasProductos } from './modules/productos/rutas.js';
 import { rutasNotificaciones } from './modules/notificaciones/rutas.js';
@@ -17,10 +18,14 @@ import { rutasProveedores } from './modules/proveedores/rutas.js';
 import { rutasStock } from './modules/stock/rutas.js';
 import { rutasUsuarios } from './modules/usuarios/rutas.js';
 import { rutasVentas } from './modules/ventas/rutas.js';
+import type { ClienteWhatsapp } from './modules/whatsapp/cliente.js';
+import { rutasWhatsapp } from './modules/whatsapp/rutas.js';
 import { registrarSesion } from './plugins/sesion.js';
 
 export interface OpcionesApp {
   prisma: PrismaClient;
+  /** Sin cliente (no hay WAHA_URL), WhatsApp queda `no_configurado`. */
+  whatsapp?: ClienteWhatsapp;
   /** Por defecto, `SELECT 1` con el mismo cliente de Prisma. */
   verificarBase?: VerificarBase;
   /** Carpeta con el build de la web. Si no existe, la API no sirve archivos estáticos. */
@@ -30,6 +35,8 @@ export interface OpcionesApp {
   ahora?: () => Date;
   /** Cookie de sesión solo por HTTPS (producción). */
   cookieSegura?: boolean;
+  /** Detrás del proxy (Caddy en producción): la IP del cliente sale de X-Forwarded-For. */
+  trustProxy?: boolean;
 }
 
 export interface RutaRegistrada {
@@ -39,6 +46,7 @@ export interface RutaRegistrada {
 
 export async function crearApp({
   prisma,
+  whatsapp,
   verificarBase = async () => {
     await prisma.$queryRaw`SELECT 1`;
   },
@@ -46,8 +54,9 @@ export async function crearApp({
   logger = false,
   ahora = () => new Date(),
   cookieSegura = false,
+  trustProxy = false,
 }: OpcionesApp) {
-  const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({ logger, trustProxy }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registrarManejoDeErrores(app);
@@ -71,7 +80,9 @@ export async function crearApp({
       await api.register(rutasProductos, { prefix: '/productos', prisma });
       await api.register(rutasStock, { prefix: '/stock', prisma });
       await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora });
+      await api.register(rutasCaja, { prefix: '/caja', prisma, ahora });
       await api.register(rutasNotificaciones, { prefix: '/notificaciones', prisma });
+      await api.register(rutasWhatsapp, { prefix: '/whatsapp', prisma, whatsapp });
     },
     { prefix: '/api' },
   );

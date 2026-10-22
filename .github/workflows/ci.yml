@@ -73,3 +73,41 @@ jobs:
           name: playwright-resultados
           path: apps/web/test-results/
           retention-days: 7
+
+  produccion:
+    # Construye la imagen y levanta el Compose de producción como en el servidor,
+    # con DOMINIO=localhost (Caddy usa su propia autoridad de certificación).
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f infra/docker-compose.prod.yml
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configuración de prueba
+        run: |
+          printf 'DOMINIO=localhost\nPOSTGRES_PASSWORD=%s\nWAHA_API_KEY=%s\n' \
+            "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > infra/.env
+      - run: $COMPOSE build app migrate
+      - run: $COMPOSE run --rm migrate
+      - run: $COMPOSE up -d --wait
+      - name: HTTPS, redirección y puertos cerrados
+        run: |
+          # Caddy no tiene healthcheck: puede tardar un momento en emitir el certificado.
+          curl -fsSk --retry 10 --retry-all-errors --retry-delay 1 https://localhost/api/health | grep -q '"estado":"ok"'
+          test "$(curl -s --retry 10 --retry-all-errors --retry-delay 1 -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost/venta)" = "308 https://localhost/venta"
+          for servicio in db app waha; do
+            test "$(docker inspect -f '{{json .HostConfig.PortBindings}}' "kiosco-$servicio-1")" = '{}'
+          done
+      - name: WAHA solo con la API key
+        run: |
+          # Desde la red interna: sin la clave, 401; con la clave, responde.
+          pedir() {
+            $COMPOSE exec -T app node -e "fetch('http://waha:3000/api/sessions', { headers: $1 }).then((r) => console.log(r.status), () => console.log('caido'))"
+          }
+          for intento in $(seq 30); do
+            test "$(pedir '{}')" != caido && break
+            sleep 2
+          done
+          test "$(pedir '{}')" = 401
+          test "$(pedir "{ 'X-Api-Key': process.env.WAHA_API_KEY }")" = 200
+      - if: failure()
+        run: $COMPOSE logs

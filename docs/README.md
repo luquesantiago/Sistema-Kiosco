@@ -10,7 +10,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 
 | Actor | Qué hace | Dónde |
 |---|---|---|
-| **Admin** (dueño/familia) | Gestiona productos, precios, proveedores y usuarios; ve el dashboard y los cierres de caja | PC del kiosco y **celular** |
+| **Admin** (dueño/familia) | Gestiona productos, precios, proveedores y usuarios; ve el dashboard y los cierres de caja; recibe los avisos por WhatsApp | PC del kiosco y **celular** |
 | **Empleado** | Abre y cierra su turno, vende y cobra | PC del kiosco |
 | **Proveedor** | No usa el sistema; recibe pedidos (en persona o por teléfono) | — |
 
@@ -19,7 +19,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 - **Horario:** de 7:00 a 19:00.
 - **Turnos:** 2 de 6 horas (de 7:00 a 13:00 y de 13:00 a 19:00).
 - **Condición fiscal:** monotributista, por lo que emite **Factura C**.
-- **Aviso de reposición:** todos los días a las **12:00** por WhatsApp al `<NUMERO_WHATSAPP_ADMIN>` (se configura en el sistema y no se guarda en el repositorio).
+- **Aviso de reposición:** todos los días a las **12:00** por WhatsApp al número que el admin carga en **Administración → WhatsApp** (no se guarda en el repositorio).
 
 ## Módulos
 
@@ -29,6 +29,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 4. **Usuarios y roles:** admin y empleado.
 5. **Ventas (POS):** venta rápida con el lector, con medios de pago efectivo, débito, crédito y Mercado Pago (transferencias).
 6. **Caja y turnos:** apertura, cierre, arqueo, retiros y diferencias por empleado.
+   - **Avisos al admin por WhatsApp:** anulaciones, gastos y retiros de los empleados y el resumen de cada cierre.
 7. **Dashboard:** ventas, productos más vendidos, ingresos y egresos.
 8. **Reposición:** recomendaciones agrupadas por proveedor y aviso diario por WhatsApp.
 9. **Facturación:** Factura C electrónica (ARCA, WSFE) e integración con Mercado Pago.
@@ -37,10 +38,11 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 
 ```
 1. Base: productos, proveedores, stock, usuarios/roles, venta con lector
-   (solo desarrollo; no se usa en el kiosco todavía)
+   [terminada, unida a main]
         |
 2. Caja + puesta en marcha: turnos, apertura/cierre, arqueo, retiros;
-   deploy en el VPS, backups, WAHA y envío de avisos pendientes
+   deploy en el VPS, backups, WAHA y envío de avisos
+   [código terminado en la rama etapa-2; falta instalar en el servidor]
         |
 3. Dashboard: ventas, top productos, ingresos/egresos
         |
@@ -56,6 +58,14 @@ Cada etapa se trabaja con uno o más cambios de OpenSpec (`/opsx:propose`). La E
 3. `productos-y-proveedores`: alta, baja y modificación, búsqueda por código y por nombre.
 4. `stock`: movimientos, ingreso de mercadería, ajustes y carga de ventas hechas sin sistema.
 5. `venta-pos`: venta con lector, cobro, ticket y anulación.
+
+La Etapa 2 se divide en 3 cambios:
+
+1. `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros, y los avisos al admin.
+2. `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive.
+3. `envio-whatsapp`: WAHA y envío de los avisos, con la vinculación del chip por QR desde el sistema.
+
+Los tres están implementados. La instalación en el servidor (contratar el Cloud Server, instalar y configurar los backups con la cuenta del dueño) se hace cuando el sistema esté completo, para no pagar el servidor antes de usarlo. Hasta entonces el sistema no se usa en el kiosco.
 
 **WAHA se adelanta a la Etapa 2.** El primer día real ya hace falta avisar las anulaciones por WhatsApp. La Etapa 4 solo agrega el contenido del aviso de reposición.
 

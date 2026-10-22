@@ -151,6 +151,7 @@ describe('avisos', () => {
             creadaEn: '2026-10-20T19:00:00.000Z',
             enviadaEn: null,
             error: null,
+            intentos: 0,
           },
         ],
       ],

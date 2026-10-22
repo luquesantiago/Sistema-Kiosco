@@ -27,8 +27,20 @@ const CHICLE = {
 
 const busqueda = (q: string) => `GET /productos?q=${q}&pagina=1`;
 
+const TURNO_ID = '0198a5b0-0000-7000-8000-000000000401';
+const TURNO_PROPIO = {
+  turnoAbierto: {
+    id: TURNO_ID,
+    responsable: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
+    abiertoEn: '2026-10-20T10:00:00.000Z',
+    esMio: true,
+  },
+  montoSugerido: '0.00',
+};
+
 const BASE = {
   'GET /auth/sesion': [200, EMPLEADO],
+  'GET /caja/estado': [200, TURNO_PROPIO],
   [busqueda('111')]: [200, [ALFAJOR]],
   [busqueda('222')]: [200, [GASEOSA]],
   [busqueda('999')]: [200, []],

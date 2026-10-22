@@ -20,7 +20,7 @@ export function configurarAlNoAutenticado(funcion: () => void): void {
   alNoAutenticado = funcion;
 }
 
-type Metodo = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** Llama a la API (`/api` + ruta) y devuelve el JSON, o undefined si es 204. */
 export async function pedir<T>(metodo: Metodo, ruta: string, cuerpo?: unknown): Promise<T> {

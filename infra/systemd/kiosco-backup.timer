@@ -1,0 +1,11 @@
+# Todos los días a las 03:00 de Argentina. Persistent: si el servidor estaba
+# apagado a esa hora, corre apenas vuelve.
+[Unit]
+Description=Backup diario de la base del kiosco
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Argentina/Buenos_Aires
+Persistent=true
+
+[Install]
+WantedBy=timers.target

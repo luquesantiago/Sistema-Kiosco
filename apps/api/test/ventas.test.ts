@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { textoAvisoAnulacion } from '../src/modules/ventas/aviso.js';
 import { limpiarBase, prismaTest } from './base.js';
-import { crearAppDePrueba, crearUsuarioDePrueba, sesionDe } from './ayudas.js';
+import {
+  abrirTurnoDePrueba,
+  cerrarTurnoDePrueba,
+  crearAppDePrueba,
+  crearUsuarioDePrueba,
+  sesionDe,
+} from './ayudas.js';
 import { crearProductoDePrueba, verificarStockConsistente } from './stock-ayudas.js';
 
 beforeEach(async () => {
@@ -27,7 +33,8 @@ async function preparar() {
   const empleado = await sesionDe(app, 'juan');
   const alfajor = await crearProductoDePrueba('Alfajor', { precio: '900', codigoBarras: '1' });
   const gaseosa = await crearProductoDePrueba('Gaseosa', { precio: '1500', codigoBarras: '2' });
-  return { app, adelantar, admin, empleado, juan, alfajor, gaseosa };
+  const turnoId = await abrirTurnoDePrueba(app, empleado);
+  return { app, adelantar, admin, empleado, juan, alfajor, gaseosa, turnoId };
 }
 
 type Ctx = Awaited<ReturnType<typeof preparar>>;
@@ -90,6 +97,24 @@ describe('registro de una venta', () => {
       pagos: [{ medio: 'debito', monto: '3300.00', montoRecibido: null, vuelto: null }],
       anulacion: null,
     });
+  });
+
+  it('queda en el turno abierto de quien vende', async () => {
+    const ctx = await preparar();
+    const { id } = (await ventaTipica(ctx)).json();
+    expect((await prismaTest.venta.findUniqueOrThrow({ where: { id } })).turnoId).toBe(ctx.turnoId);
+  });
+
+  it('sin turno abierto responde 409, no registra la venta y no mueve stock', async () => {
+    const ctx = await preparar();
+    await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId);
+
+    const res = await ventaTipica(ctx);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.codigo).toBe('SIN_TURNO_ABIERTO');
+    expect(await prismaTest.venta.count()).toBe(0);
+    expect(await prismaTest.movimientoStock.count()).toBe(0);
   });
 
   it.each([
@@ -362,6 +387,7 @@ describe('listado de ventas según el rol', () => {
     await crearUsuarioDePrueba('ana', 'admin');
     const admin = await sesionDe(app, 'ana');
     const p = await crearProductoDePrueba('Agua', { precio: '500' });
+    await abrirTurnoDePrueba(app, admin);
     await app.inject({
       method: 'POST',
       url: '/api/ventas',
@@ -444,6 +470,9 @@ describe('anulación de ventas', () => {
     const ctx = await preparar();
     const { id } = (await ventaTipica(ctx)).json();
     await pasarAAyer(id);
+    // La venta de ayer quedó en un turno que ya se cerró.
+    await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId);
+    await abrirTurnoDePrueba(ctx.app, ctx.empleado);
 
     const delEmpleado = await anular(ctx, id, 'me equivoqué');
     expect(delEmpleado.statusCode).toBe(403);
@@ -451,6 +480,38 @@ describe('anulación de ventas', () => {
 
     const delAdmin = await anular(ctx, id, 'me equivoqué', ctx.admin);
     expect(delAdmin.statusCode).toBe(200);
+  });
+
+  it('el empleado no puede anular una venta de hoy de otro turno', async () => {
+    const ctx = await preparar();
+    const { id } = (await ventaTipica(ctx)).json();
+    await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId);
+    const nuevoTurno = await abrirTurnoDePrueba(ctx.app, ctx.empleado);
+
+    const res = await anular(ctx, id, 'me equivoqué');
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.mensaje).toContain('turno');
+    const venta = await prismaTest.venta.findUniqueOrThrow({ where: { id } });
+    expect(venta).toMatchObject({ estado: 'pagada', anulacionTurnoId: null });
+    expect(nuevoTurno).not.toBe(ctx.turnoId);
+  });
+
+  it('la anulación guarda el turno abierto; el admin puede anular sin turno abierto', async () => {
+    const ctx = await preparar();
+    const primera = (await ventaTipica(ctx)).json();
+    const segunda = (await ventaTipica(ctx)).json();
+
+    await anular(ctx, primera.id, 'cobré dos veces');
+    await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId);
+    const sinTurno = await anular(ctx, segunda.id, 'devolución a la noche', ctx.admin);
+
+    expect(sinTurno.statusCode).toBe(200);
+    const [a, b] = await Promise.all(
+      [primera.id, segunda.id].map((id) => prismaTest.venta.findUniqueOrThrow({ where: { id } })),
+    );
+    expect(a?.anulacionTurnoId).toBe(ctx.turnoId);
+    expect(b).toMatchObject({ estado: 'anulada', anulacionTurnoId: null });
   });
 
   it('anular dos veces responde 409 y no repone stock otra vez', async () => {

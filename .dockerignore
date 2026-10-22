@@ -1,0 +1,21 @@
+# Lo que no entra al contexto del build: dependencias y builds locales,
+# secretos y archivos que no hacen falta para compilar.
+**/node_modules
+**/dist
+apps/api/src/generated
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.crt
+**/*.p12
+.git
+.github
+.claude
+openspec
+docs
+infra
+**/test-results
+**/playwright-report
+*.log

@@ -25,7 +25,7 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ```
 
 - **Lector de código de barras:** USB en modo teclado (HID). Escribe el código y un Enter en el campo activo, así que no necesita integración especial.
-- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). El Compose de producción (con `caddy` y `waha`) se arma en la Etapa 2, con la puesta en marcha. Durante la Etapa 1 solo existe el Compose de desarrollo de [`infra/`](../infra/README.md), con PostgreSQL.
+- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). En [`infra/`](../infra/README.md) están el Compose de desarrollo (PostgreSQL y WAHA) y el de producción (`caddy`, `app`, `db` y `waha`), con los scripts de deploy, backup y restauración y el runbook del servidor.
 - **Impresora:** térmica de tickets común (58 u 80 mm). Con factura electrónica **no hace falta impresora fiscal**.
 
 ## Módulos y dependencias
@@ -66,19 +66,21 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **MovimientoStock** | producto, tipo (venta/compra/ajuste/anulacion), motivo (obligatorio en los ajustes: rotura/vencimiento/robo/conteo/venta_sin_sistema/correccion/otro), cantidad con signo, stock resultante, nota, usuario, fecha; inmutable | Producto, Usuario, IngresoMercaderia (opcional) |
 | **IngresoMercaderia** | proveedor (opcional), usuario, nota, fecha | Proveedor, Usuario, ItemsIngreso, MovimientosStock |
 | **ItemIngreso** | ingreso, producto, cantidad, costo unitario (opcional, solo si lo cargó el admin) | IngresoMercaderia, Producto |
-| **Turno** | usuario, apertura (fecha, monto inicial), cierre (fecha, monto contado), diferencia | Usuario, Ventas, MovimientosCaja |
-| **MovimientoCaja** | turno, tipo (retiro/ingreso/gasto), monto, motivo, usuario | Turno |
-| **Venta** | número correlativo, usuario, fecha, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo); el turno se agrega en la Etapa 2 | Ítems, Pagos, MovimientosStock, Pago MP, Factura |
+| **Turno** | responsable (quien abrió), apertura (fecha, monto sugerido, monto inicial contado), cierre (quién cerró, fecha, monto contado, retiro al cierre y motivo, esperado, diferencia, lo que quedó en caja); como máximo uno abierto | Usuario, Ventas, MovimientosCaja |
+| **MovimientoCaja** | turno, tipo (gasto/retiro/ingreso), monto, motivo, usuario, fecha; inmutable | Turno, Usuario |
+| **Venta** | número correlativo, usuario, fecha, turno, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo, turno abierto al anular) | Turno, Ítems, Pagos, MovimientosStock, Pago MP, Factura |
 | **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción (nombre al momento de vender), cantidad, precio unitario, subtotal | Venta, Producto |
 | **PagoVenta** | venta, medio (efectivo/debito/credito/mercado_pago), monto, monto recibido y vuelto (solo efectivo); uno por medio | Venta |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
+| **ConfiguracionWhatsapp** | número que recibe los avisos (10 dígitos), chat de WhatsApp, quién lo cargó (una sola fila) | Usuario |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
 - **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
-- **Notificacion:** la Etapa 1 solo las crea como pendientes (por ejemplo, al anular una venta). El envío por WAHA se suma en la Etapa 2, con la puesta en marcha.
+- **Notificacion:** se crea como pendiente en la misma transacción que la anulación, el gasto o retiro de un empleado o el cierre de turno, y la envía después el proceso de envío (ver "Avisos por WhatsApp"). Nunca se borra.
+- **Turno:** el esperado y la diferencia se guardan al cerrar, como foto del cierre. Un índice único parcial (`turnos_un_solo_abierto`) garantiza que haya un solo turno abierto.
 
 ## Flujos principales
 
@@ -116,10 +118,41 @@ Escanear productos --> Elegir medio de pago (F1-F4) o pago mixto (F6)
 ### Turno de caja
 
 ```
-Abrir turno (monto inicial) --> Ventas / retiros --> Cerrar turno
-                                                       |
-                                     Contar efectivo --+--> Diferencia
-                                                            (esperado vs contado)
+Abrir turno ------------------> Ventas, gastos, retiros --> Cerrar turno (ciego)
+(monto sugerido = lo que         (ingresos: solo admin)      contar efectivo
+ quedó; se corrige si                                         + retiro opcional
+ no coincide)                                                       |
+                                                                    v
+                                          Diferencia = contado - esperado (la ve el admin)
+                                          Quedó en caja = contado - retiro
+                                          Aviso de cierre al admin
+```
+
+Cambio de turno a las 13:00 (una sola PC):
+
+```
+A cierra su turno --> A cierra sesión --> B ingresa --> B abre con lo que quedó
+
+Si A se fue sin cerrar:
+B ingresa --> "El turno de A está abierto" --> B lo cierra contando la caja
+          --> queda registrado: responsable A, cerró B --> B abre su turno
+```
+
+### Avisos por WhatsApp
+
+```
+Anulación / gasto o retiro del empleado / cierre de turno
+   --> Notificacion "pendiente" (misma transacción)
+
+Proceso de envío, cada 15 s:
+   ¿WhatsApp conectado y número cargado? -- no --> no toca nada (esperan sin gastar intentos)
+      | sí
+      v
+   pendientes sin espera, del más viejo al más nuevo, de a uno con 3 s de pausa
+      --> WAHA sendText --> OK --> "enviada" con fecha de envío
+                         --> WhatsApp caído --> corta la pasada
+                         --> rechazo --> intentos + 1, espera 30 s / 2 / 10 / 30 min
+                                         5 fallas --> "error" (el admin puede reintentar)
 ```
 
 ### Aviso diario de reposición (12:00)
@@ -130,7 +163,7 @@ Tarea programada 12:00
    --> cantidad sugerida = stock máximo - stock actual
    --> agrupar por proveedor
    --> ordenar: primero los proveedores que toman pedido HOY
-   --> armar mensaje --> WAHA --> <NUMERO_WHATSAPP_ADMIN>
+   --> armar mensaje --> Notificacion pendiente --> proceso de envío --> WhatsApp
 ```
 
 ## Estructura de carpetas
@@ -143,16 +176,23 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   ├── api/                  # Backend Fastify (TypeScript)
 │   │   ├── prisma/           # schema.prisma y migraciones
 │   │   └── src/
-│   │       ├── modules/      # un módulo por dominio: usuarios, productos, proveedores, stock, ventas, caja...
-│   │       ├── integrations/ # clientes de ARCA, Mercado Pago y WAHA
-│   │       └── jobs/         # tareas programadas (aviso de reposición 12:00)
+│   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
+│   │       │                 # ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío), estado
+│   │       ├── plugins/      # sesión y permisos por rol
+│   │       ├── lib/          # fechas en Argentina, formatos y utilidades
+│   │       ├── cli/          # comandos de consola (crear el primer admin)
+│   │       ├── integrations/ # (Etapa 5) clientes de ARCA y Mercado Pago
+│   │       └── jobs/         # (Etapa 4) tareas programadas: aviso de reposición 12:00
 │   └── web/                  # Frontend React + Vite
 │       └── src/
 │           ├── pos/          # pantalla de venta (escritorio, teclado y lector)
-│           └── admin/        # pantallas de admin y dashboard (responsive)
+│           ├── ventas/       # listado y detalle de ventas, anulación
+│           ├── stock/        # ingreso de mercadería y stock
+│           ├── admin/        # pantallas de admin (turnos, avisos, WhatsApp...) y dashboard (responsive)
+│           └── app/          # ingreso, rutas y layout
 ├── packages/
 │   └── shared/               # esquemas Zod y tipos compartidos entre api y web
-├── infra/                    # docker-compose.yml, Caddyfile y scripts de backup
+├── infra/                    # Compose de desarrollo y producción, Caddyfile, deploy, backup y restauración
 ├── docs/                     # documentación del proyecto
 └── openspec/                 # cambios y specs de OpenSpec
 ```

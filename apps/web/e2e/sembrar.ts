@@ -14,12 +14,17 @@ const admin = await crearUsuario(prismaTest, {
   rol: 'admin',
   contrasena: process.env.E2E_CLAVE_ADMIN!,
 });
-await crearUsuario(prismaTest, {
-  nombre: 'Empleado E2E',
-  usuario: 'e2e-empleado',
-  rol: 'empleado',
-  contrasena: process.env.E2E_CLAVE_EMPLEADO!,
-});
+for (const [nombre, usuario] of [
+  ['Empleado E2E', 'e2e-empleado'],
+  ['Segunda E2E', 'e2e-segunda'],
+]) {
+  await crearUsuario(prismaTest, {
+    nombre: nombre!,
+    usuario: usuario!,
+    rol: 'empleado',
+    contrasena: process.env.E2E_CLAVE_EMPLEADO!,
+  });
+}
 
 for (const p of PRODUCTOS_E2E) {
   const producto = await prismaTest.producto.create({
