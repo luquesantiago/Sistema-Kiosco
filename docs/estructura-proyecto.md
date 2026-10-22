@@ -25,7 +25,7 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 ```
 
 - **Lector de código de barras:** USB en modo teclado (HID). Escribe el código y un Enter en el campo activo, así que no necesita integración especial.
-- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). En [`infra/`](../infra/README.md) están el Compose de desarrollo (PostgreSQL) y el de producción (`caddy`, `app` y `db`; `waha` se suma con `envio-whatsapp`), con los scripts de deploy, backup y restauración y el runbook del servidor.
+- **Servicios:** el detalle de cada servicio y las librerías elegidas está en el [stack tecnológico](stack-tecnologico.md). En [`infra/`](../infra/README.md) están el Compose de desarrollo (PostgreSQL y WAHA) y el de producción (`caddy`, `app`, `db` y `waha`), con los scripts de deploy, backup y restauración y el runbook del servidor.
 - **Impresora:** térmica de tickets común (58 u 80 mm). Con factura electrónica **no hace falta impresora fiscal**.
 
 ## Módulos y dependencias
@@ -74,11 +74,12 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
+| **ConfiguracionWhatsapp** | número que recibe los avisos (10 dígitos), chat de WhatsApp, quién lo cargó (una sola fila) | Usuario |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
 - **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
-- **Notificacion:** por ahora solo se crean como pendientes (al anular una venta, por un gasto o retiro de un empleado y al cerrar un turno). El envío por WAHA se suma con el cambio `envio-whatsapp` de la Etapa 2.
+- **Notificacion:** se crea como pendiente en la misma transacción que la anulación, el gasto o retiro de un empleado o el cierre de turno, y la envía después el proceso de envío (ver "Avisos por WhatsApp"). Nunca se borra.
 - **Turno:** el esperado y la diferencia se guardan al cerrar, como foto del cierre. Un índice único parcial (`turnos_un_solo_abierto`) garantiza que haya un solo turno abierto.
 
 ## Flujos principales
@@ -137,6 +138,23 @@ B ingresa --> "El turno de A está abierto" --> B lo cierra contando la caja
           --> queda registrado: responsable A, cerró B --> B abre su turno
 ```
 
+### Avisos por WhatsApp
+
+```
+Anulación / gasto o retiro del empleado / cierre de turno
+   --> Notificacion "pendiente" (misma transacción)
+
+Proceso de envío, cada 15 s:
+   ¿WhatsApp conectado y número cargado? -- no --> no toca nada (esperan sin gastar intentos)
+      | sí
+      v
+   pendientes sin espera, del más viejo al más nuevo, de a uno con 3 s de pausa
+      --> WAHA sendText --> OK --> "enviada" con fecha de envío
+                         --> WhatsApp caído --> corta la pasada
+                         --> rechazo --> intentos + 1, espera 30 s / 2 / 10 / 30 min
+                                         5 fallas --> "error" (el admin puede reintentar)
+```
+
 ### Aviso diario de reposición (12:00)
 
 ```
@@ -145,7 +163,7 @@ Tarea programada 12:00
    --> cantidad sugerida = stock máximo - stock actual
    --> agrupar por proveedor
    --> ordenar: primero los proveedores que toman pedido HOY
-   --> armar mensaje --> WAHA --> <NUMERO_WHATSAPP_ADMIN>
+   --> armar mensaje --> Notificacion pendiente --> proceso de envío --> WhatsApp
 ```
 
 ## Estructura de carpetas
@@ -159,7 +177,7 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   │   ├── prisma/           # schema.prisma y migraciones
 │   │   └── src/
 │   │       ├── modules/      # un módulo por dominio: usuarios, productos, proveedores, stock, ventas, caja...
-│   │       ├── integrations/ # clientes de ARCA, Mercado Pago y WAHA
+│   │       ├── integrations/ # clientes de ARCA y Mercado Pago (el de WAHA está en modules/whatsapp)
 │   │       └── jobs/         # tareas programadas (aviso de reposición 12:00)
 │   └── web/                  # Frontend React + Vite
 │       └── src/

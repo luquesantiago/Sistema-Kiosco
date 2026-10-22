@@ -72,7 +72,7 @@
   - El motivo es obligatorio.
   - La venta queda en estado `anulada` y nunca se borra, y el stock se repone.
   - Si la venta tenía un pago en efectivo, la devolución sale de la caja del turno abierto al anular, aunque la venta sea de otro turno. Si el admin anula sin ningún turno abierto, no afecta ninguna caja.
-  - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta. Por ahora el aviso queda pendiente y el admin lo ve en "Avisos"; el envío por WhatsApp se suma con el cambio `envio-whatsapp`.
+  - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta.
 
 ### Caja y turnos
 - 2 turnos de 6 horas: de 7:00 a 13:00 y de 13:00 a 19:00. Son una referencia: el sistema no los impone.
@@ -83,8 +83,16 @@
 - **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos − gastos − retiros − efectivo de las ventas anuladas durante el turno. El vuelto no cuenta y las tarjetas y Mercado Pago no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
 - **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos (por ejemplo, el pago a un proveedor) y retiros; los ingresos son solo del admin. No se editan ni se borran.
-- **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso.
+- **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso que se envía por WhatsApp (ver "Avisos por WhatsApp").
 - El admin ve la lista de turnos con sus diferencias y el detalle de cada uno desde el celular.
+
+### Avisos por WhatsApp
+- Salen desde un **chip dedicado**, vinculado por QR desde **Administración → WhatsApp**, sin depender de quien hizo el sistema. El celular del chip tiene que conectarse a internet al menos cada ~14 días; si no, WhatsApp desvincula la sesión.
+- Van a **un solo número**, que el admin carga en la misma pantalla: código de área sin 0 y número sin 15. El sistema verifica que tenga WhatsApp y hay un botón para mandar una prueba.
+- Con WhatsApp funcionando, cada aviso sale dentro del minuto. En "Avisos" se ve si se envió y cuándo.
+- Si WhatsApp no está vinculado, no responde o falta el número, los avisos **esperan** sin darse por fallados, y el panel del admin muestra un cartel con cuántos hay esperando. Al volver, se mandan uno por uno, del más viejo al más nuevo, con unos segundos entre cada uno.
+- Si un aviso falla con WhatsApp conectado, se reintenta esperando cada vez más (30 s, 2, 10 y 30 min). Después de 5 fallas queda con error y su motivo, y el admin puede reintentarlo.
+- Puede llegar algún aviso repetido (si WhatsApp tarda en confirmar el envío): es preferible a perder uno.
 
 ### Dashboard (admin)
 - Ventas por día, semana y mes.
@@ -97,7 +105,7 @@
 - **Fase A (inicial):** un producto necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual.
 - **Fase B (futura):** la sugerencia se calcula según el promedio de ventas diarias y los días hasta la próxima entrega del proveedor.
 - Las recomendaciones se agrupan **por proveedor**.
-- Todos los días a las **12:00** se envía un WhatsApp, vía WAHA, al `<NUMERO_WHATSAPP_ADMIN>`.
+- Todos los días a las **12:00** se envía un WhatsApp, vía WAHA, al número que recibe los avisos.
 - Primero aparecen los proveedores que toman pedido ese día.
 
 ### Facturación
@@ -129,7 +137,7 @@
 
 ## Restricciones y riesgos
 
-- **WAHA no es la API oficial de WhatsApp.** Usa una sesión de WhatsApp Web vinculada por QR y el número puede ser bloqueado. Se recomienda un número o chip dedicado.
+- **WAHA no es la API oficial de WhatsApp.** Usa una sesión de WhatsApp Web vinculada por QR y el número puede ser bloqueado. Por eso se usa un chip dedicado, que solo le escribe al número del admin y con pausa entre mensajes.
 - **ARCA:** requiere certificado digital, un punto de venta habilitado para web services y pruebas en el entorno de homologación antes de producción.
 - **Mercado Pago:** requiere credenciales de la cuenta del kiosco y una URL pública para recibir notificaciones (webhooks).
 - **Dependencia de internet:** al estar hosteado, sin conexión en el kiosco no se puede usar el sistema. No hay modo sin conexión (ver abajo).
@@ -152,5 +160,5 @@ No hay modo sin conexión. Durante un corte:
 - [x] ¿Se manejan productos por peso (balanza)? → No.
 - [x] ¿El empleado puede hacer descuentos o anular ventas? → No hay descuentos. El empleado puede anular ventas de su turno, con motivo y aviso al admin por WhatsApp.
 - [ ] ¿Se registran fiado o cuentas corrientes de clientes?
-- [ ] ¿Desde qué número sale el aviso de WhatsApp (el chip vinculado a WAHA)?
+- [x] ¿Desde qué número sale el aviso de WhatsApp (el chip vinculado a WAHA)? → Desde un chip dedicado del dueño, vinculado por QR desde Administración → WhatsApp.
 - [ ] ¿Hace falta cancelar facturas (notas de crédito C) ante devoluciones?

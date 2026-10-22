@@ -1,4 +1,5 @@
-# Base de datos para desarrollo y tests. Solo escucha en la máquina local.
+# Base de datos para desarrollo y tests, y WhatsApp (WAHA) aparte con el perfil
+# `whatsapp` (pnpm whatsapp:up). Solo escuchan en la máquina local.
 name: kiosco-dev
 
 services:
@@ -19,5 +20,22 @@ services:
       timeout: 3s
       retries: 15
 
+  waha:
+    image: devlikeapro/waha:gows-2026.9.2
+    profiles: [whatsapp]
+    environment:
+      TZ: America/Argentina/Buenos_Aires
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WAHA_API_KEY: kiosco-dev
+      # Panel de WAHA para depurar: http://localhost:3200/dashboard (admin / kiosco-dev).
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: kiosco-dev
+    ports:
+      # El 3000 lo usa la API y el 3100 el e2e.
+      - '127.0.0.1:${WAHA_PORT:-3200}:3000'
+    volumes:
+      - waha-sesiones:/app/.sessions
+
 volumes:
   db-data:
+  waha-sesiones:

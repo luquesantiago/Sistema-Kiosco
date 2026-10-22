@@ -1,11 +1,24 @@
 import { z } from 'zod';
 
-const configSchema = z.object({
-  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-});
+const configSchema = z
+  .object({
+    DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    // WhatsApp es opcional: sin WAHA la app funciona y los avisos quedan pendientes.
+    WAHA_URL: z.url({ protocol: /^https?$/ }).optional(),
+    WAHA_API_KEY: z.string().min(1).optional(),
+  })
+  .superRefine((config, ctx) => {
+    // Una sin la otra es un error de instalación: mejor no arrancar que no enviar en silencio.
+    if (config.WAHA_URL !== undefined && config.WAHA_API_KEY === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['WAHA_API_KEY'], message: 'falta' });
+    }
+    if (config.WAHA_API_KEY !== undefined && config.WAHA_URL === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['WAHA_URL'], message: 'falta' });
+    }
+  });
 
 export type Config = z.infer<typeof configSchema>;
 

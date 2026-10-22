@@ -2,8 +2,8 @@
 
 | Archivo | Para qué |
 |---|---|
-| `docker-compose.dev.yml` | PostgreSQL para desarrollo y tests |
-| `docker-compose.prod.yml`, `Caddyfile`, `.env.example` | El sistema en producción: `caddy` (HTTPS), `app` y `db` |
+| `docker-compose.dev.yml` | PostgreSQL para desarrollo y tests, y WhatsApp (WAHA) con el perfil `whatsapp` |
+| `docker-compose.prod.yml`, `Caddyfile`, `.env.example` | El sistema en producción: `caddy` (HTTPS), `app`, `db` y `waha` (WhatsApp) |
 | `deploy.sh` | Actualizar el sistema en el servidor |
 | `backup.sh`, `systemd/` | Copia diaria de la base a Google Drive (timer de las 03:00) |
 | `restaurar.sh` | Volver a una copia |
@@ -54,6 +54,24 @@ DB_PORT=5433 pnpm db:up
 
 - En `apps/api/.env`, cambiá el puerto de `DATABASE_URL` a `5433`.
 - Para los tests, definí `TEST_DATABASE_URL` con el mismo puerto.
+
+## WhatsApp de desarrollo
+
+Para probar los avisos con el chip, sin servidor:
+
+```bash
+pnpm whatsapp:up
+```
+
+Levanta WAHA (motor GOWS) en `http://localhost:3200`, con la API key `kiosco-dev`. `pnpm db:up` no lo levanta. Para que la API lo use, descomentar `WAHA_URL` y `WAHA_API_KEY` en `apps/api/.env` y reiniciar `pnpm dev`. Después, vincular el chip desde **Administración → WhatsApp**, igual que en producción. El panel propio de WAHA, para depurar, queda en `http://localhost:3200/dashboard` (`admin` / `kiosco-dev`).
+
+```bash
+pnpm whatsapp:down
+```
+
+Lo detiene. La sesión vinculada queda en el volumen `waha-sesiones`. Si el 3200 está ocupado: `WAHA_PORT=3201 pnpm whatsapp:up` y el mismo puerto en `WAHA_URL`.
+
+Sin `WAHA_URL`, la API funciona igual: los avisos quedan pendientes y la pantalla de WhatsApp dice que no está configurado.
 
 ## Producción (runbook)
 
@@ -158,7 +176,8 @@ cd /opt/kiosco
 cp infra/.env.example infra/.env
 chmod 600 infra/.env
 openssl rand -hex 24   # copiar el resultado como POSTGRES_PASSWORD
-nano infra/.env        # DOMINIO, POSTGRES_PASSWORD, NOMBRE_KIOSCO (sin comillas)
+openssl rand -hex 24   # otro distinto, como WAHA_API_KEY
+nano infra/.env        # DOMINIO, POSTGRES_PASSWORD, WAHA_API_KEY, NOMBRE_KIOSCO (sin comillas)
 ./infra/deploy.sh
 ```
 
@@ -237,6 +256,17 @@ En PowerShell, el chequeo de la base es `Test-NetConnection <IP> -Port 5432`, y 
 
    Tiene que decir que bajó la copia de `gdrive:kiosco-backups` y terminar con `Listo: la app responde sana`. Después, ingresar a la web y ver que están los productos y usuarios cargados.
 
+### 7. Vincular WhatsApp
+
+Con el celular del chip en la mano y cargado:
+
+1. Desde la PC del kiosco, ingresar como admin y abrir **Administración → WhatsApp**. El panel muestra un cartel mientras WhatsApp no esté listo.
+2. **Vincular WhatsApp**. En el celular del chip: WhatsApp → **Dispositivos vinculados** → **Vincular un dispositivo**, y escanear el QR de la pantalla. Si el QR se vence, **Generar QR nuevo**.
+3. Cargar el número que recibe los avisos (código de área sin 0 y número sin 15) y **Mandar prueba**. Tiene que llegar al celular del dueño.
+4. Conviene que el dueño agende el número del chip y le escriba una vez: un chip que solo le escribe a contactos que lo tienen agendado tiene menos riesgo de bloqueo.
+
+El celular del chip tiene que conectarse a internet **al menos cada ~14 días**: si no, WhatsApp desvincula la sesión. Lo más simple es dejarlo en el kiosco, cargando y con Wi-Fi.
+
 ### Operación
 
 #### Actualizar el sistema
@@ -270,6 +300,27 @@ df -h /                     # espacio en disco: si pasa del 80 %, revisar
 ```
 
 Tiene que haber una línea `Subida ... completa` por día y ningún `ERROR`.
+
+#### Si WhatsApp se desvincula
+
+El panel del admin muestra "WhatsApp no está vinculado" y cuántos avisos esperan. Los avisos no se pierden.
+
+1. Encender el celular del chip y conectarlo a internet.
+2. **Administración → WhatsApp → Vincular WhatsApp** y escanear el QR (paso 7). Al vincular, los avisos acumulados llegan uno por uno, en orden.
+
+Si dice "WhatsApp no responde", el servicio está caído. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml logs --tail 100 waha
+docker compose -f infra/docker-compose.prod.yml restart waha
+```
+
+Un aviso con **Error al enviar** (5 fallas con WhatsApp conectado, por ejemplo con el número de destino dado de baja) muestra el motivo en **Avisos**. Corregir la causa (en general, volver a guardar el número en WhatsApp) y tocar **Reintentar**.
+
+#### Cambiar el chip o el número que recibe los avisos
+
+- **Chip:** **Administración → WhatsApp → Desvincular** y vincular el nuevo (paso 7). Mientras tanto los avisos esperan.
+- **Número del dueño:** cargar el nuevo en la misma pantalla y mandar la prueba. Los avisos pendientes van al número nuevo.
 
 #### Restaurar un backup
 
@@ -314,6 +365,7 @@ A *Use web browser to automatically authenticate?* responder **`n`**. Muestra ot
    cd /opt/kiosco
    docker compose -f infra/docker-compose.prod.yml ps
    docker compose -f infra/docker-compose.prod.yml logs --tail 100 app
+   docker compose -f infra/docker-compose.prod.yml logs --tail 100 waha
    ```
 
    Para reiniciar el servidor, **como `admin`**: `sudo reboot`. Los servicios vuelven solos.
@@ -325,5 +377,6 @@ A *Use web browser to automatically authenticate?* responder **`n`**. Muestra ot
    4. Paso 6.1 (rclone). Ver la última copia con `rclone ls gdrive:kiosco-backups | sort -k2 | tail -n 3`.
    5. Como `kiosco`, en `/opt/kiosco`: `./infra/restaurar.sh <fecha de esa copia>`.
    6. Pasos 6.2 y 6.3 (timer y primer backup).
+   7. Paso 7: la sesión de WhatsApp no se respalda, se vuelve a escanear el QR.
 
 Mientras tanto, el kiosco sigue en papel (ver "Corte de internet o de luz" en `docs/requisitos-y-limites.md`).

@@ -19,7 +19,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
 - **Horario:** de 7:00 a 19:00.
 - **Turnos:** 2 de 6 horas (de 7:00 a 13:00 y de 13:00 a 19:00).
 - **Condición fiscal:** monotributista, por lo que emite **Factura C**.
-- **Aviso de reposición:** todos los días a las **12:00** por WhatsApp al `<NUMERO_WHATSAPP_ADMIN>` (se configura en el sistema y no se guarda en el repositorio).
+- **Aviso de reposición:** todos los días a las **12:00** por WhatsApp al número que el admin carga en **Administración → WhatsApp** (no se guarda en el repositorio).
 
 ## Módulos
 

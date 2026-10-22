@@ -1,14 +1,17 @@
 import type { Rol } from '@kiosco/shared';
-import { crearApp } from '../src/app.js';
+import { crearApp, type OpcionesApp } from '../src/app.js';
 import { crearUsuario } from '../src/modules/usuarios/servicio.js';
 import { prismaTest } from './base.js';
 
 export const CONTRASENA = 'clave-segura-1';
 
 /** App de test con un reloj que se puede adelantar. */
-export async function crearAppDePrueba(inicio = new Date('2026-10-20T12:00:00Z')) {
+export async function crearAppDePrueba(
+  inicio = new Date('2026-10-20T12:00:00Z'),
+  opciones: Pick<OpcionesApp, 'whatsapp'> = {},
+) {
   let ahora = inicio;
-  const app = await crearApp({ prisma: prismaTest, ahora: () => ahora });
+  const app = await crearApp({ prisma: prismaTest, ahora: () => ahora, ...opciones });
   return {
     app,
     adelantar(ms: number) {

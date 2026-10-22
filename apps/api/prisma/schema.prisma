@@ -24,27 +24,28 @@ enum Rol {
 }
 
 model Usuario {
-  id               String              @id @default(uuid(7)) @db.Uuid
+  id               String                  @id @default(uuid(7)) @db.Uuid
   nombre           String
   /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
-  usuario          String              @unique
-  contrasenaHash   String              @map("contrasena_hash")
+  usuario          String                  @unique
+  contrasenaHash   String                  @map("contrasena_hash")
   rol              Rol
-  activo           Boolean             @default(true)
-  intentosFallidos Int                 @default(0) @map("intentos_fallidos")
-  bloqueadoHasta   DateTime?           @map("bloqueado_hasta") @db.Timestamptz
-  ultimoIngreso    DateTime?           @map("ultimo_ingreso") @db.Timestamptz
-  creadoEn         DateTime            @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn    DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
+  activo           Boolean                 @default(true)
+  intentosFallidos Int                     @default(0) @map("intentos_fallidos")
+  bloqueadoHasta   DateTime?               @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso    DateTime?               @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn         DateTime                @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn    DateTime                @updatedAt @map("actualizado_en") @db.Timestamptz
   sesiones         Sesion[]
   cambiosPrecio    CambioPrecio[]
   movimientosStock MovimientoStock[]
   ingresos         IngresoMercaderia[]
-  ventas           Venta[]             @relation("VentasVendidas")
-  ventasAnuladas   Venta[]             @relation("VentasAnuladas")
-  turnosAbiertos   Turno[]             @relation("TurnosAbiertos")
-  turnosCerrados   Turno[]             @relation("TurnosCerrados")
+  ventas           Venta[]                 @relation("VentasVendidas")
+  ventasAnuladas   Venta[]                 @relation("VentasAnuladas")
+  turnosAbiertos   Turno[]                 @relation("TurnosAbiertos")
+  turnosCerrados   Turno[]                 @relation("TurnosCerrados")
   movimientosCaja  MovimientoCaja[]
+  destinosWhatsapp ConfiguracionWhatsapp[]
 
   @@map("usuarios")
 }
@@ -349,18 +350,39 @@ model MovimientoCaja {
   @@map("movimientos_caja")
 }
 
-/// Aviso para el admin; el envío por WhatsApp (WAHA) llega con el cambio `envio-whatsapp`.
+/// Aviso para el admin. La tabla hace de cola de salida: el proceso de envío
+/// (modules/whatsapp/envio.ts) manda por WhatsApp los pendientes.
 model Notificacion {
-  id        String             @id @default(uuid(7)) @db.Uuid
-  tipo      TipoNotificacion
-  /// Por ahora siempre "admin".
-  destino   String
-  texto     String
-  estado    EstadoNotificacion @default(pendiente)
-  creadaEn  DateTime           @default(now()) @map("creada_en") @db.Timestamptz
-  enviadaEn DateTime?          @map("enviada_en") @db.Timestamptz
-  error     String?
+  id               String             @id @default(uuid(7)) @db.Uuid
+  tipo             TipoNotificacion
+  /// Siempre "admin": el número real se resuelve al enviar (ConfiguracionWhatsapp).
+  destino          String
+  texto            String
+  estado           EstadoNotificacion @default(pendiente)
+  creadaEn         DateTime           @default(now()) @map("creada_en") @db.Timestamptz
+  enviadaEn        DateTime?          @map("enviada_en") @db.Timestamptz
+  /// Motivo de la última falla.
+  error            String?
+  /// Envíos fallados con WhatsApp conectado; al quinto, el aviso pasa a `error`.
+  intentos         Int                @default(0)
+  /// Si está, el aviso no se reintenta antes de esta hora.
+  proximoIntentoEn DateTime?          @map("proximo_intento_en") @db.Timestamptz
 
   @@index([creadaEn])
+  @@index([estado, creadaEn])
   @@map("notificaciones")
+}
+
+/// Número que recibe los avisos. Una sola fila, con id 1.
+model ConfiguracionWhatsapp {
+  id               Int      @id @default(1)
+  /// 10 dígitos: código de área sin 0 y número sin 15.
+  numero           String
+  /// Chat de WhatsApp que devuelve WAHA al verificar el número (`@c.us` o `@lid`).
+  chatId           String   @map("chat_id")
+  actualizadoEn    DateTime @updatedAt @map("actualizado_en") @db.Timestamptz
+  actualizadoPorId String   @map("actualizado_por_id") @db.Uuid
+  actualizadoPor   Usuario  @relation(fields: [actualizadoPorId], references: [id], onDelete: Restrict)
+
+  @@map("configuracion_whatsapp")
 }

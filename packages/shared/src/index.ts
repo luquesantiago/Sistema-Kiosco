@@ -9,3 +9,4 @@ export * from './proveedores.js';
 export * from './stock.js';
 export * from './usuarios.js';
 export * from './ventas.js';
+export * from './whatsapp.js';

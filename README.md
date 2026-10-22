@@ -20,7 +20,7 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 2. 🚧 **Caja y puesta en marcha** (rama `etapa-2`), en 3 cambios:
    - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
    - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño.
-   - ⏳ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre).
+   - 🚧 `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre). Implementado y probado con el chip.
 3. Dashboard
 4. Reposición: aviso diario de las 12:00 por WhatsApp
 5. Facturación electrónica ARCA e integración con Mercado Pago
@@ -79,6 +79,8 @@ pnpm dev
 
 Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la web con `API_PORT` igual a ese puerto. Si el 5173 está ocupado, Vite elige el siguiente libre y lo muestra en la consola.
 
+Los avisos por WhatsApp son opcionales en desarrollo: sin WAHA quedan pendientes y se ven en **Avisos**. Para probarlos con el chip, ver [WhatsApp de desarrollo](infra/README.md#whatsapp-de-desarrollo).
+
 ### Comandos
 
 | Comando | Qué hace |
@@ -89,6 +91,7 @@ Si el puerto 3000 está ocupado, cambiá `PORT` en `apps/api/.env` y levantá la
 | `pnpm format` | Formatea el código con Prettier |
 | `pnpm build` / `pnpm start` | Build de producción; la API sirve la web desde el mismo puerto |
 | `pnpm db:up` / `pnpm db:down` | Levanta o detiene PostgreSQL de desarrollo (ver [`infra/`](infra/README.md)) |
+| `pnpm whatsapp:up` / `pnpm whatsapp:down` | Levanta o detiene WhatsApp (WAHA) de desarrollo, para probar los avisos con el chip (ver [`infra/`](infra/README.md#whatsapp-de-desarrollo)) |
 | `pnpm db:migrate` | Crea y aplica migraciones en desarrollo (`prisma migrate dev`) |
 | `pnpm db:deploy` | Aplica las migraciones pendientes sin crear nuevas (`prisma migrate deploy`) |
 | `pnpm --filter api usuarios:crear-admin` | Crea un usuario admin desde la consola |

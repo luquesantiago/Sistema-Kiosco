@@ -100,7 +100,7 @@ desplegar() {
   log 'Actualizando imágenes base'
   local base
   base=$(awk '/^FROM /{print $2; exit}' Dockerfile)
-  if ! { docker pull --quiet "$base" >/dev/null && "${COMPOSE[@]}" pull --quiet caddy db; }; then
+  if ! { docker pull --quiet "$base" >/dev/null && "${COMPOSE[@]}" pull --quiet caddy db waha; }; then
     log 'AVISO: no se pudieron actualizar las imágenes base; se usan las que ya están.'
   fi
 

@@ -20,6 +20,7 @@ const PREFIJOS_ADMIN = [
   '/api/stock',
   '/api/notificaciones',
   '/api/caja',
+  '/api/whatsapp',
 ];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
@@ -96,6 +97,13 @@ describe('acceso a la API según sesión', () => {
       expect.arrayContaining([
         'GET /api/proveedores',
         'GET /api/notificaciones',
+        'POST /api/notificaciones/:id/reintentar',
+        'GET /api/whatsapp',
+        'POST /api/whatsapp/vincular',
+        'GET /api/whatsapp/qr',
+        'POST /api/whatsapp/desvincular',
+        'PUT /api/whatsapp/destino',
+        'POST /api/whatsapp/prueba',
         'POST /api/stock/ajustes',
         'GET /api/stock/ingresos',
         'GET /api/stock/productos/:id/movimientos',

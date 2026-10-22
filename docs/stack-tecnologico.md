@@ -15,10 +15,10 @@
 | Tarea programada | **croner** dentro del proceso | Zona horaria `America/Argentina/Buenos_Aires` |
 | Pagos | SDK oficial **`mercadopago`** (npm) | Webhook en una ruta pública con verificación de firma |
 | Facturación | **ARCA/AFIP, WSAA + WSFE** con cliente propio | Sobre `soap` y `node-forge`; solo Factura C |
-| WhatsApp | **WAHA** (WhatsApp HTTP API) | Llamadas HTTP directas dentro de la red de Docker Compose |
+| WhatsApp | **WAHA** (WhatsApp HTTP API), motor **GOWS** | Llamadas HTTP directas dentro de la red de Docker Compose, con API key |
 | Lector de código de barras | USB en modo HID (teclado) | No requiere drivers ni integración |
 | Impresora | Térmica de tickets (58 u 80 mm), no fiscal | `window.print()` con estilos para papel de ticket |
-| Infraestructura | **VPS + Docker Compose** | Cloud Server de DonWeb (Argentina) con subdominio de DuckDNS. Servicios `caddy`, `app`, `db` y, con `envio-whatsapp`, `waha` |
+| Infraestructura | **VPS + Docker Compose** | Cloud Server de DonWeb (Argentina) con subdominio de DuckDNS. Servicios `caddy`, `app`, `db` y `waha` |
 | Paquetes | **pnpm** con workspaces (monorepo) | Ver [estructura de carpetas](estructura-proyecto.md#estructura-de-carpetas) |
 | Calidad | ESLint + Prettier, **Vitest**, **Playwright** | |
 
@@ -53,7 +53,8 @@
 ### Integraciones
 - **Mercado Pago:** SDK oficial `mercadopago`. El webhook entra por una ruta pública de Fastify con verificación de firma.
 - **ARCA (WSAA/WSFE):** cliente propio y acotado sobre `soap` y `node-forge` (firma CMS del ticket de acceso). Se prueba en homologación antes de producción. Plan B: `@afipsdk/afip.js`.
-- **WAHA:** `fetch` a su API REST dentro de la red interna de Docker Compose.
+- **WAHA:** `fetch` a su API REST dentro de la red interna de Docker Compose, con API key y sin puertos publicados. Motor **GOWS** (Go, sin navegador): WEBJS, el motor por defecto, levanta un Chromium entero para unos pocos mensajes por día. La imagen queda fijada en una versión. La app solo usa endpoints comunes a todos los motores, así que pasar a NOWEB es cambiar la imagen.
+- **Envío de avisos:** la tabla `notificaciones` hace de cola de salida. Un proceso dentro de la app la revisa cada 15 s y manda los pendientes (`apps/api/src/modules/whatsapp/envio.ts`). Así WhatsApp nunca demora una venta o un cierre.
 
 ### Impresión de tickets
 - Fase inicial: `window.print()` con una hoja de estilos para papel de 58/80 mm y la térmica como impresora por defecto del navegador del kiosco.
@@ -65,7 +66,7 @@
   - `caddy`: proxy inverso con HTTPS automático (Let's Encrypt). Es el único servicio que expone puertos.
   - `app`: Fastify + build de React, en una imagen multi-etapa (`Dockerfile`) que se construye en el propio servidor.
   - `db`: PostgreSQL.
-  - `waha`: WhatsApp HTTP API, con la sesión persistida en un volumen. Se suma con el cambio `envio-whatsapp`.
+  - `waha`: WhatsApp HTTP API, con la sesión persistida en un volumen, sin puertos y con API key. La app no depende de él: si no levanta, el sistema funciona y los avisos esperan.
 - **Servidor:** Cloud Server de DonWeb en Argentina (2 vCPU, 4 GB, 30 GB), pago anual en pesos: sin percepciones por compra en dólares y con la menor latencia desde el kiosco.
 - **Dominio:** subdominio gratuito de DuckDNS apuntado a la IPv4 fija del servidor. El HTTPS también hace falta para los webhooks de Mercado Pago. Pasar a un dominio propio es cambiar `DOMINIO` y el DNS.
 - **Deploy:** manual, con `infra/deploy.sh` por SSH: backup, build, migraciones, verificación de `/api/health` y vuelta atrás si la versión nueva no queda sana.
@@ -75,7 +76,7 @@
 - **pnpm** con workspaces.
 - **ESLint + Prettier** para lint y formato.
 - **Vitest** para tests unitarios y de integración de la API contra un PostgreSQL de prueba; **Playwright** para los flujos críticos del POS.
-- Logs en JSON con `pino`; alerta básica si WAHA se desconecta o falla ARCA.
+- Logs en JSON con `pino`; si WhatsApp se desvincula o no responde, el panel del admin lo muestra con un cartel; las alertas de ARCA se definen en la etapa de facturación.
 - Control de versiones en git, con cambios organizados por OpenSpec.
 
 ## Alternativas descartadas

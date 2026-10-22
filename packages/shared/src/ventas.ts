@@ -175,5 +175,6 @@ export const notificacionSchema = z.object({
   creadaEn: z.iso.datetime(),
   enviadaEn: z.iso.datetime().nullable(),
   error: z.string().nullable(),
+  intentos: z.number().int(),
 });
 export type Notificacion = z.infer<typeof notificacionSchema>;

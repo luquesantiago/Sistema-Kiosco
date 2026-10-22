@@ -20,6 +20,30 @@ describe('cargarConfig', () => {
     expect(resultado).toEqual({ ok: false, errores: ['DATABASE_URL: falta la variable'] });
   });
 
+  it('acepta WhatsApp configurado con URL y clave', () => {
+    const resultado = cargarConfig({
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/kiosco',
+      WAHA_URL: 'http://waha:3000',
+      WAHA_API_KEY: 'clave',
+    });
+    expect(resultado).toMatchObject({
+      ok: true,
+      config: { WAHA_URL: 'http://waha:3000', WAHA_API_KEY: 'clave' },
+    });
+  });
+
+  it('rechaza WhatsApp a medias y nombra la variable que falta', () => {
+    const base = { DATABASE_URL: 'postgresql://u:p@localhost:5432/kiosco' };
+    expect(cargarConfig({ ...base, WAHA_URL: 'http://waha:3000' })).toEqual({
+      ok: false,
+      errores: ['WAHA_API_KEY: falta la variable'],
+    });
+    expect(cargarConfig({ ...base, WAHA_API_KEY: 'clave-secreta' })).toEqual({
+      ok: false,
+      errores: ['WAHA_URL: falta la variable'],
+    });
+  });
+
   it('no incluye los valores recibidos en los errores', () => {
     const resultado = cargarConfig({
       DATABASE_URL: 'mysql://usuario:secreto@host/db',

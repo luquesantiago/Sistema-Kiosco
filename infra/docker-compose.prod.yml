@@ -56,6 +56,8 @@ services:
       <<: *zona-horaria
       DATABASE_URL: *url-base
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      WAHA_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY:?Falta WAHA_API_KEY en infra/.env}
     healthcheck:
       test:
         - CMD
@@ -69,6 +71,26 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # WhatsApp (WAHA) para los avisos al admin. Sin puertos: solo la app lo usa,
+  # por la red interna y con la API key. La app no depende de este servicio: si
+  # no levanta, el sistema funciona y los avisos quedan pendientes.
+  waha:
+    # Motor GOWS (sin navegador), versión fijada. En un servidor ARM: gows-arm-<versión>.
+    image: devlikeapro/waha:gows-2026.9.2
+    restart: unless-stopped
+    logging: *logs
+    environment:
+      <<: *zona-horaria
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WAHA_API_KEY: ${WAHA_API_KEY:?Falta WAHA_API_KEY en infra/.env}
+      # El QR se escanea desde Administración > WhatsApp: ni paneles ni QR en los logs.
+      WAHA_DASHBOARD_ENABLED: 'false'
+      WHATSAPP_SWAGGER_ENABLED: 'false'
+      WAHA_PRINT_QR: 'false'
+    volumes:
+      # Sesión vinculada. No se respalda: si se pierde, se vuelve a escanear el QR.
+      - waha-sesiones:/app/.sessions
 
   # Aplica las migraciones; lo corre deploy.sh con `run --rm migrate`.
   migrate:
@@ -108,3 +130,4 @@ volumes:
   db-data:
   caddy-data:
   caddy-config:
+  waha-sesiones:
