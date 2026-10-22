@@ -176,16 +176,23 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   ├── api/                  # Backend Fastify (TypeScript)
 │   │   ├── prisma/           # schema.prisma y migraciones
 │   │   └── src/
-│   │       ├── modules/      # un módulo por dominio: usuarios, productos, proveedores, stock, ventas, caja...
-│   │       ├── integrations/ # clientes de ARCA y Mercado Pago (el de WAHA está en modules/whatsapp)
-│   │       └── jobs/         # tareas programadas (aviso de reposición 12:00)
+│   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
+│   │       │                 # ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío), estado
+│   │       ├── plugins/      # sesión y permisos por rol
+│   │       ├── lib/          # fechas en Argentina, formatos y utilidades
+│   │       ├── cli/          # comandos de consola (crear el primer admin)
+│   │       ├── integrations/ # (Etapa 5) clientes de ARCA y Mercado Pago
+│   │       └── jobs/         # (Etapa 4) tareas programadas: aviso de reposición 12:00
 │   └── web/                  # Frontend React + Vite
 │       └── src/
 │           ├── pos/          # pantalla de venta (escritorio, teclado y lector)
-│           └── admin/        # pantallas de admin y dashboard (responsive)
+│           ├── ventas/       # listado y detalle de ventas, anulación
+│           ├── stock/        # ingreso de mercadería y stock
+│           ├── admin/        # pantallas de admin (turnos, avisos, WhatsApp...) y dashboard (responsive)
+│           └── app/          # ingreso, rutas y layout
 ├── packages/
 │   └── shared/               # esquemas Zod y tipos compartidos entre api y web
-├── infra/                    # docker-compose.yml, Caddyfile y scripts de backup
+├── infra/                    # Compose de desarrollo y producción, Caddyfile, deploy, backup y restauración
 ├── docs/                     # documentación del proyecto
 └── openspec/                 # cambios y specs de OpenSpec
 ```
