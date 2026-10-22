@@ -107,6 +107,7 @@ describe('acceso a la API según sesión', () => {
         'POST /api/stock/ajustes',
         'GET /api/stock/ingresos',
         'GET /api/stock/productos/:id/movimientos',
+        'GET /api/caja/movimientos-mp',
         'POST /api/productos/aumento',
         'GET /api/productos/:id/historial-precios',
       ]),

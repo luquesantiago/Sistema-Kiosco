@@ -1,6 +1,7 @@
 import {
   CODIGOS_ERROR,
   MEDIOS_PAGO,
+  MOVIMIENTOS_MP_POR_PAGINA,
   restar,
   sumar,
   TURNOS_POR_PAGINA,
@@ -8,6 +9,7 @@ import {
   type CierreRespuesta,
   type cierreSchema,
   type EstadoCaja,
+  type listadoMovimientosMpQuerySchema,
   type MovimientoCaja,
   type movimientoCajaEntradaSchema,
   type ResumenCaja,
@@ -18,6 +20,7 @@ import {
 import type { z } from 'zod';
 import { ErrorHttp } from '../../errores.js';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import { fechaEnArgentina, rangoDelDiaEnArgentina } from '../../lib/fechas.js';
 import { textoAvisoCierre, textoAvisoMovimiento } from './avisos.js';
 
 type Tx = Prisma.TransactionClient;
@@ -72,7 +75,9 @@ export async function turnoParaOperar(tx: Tx, usuario: UsuarioSesion): Promise<T
 
 /**
  * Cómo se llega al efectivo esperado. Las ventas del turno cuentan aunque se
- * hayan anulado después: la devolución resta en el turno donde se anuló.
+ * hayan anulado después: la devolución resta en el turno donde se anuló, por el
+ * total de la venta, porque siempre se devuelve en efectivo. Los movimientos de
+ * Mercado Pago no pasan por el cajón.
  */
 export async function resumenDeCaja(
   db: Tx | PrismaClient,
@@ -85,13 +90,13 @@ export async function resumenDeCaja(
       _sum: { monto: true },
     }),
     db.venta.count({ where: { turnoId: turno.id } }),
-    db.pagoVenta.aggregate({
-      where: { medio: 'efectivo', venta: { anulacionTurnoId: turno.id } },
-      _sum: { monto: true },
+    db.venta.aggregate({
+      where: { anulacionTurnoId: turno.id },
+      _sum: { total: true },
     }),
     db.movimientoCaja.groupBy({
       by: ['tipo'],
-      where: { turnoId: turno.id },
+      where: { turnoId: turno.id, cuenta: 'efectivo' },
       _sum: { monto: true },
     }),
   ]);
@@ -103,7 +108,7 @@ export async function resumenDeCaja(
   const ingresos = deTipo('ingreso');
   const gastos = deTipo('gasto');
   const retiros = deTipo('retiro');
-  const efectivoAnulado = monto(anulado._sum.monto);
+  const devoluciones = monto(anulado._sum.total);
   return {
     cantidadVentas,
     porMedio: Object.fromEntries(
@@ -114,10 +119,10 @@ export async function resumenDeCaja(
     ingresos,
     gastos,
     retiros,
-    efectivoAnulado,
+    devoluciones,
     esperado: restar(
       sumar(montoInicial, efectivoVendido, ingresos),
-      sumar(gastos, retiros, efectivoAnulado),
+      sumar(gastos, retiros, devoluciones),
     ),
   };
 }
@@ -257,6 +262,8 @@ function aMovimiento(m: MovimientoConUsuario): MovimientoCaja {
     id: m.id,
     tipo: m.tipo,
     categoria: m.categoria,
+    cuenta: m.cuenta,
+    turnoId: m.turnoId,
     monto: m.monto.toFixed(2),
     motivo: m.motivo,
     usuario: m.usuario,
@@ -266,7 +273,8 @@ function aMovimiento(m: MovimientoConUsuario): MovimientoCaja {
 
 /**
  * Gasto, retiro o ingreso en el turno abierto. Los gastos y retiros de un
- * empleado dejan un aviso para el admin en la misma operación.
+ * empleado dejan un aviso para el admin en la misma operación. El admin
+ * registra lo de Mercado Pago aunque no haya turno abierto.
  */
 export async function registrarMovimientoCaja(
   prisma: PrismaClient,
@@ -274,22 +282,34 @@ export async function registrarMovimientoCaja(
   usuario: UsuarioSesion,
   ahora: Date,
 ): Promise<MovimientoCaja> {
-  const { tipo, monto: montoMovimiento, motivo } = entrada;
+  const { tipo, cuenta, monto: montoMovimiento, motivo } = entrada;
   const categoria = entrada.tipo === 'gasto' ? entrada.categoria : null;
-  if (tipo === 'ingreso' && usuario.rol !== 'admin') {
+  const esAdmin = usuario.rol === 'admin';
+  if (tipo === 'ingreso' && !esAdmin) {
     throw new ErrorHttp(
       403,
       CODIGOS_ERROR.sinPermiso,
       'Solo el admin puede registrar ingresos de caja.',
     );
   }
+  if (tipo === 'retiro' && cuenta === 'mercado_pago' && !esAdmin) {
+    throw new ErrorHttp(
+      403,
+      CODIGOS_ERROR.sinPermiso,
+      'Solo el admin puede registrar retiros de Mercado Pago.',
+    );
+  }
   const movimiento = await prisma.$transaction(async (tx) => {
-    const turno = await turnoParaOperar(tx, usuario);
+    const turno =
+      esAdmin && cuenta === 'mercado_pago'
+        ? await turnoAbiertoBloqueado(tx)
+        : await turnoParaOperar(tx, usuario);
     const creado = await tx.movimientoCaja.create({
       data: {
-        turnoId: turno.id,
+        turnoId: turno?.id ?? null,
         tipo,
         categoria,
+        cuenta,
         monto: montoMovimiento,
         motivo,
         usuarioId: usuario.id,
@@ -305,6 +325,7 @@ export async function registrarMovimientoCaja(
           texto: textoAvisoMovimiento({
             tipo,
             categoria,
+            cuenta,
             monto: montoMovimiento,
             motivo,
             usuario: usuario.nombre,
@@ -333,6 +354,34 @@ export async function movimientosDelTurnoAbierto(
     where: { turnoId: turno.id },
     include: incluirUsuario,
     orderBy: [{ creadoEn: 'asc' }, { id: 'asc' }],
+  });
+  return movimientos.map(aMovimiento);
+}
+
+/** Movimientos de Mercado Pago de un rango de fechas en Argentina (sin fechas: hoy). Solo admin. */
+export async function listarMovimientosMp(
+  prisma: PrismaClient,
+  { desde, hasta, pagina }: z.output<typeof listadoMovimientosMpQuerySchema>,
+  ahora: Date,
+): Promise<MovimientoCaja[]> {
+  const hoy = fechaEnArgentina(ahora);
+  const inicio = desde ?? hasta ?? hoy;
+  const fin = hasta ?? desde ?? hoy;
+  if (inicio > fin) {
+    throw new ErrorHttp(400, CODIGOS_ERROR.validacion, 'La fecha "desde" es posterior a "hasta".');
+  }
+  const movimientos = await prisma.movimientoCaja.findMany({
+    where: {
+      cuenta: 'mercado_pago',
+      creadoEn: {
+        gte: rangoDelDiaEnArgentina(inicio).desde,
+        lt: rangoDelDiaEnArgentina(fin).hasta,
+      },
+    },
+    include: incluirUsuario,
+    orderBy: [{ creadoEn: 'desc' }, { id: 'desc' }],
+    skip: (pagina - 1) * MOVIMIENTOS_MP_POR_PAGINA,
+    take: MOVIMIENTOS_MP_POR_PAGINA,
   });
   return movimientos.map(aMovimiento);
 }
@@ -380,8 +429,7 @@ export async function obtenerTurno(prisma: PrismaClient, id: string): Promise<Tu
       orderBy: [{ creadoEn: 'asc' }, { id: 'asc' }],
     }),
     prisma.venta.findMany({
-      where: { anulacionTurnoId: id, pagos: { some: { medio: 'efectivo' } } },
-      include: { pagos: { where: { medio: 'efectivo' } } },
+      where: { anulacionTurnoId: id },
       orderBy: { anuladaEn: 'asc' },
     }),
   ]);
@@ -398,7 +446,8 @@ export async function obtenerTurno(prisma: PrismaClient, id: string): Promise<Tu
     anulaciones: anuladas.map((v) => ({
       ventaId: v.id,
       numero: v.numero,
-      efectivo: monto(v.pagos[0]?.monto),
+      // Se devuelve siempre en efectivo, por el total.
+      efectivo: v.total.toFixed(2),
       anuladaEn: v.anuladaEn!.toISOString(),
       motivo: v.motivoAnulacion!,
     })),

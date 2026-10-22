@@ -4,6 +4,7 @@ import {
   NOMBRE_MEDIO,
   restar,
   type CategoriaGasto,
+  type Cuenta,
   type ResumenCaja,
 } from '@kiosco/shared';
 import { formatearFechaHora, formatearHora, formatearPesos } from '../../lib/formato.js';
@@ -12,6 +13,7 @@ export interface DatosAvisoMovimiento {
   tipo: 'gasto' | 'retiro';
   /** Solo en los gastos. */
   categoria: CategoriaGasto | null;
+  cuenta: Cuenta;
   monto: string;
   motivo: string;
   usuario: string;
@@ -22,12 +24,14 @@ export interface DatosAvisoMovimiento {
 export function textoAvisoMovimiento({
   tipo,
   categoria,
+  cuenta,
   monto,
   motivo,
   usuario,
   creadoEn,
 }: DatosAvisoMovimiento): string {
-  const titulo = tipo === 'gasto' ? 'Gasto de caja' : 'Retiro de caja';
+  const origen = cuenta === 'mercado_pago' ? 'de Mercado Pago' : 'de caja';
+  const titulo = `${tipo === 'gasto' ? 'Gasto' : 'Retiro'} ${origen}`;
   const encabezado = categoria ? `${titulo} · ${NOMBRE_CATEGORIA_GASTO[categoria]}` : titulo;
   return [
     `*${encabezado}: ${formatearPesos(monto)}*`,
@@ -79,7 +83,7 @@ export function textoAvisoCierre(d: DatosAvisoCierre): string {
     ['Ingresos', r.ingresos],
     ['Gastos', r.gastos],
     ['Retiros', r.retiros],
-    ['Anulaciones en efectivo', r.efectivoAnulado],
+    ['Devoluciones de anulaciones', r.devoluciones],
   ];
   for (const [nombre, monto] of movimientos) {
     if (!esCero(monto)) lineas.push(`${nombre}: ${formatearPesos(monto)}`);

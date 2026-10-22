@@ -336,6 +336,12 @@ enum TipoMovimientoCaja {
   ingreso
 }
 
+/// De dónde sale o adónde entra la plata: el cajón o la cuenta de MP del kiosco.
+enum Cuenta {
+  efectivo
+  mercado_pago
+}
+
 /// Lista fija; los pagos a proveedor no son gastos (van por pedidos).
 enum CategoriaGasto {
   servicios
@@ -346,9 +352,12 @@ enum CategoriaGasto {
 /// Plata que entra o sale del cajón fuera de las ventas. Inmutable.
 model MovimientoCaja {
   id        String             @id @default(uuid(7)) @db.Uuid
-  turnoId   String             @map("turno_id") @db.Uuid
-  turno     Turno              @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  /// Vacío solo en movimientos de Mercado Pago del admin sin turno abierto.
+  turnoId   String?            @map("turno_id") @db.Uuid
+  turno     Turno?             @relation(fields: [turnoId], references: [id], onDelete: Restrict)
   tipo      TipoMovimientoCaja
+  /// Solo los movimientos en efectivo cuentan para el esperado del turno.
+  cuenta    Cuenta             @default(efectivo)
   /// Obligatoria en los gastos; vacía en retiros e ingresos (lo valida la entrada).
   categoria CategoriaGasto?
   monto     Decimal            @db.Decimal(12, 2)

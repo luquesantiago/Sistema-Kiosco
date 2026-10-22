@@ -3,6 +3,7 @@ import {
   cierreRespuestaSchema,
   cierreSchema,
   estadoCajaSchema,
+  listadoMovimientosMpQuerySchema,
   movimientoCajaEntradaSchema,
   movimientoCajaSchema,
   paginaSchema,
@@ -17,6 +18,7 @@ import {
   abrirTurno,
   cerrarTurno,
   estadoDeCaja,
+  listarMovimientosMp,
   listarTurnos,
   movimientosDelTurnoAbierto,
   obtenerTurno,
@@ -75,6 +77,18 @@ export const rutasCaja: FastifyPluginAsyncZod<{
       reply
         .status(201)
         .send(await registrarMovimientoCaja(prisma, request.body, usuarioActual(request), ahora())),
+  );
+
+  app.get(
+    '/movimientos-mp',
+    {
+      ...soloAdmin,
+      schema: {
+        querystring: listadoMovimientosMpQuerySchema,
+        response: { 200: z.array(movimientoCajaSchema) },
+      },
+    },
+    async (request) => listarMovimientosMp(prisma, request.query, ahora()),
   );
 
   app.get(

@@ -8,6 +8,11 @@ const SECCIONES = [
   { a: '/admin/stock', titulo: 'Stock', detalle: 'Ajustes, conteos, ingresos y movimientos' },
   { a: '/admin/proveedores', titulo: 'Proveedores', detalle: 'Contacto y días de pedido' },
   { a: '/admin/turnos', titulo: 'Turnos de caja', detalle: 'Cierres, diferencias y movimientos' },
+  {
+    a: '/admin/mercado-pago',
+    titulo: 'Mercado Pago',
+    detalle: 'Gastos, retiros e ingresos de la cuenta del kiosco',
+  },
   { a: '/ventas', titulo: 'Ventas', detalle: 'Listado, detalle y anulaciones' },
   { a: '/admin/avisos', titulo: 'Avisos', detalle: 'Anulaciones, gastos, retiros y cierres' },
   { a: '/admin/whatsapp', titulo: 'WhatsApp', detalle: 'Vinculación y número de los avisos' },

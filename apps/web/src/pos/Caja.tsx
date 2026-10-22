@@ -1,11 +1,14 @@
 import {
   CATEGORIAS_GASTO,
   comparar,
+  CUENTAS,
   NOMBRE_CATEGORIA_GASTO,
+  NOMBRE_CUENTA,
   NOMBRE_MOVIMIENTO_CAJA,
   nombreMovimientoCaja,
   type CategoriaGasto,
   type CierreRespuesta,
+  type Cuenta,
   type EstadoCaja,
   type MovimientoCaja,
   type MovimientoCajaEntrada,
@@ -16,6 +19,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
+import { OpcionesBoton } from '../app/OpcionesBoton.js';
 import { useSalir } from '../app/sesion.js';
 import { formatearHora } from '../lib/fechas.js';
 import { entradaAMonto, formatearPesos, montoParaEditar } from '../lib/montos.js';
@@ -271,6 +275,9 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
   const [monto, setMonto] = useState('');
   // Sin categoría preseleccionada, para que "Otro" no se llene por apuro.
   const [categoria, setCategoria] = useState<CategoriaGasto | null>(null);
+  // Efectivo es lo común en el mostrador; el empleado solo elige cuenta en los gastos.
+  const [cuenta, setCuenta] = useState<Cuenta>('efectivo');
+  const conCuenta = tipo === 'gasto' || esAdmin;
   const [motivo, setMotivo] = useState('');
   const [problema, setProblema] = useState<string | null>(null);
   const movimientos = useQuery({
@@ -283,6 +290,7 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
     onSuccess: () => {
       setMonto('');
       setCategoria(null);
+      setCuenta('efectivo');
       setMotivo('');
       void queryClient.invalidateQueries({ queryKey: CLAVE_MOVIMIENTOS });
     },
@@ -311,7 +319,11 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
     }
     setProblema(null);
     if (registro.isPending) return;
-    const base = { monto: valor, motivo: motivo.trim() };
+    const base = {
+      cuenta: conCuenta ? cuenta : ('efectivo' as const),
+      monto: valor,
+      motivo: motivo.trim(),
+    };
     if (tipo === 'gasto') {
       if (categoria !== null) registro.mutate({ tipo, categoria, ...base });
     } else {
@@ -349,28 +361,24 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
           />
         </label>
         {tipo === 'gasto' && (
-          // Radios con aspecto de botón: un toque con el mouse, o Tab y flechas.
-          <fieldset>
-            <legend className="text-sm font-medium">Categoría</legend>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {CATEGORIAS_GASTO.map((c) => (
-                <label
-                  key={c}
-                  className="cursor-pointer rounded border border-slate-300 bg-white px-4 py-2 has-checked:border-slate-800 has-checked:bg-slate-800 has-checked:text-white has-focus-visible:ring-2 has-focus-visible:ring-slate-500"
-                >
-                  <input
-                    type="radio"
-                    name="categoria"
-                    value={c}
-                    className="sr-only"
-                    checked={categoria === c}
-                    onChange={() => setCategoria(c)}
-                  />
-                  {NOMBRE_CATEGORIA_GASTO[c]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <OpcionesBoton
+            leyenda="Categoría"
+            nombre="categoria"
+            opciones={CATEGORIAS_GASTO}
+            nombres={NOMBRE_CATEGORIA_GASTO}
+            valor={categoria}
+            alCambiar={setCategoria}
+          />
+        )}
+        {conCuenta && (
+          <OpcionesBoton
+            leyenda="Sale de"
+            nombre="cuenta"
+            opciones={CUENTAS}
+            nombres={NOMBRE_CUENTA}
+            valor={cuenta}
+            alCambiar={setCuenta}
+          />
         )}
         <label className="block">
           <span className="text-sm font-medium">Motivo</span>

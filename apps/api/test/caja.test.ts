@@ -73,6 +73,22 @@ function movimiento(
   });
 }
 
+/** Gasto, retiro o ingreso de la cuenta Mercado Pago (los gastos, como "insumos"). */
+function movimientoMp(ctx: Ctx, cookies: Cookies, tipo: string, monto: string, motivo = 'motivo') {
+  return ctx.app.inject({
+    method: 'POST',
+    url: '/api/caja/movimientos',
+    cookies,
+    payload: {
+      tipo,
+      categoria: tipo === 'gasto' ? 'insumos' : undefined,
+      cuenta: 'mercado_pago',
+      monto,
+      motivo,
+    },
+  });
+}
+
 /** Vende `cantidad` alfajores de $1.000 con los pagos indicados. */
 function vender(ctx: Ctx, cookies: Cookies, pagos: Record<string, unknown>[], cantidad = 1) {
   return ctx.app.inject({
@@ -348,6 +364,7 @@ describe('aviso por gasto o retiro del empleado', () => {
       textoAvisoMovimiento({
         tipo: 'gasto',
         categoria: 'insumos',
+        cuenta: 'efectivo',
         monto: '8000.00',
         motivo: 'bolsas de camiseta',
         usuario: 'Juan',
@@ -386,7 +403,7 @@ describe('efectivo esperado', () => {
       ingresos: '0.50',
       gastos: '8000.00',
       retiros: '10000.00',
-      efectivoAnulado: '0.00',
+      devoluciones: '0.00',
       esperado: '52000.50',
     });
   });
@@ -401,10 +418,34 @@ describe('efectivo esperado', () => {
 
     expect(turno.resumen).toMatchObject({
       efectivoVendido: '3000.00',
-      efectivoAnulado: '3000.00',
+      devoluciones: '3000.00',
       esperado: '1000.00',
     });
     expect(turno.anulaciones).toMatchObject([{ ventaId: id, efectivo: '3000.00' }]);
+  });
+
+  it('una venta con débito anulada en el mismo turno resta su total, porque se devuelve en efectivo', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana, '5000');
+    const { id } = (await vender(ctx, ctx.ana, [{ medio: 'debito', monto: '3000' }], 3)).json();
+    await anular(ctx, ctx.ana, id);
+
+    const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
+
+    expect(turno.resumen).toMatchObject({ devoluciones: '3000.00', esperado: '2000.00' });
+  });
+
+  it('los movimientos de Mercado Pago no tocan el efectivo', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana, '52000');
+    await movimientoMp(ctx, ctx.ana, 'gasto', '45000');
+    await movimientoMp(ctx, ctx.admin, 'retiro', '1000');
+    await movimientoMp(ctx, ctx.admin, 'ingreso', '500');
+
+    const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
+
+    expect(turno.resumen).toMatchObject({ gastos: '0.00', retiros: '0.00', esperado: '52000.00' });
+    expect(turno.movimientos).toHaveLength(3);
   });
 });
 
@@ -418,20 +459,22 @@ describe('devolución de una anulación en la caja', () => {
         ctx.ana,
         [
           { medio: 'efectivo', monto: '2000' },
-          { medio: 'debito', monto: '1000' },
+          { medio: 'mercado_pago', monto: '3000' },
         ],
-        3,
+        5,
       )
     ).json();
     await cerrarTurnoDePrueba(ctx.app, ctx.ana, ayer, { montoContado: '2000' });
-    const hoy = await abrirTurnoDePrueba(ctx.app, ctx.juan, '2000');
+    const hoy = await abrirTurnoDePrueba(ctx.app, ctx.juan, '5000');
 
     await anular(ctx, ctx.admin, id);
 
+    // Pago mixto: se devuelve todo en efectivo, también la parte de Mercado Pago.
     const deHoy = turnoDetalleSchema.parse((await detalle(ctx, hoy)).json());
     const deAyer = turnoDetalleSchema.parse((await detalle(ctx, ayer)).json());
-    expect(deHoy.resumen).toMatchObject({ efectivoAnulado: '2000.00', esperado: '0.00' });
-    expect(deAyer.resumen).toMatchObject({ efectivoAnulado: '0.00', esperado: '2000.00' });
+    expect(deHoy.resumen).toMatchObject({ devoluciones: '5000.00', esperado: '0.00' });
+    expect(deHoy.anulaciones).toMatchObject([{ ventaId: id, efectivo: '5000.00' }]);
+    expect(deAyer.resumen).toMatchObject({ devoluciones: '0.00', esperado: '2000.00' });
     expect(deAyer.diferencia).toBe('0.00');
   });
 
@@ -444,7 +487,7 @@ describe('devolución de una anulación en la caja', () => {
     expect((await anular(ctx, ctx.admin, id)).statusCode).toBe(200);
 
     const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
-    expect(turno.resumen).toMatchObject({ efectivoAnulado: '0.00', esperado: '1000.00' });
+    expect(turno.resumen).toMatchObject({ devoluciones: '0.00', esperado: '1000.00' });
   });
 });
 
@@ -636,7 +679,7 @@ describe('resumen del cierre de turno', () => {
         ingresos: '0.00',
         gastos: '8000.00',
         retiros: '10000.00',
-        efectivoAnulado: '0.00',
+        devoluciones: '0.00',
         esperado: '51500.00',
       },
       montoContado: '51000.00',
@@ -719,5 +762,118 @@ describe('turnos para el admin', () => {
       cookies: ctx.ana,
     });
     expect(lista.statusCode).toBe(403);
+  });
+});
+
+describe('cuenta de cada movimiento', () => {
+  it('el empleado paga un gasto con Mercado Pago en su turno', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.ana, 'gasto', '6000', 'bolsas');
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ tipo: 'gasto', cuenta: 'mercado_pago', turnoId });
+  });
+
+  it('sin cuenta, el movimiento es en efectivo', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimiento(ctx, ctx.ana, 'gasto', '100', 'Hielo');
+
+    expect(res.json()).toMatchObject({ cuenta: 'efectivo' });
+  });
+
+  it('el empleado no puede hacer un retiro de Mercado Pago', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.ana, 'retiro', '1000');
+
+    expect(res.statusCode).toBe(403);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('el admin registra movimientos de Mercado Pago sin turno abierto', async () => {
+    const ctx = await preparar();
+
+    const gasto = await movimientoMp(ctx, ctx.admin, 'gasto', '45000', 'luz de octubre');
+    const retiro = await movimientoMp(ctx, ctx.admin, 'retiro', '100000', 'a mi cuenta');
+
+    expect(gasto.statusCode).toBe(201);
+    expect(retiro.json()).toMatchObject({ cuenta: 'mercado_pago', turnoId: null });
+  });
+
+  it('sin turno abierto, el admin no puede mover efectivo ni el empleado Mercado Pago', async () => {
+    const ctx = await preparar();
+
+    expect((await movimiento(ctx, ctx.admin, 'gasto', '100')).statusCode).toBe(409);
+    expect((await movimientoMp(ctx, ctx.ana, 'gasto', '100')).statusCode).toBe(409);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('con un turno abierto, el movimiento de Mercado Pago del admin queda en ese turno', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.admin, 'retiro', '1000');
+
+    expect(res.json()).toMatchObject({ turnoId });
+  });
+});
+
+describe('movimientos de Mercado Pago para el admin', () => {
+  function listarMp(ctx: Ctx, query = '', cookies = ctx.admin) {
+    return ctx.app.inject({ method: 'GET', url: `/api/caja/movimientos-mp${query}`, cookies });
+  }
+
+  it('lista solo los de Mercado Pago del rango, del más reciente al más antiguo', async () => {
+    const ctx = await preparar();
+    const viejo = (await movimientoMp(ctx, ctx.admin, 'gasto', '100', 'de septiembre')).json();
+    await prismaTest.movimientoCaja.update({
+      where: { id: viejo.id },
+      data: { creadoEn: new Date('2026-09-30T12:00:00Z') },
+    });
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+    await movimiento(ctx, ctx.ana, 'gasto', '200', 'en efectivo');
+    const primero = (await movimientoMp(ctx, ctx.admin, 'retiro', '300', 'primero')).json();
+    ctx.adelantar(HORA);
+    const segundo = (await movimientoMp(ctx, ctx.ana, 'gasto', '400', 'segundo')).json();
+
+    const res = await listarMp(ctx, '?desde=2026-10-01&hasta=2026-10-20');
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      z
+        .array(movimientoCajaSchema)
+        .parse(res.json())
+        .map((m) => m.id),
+    ).toEqual([segundo.id, primero.id]);
+  });
+
+  it('sin fechas lista los de hoy; desde posterior a hasta responde 400', async () => {
+    const ctx = await preparar();
+    await movimientoMp(ctx, ctx.admin, 'gasto', '100');
+
+    expect((await listarMp(ctx)).json()).toHaveLength(1);
+    expect((await listarMp(ctx, '?desde=2026-10-21&hasta=2026-10-20')).statusCode).toBe(400);
+  });
+
+  it('un empleado recibe 403', async () => {
+    const ctx = await preparar();
+    expect((await listarMp(ctx, '', ctx.ana)).statusCode).toBe(403);
+  });
+});
+
+describe('aviso de un gasto de Mercado Pago', () => {
+  it('el aviso del empleado dice que salió de Mercado Pago', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    await movimientoMp(ctx, ctx.ana, 'gasto', '6000', 'bolsas');
+
+    const aviso = await prismaTest.notificacion.findFirstOrThrow({ where: { tipo: 'gasto_caja' } });
+    expect(aviso.texto).toMatch(/^\*Gasto de Mercado Pago · Insumos: \$ 6\.000,00\*/);
   });
 });

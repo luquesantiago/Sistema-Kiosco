@@ -72,7 +72,7 @@
   - El empleado puede anular solo las ventas del turno abierto que él abrió; las demás solo las anula el admin.
   - El motivo es obligatorio.
   - La venta queda en estado `anulada` y nunca se borra, y el stock se repone.
-  - Si la venta tenía un pago en efectivo, la devolución sale de la caja del turno abierto al anular, aunque la venta sea de otro turno. Si el admin anula sin ningún turno abierto, no afecta ninguna caja.
+  - **La devolución es siempre en efectivo, por el total de la venta**, aunque se haya cobrado con débito, crédito o Mercado Pago (nunca se devuelve por transferencia). Sale de la caja del turno abierto al anular, aunque la venta sea de otro turno. Si el admin anula sin ningún turno abierto, no afecta ninguna caja.
   - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta.
 
 ### Caja y turnos
@@ -81,9 +81,12 @@
 - **Quién opera:** el empleado vende y mueve la caja solo en el turno que abrió; el admin, en el turno abierto de cualquiera.
 - **Apertura:** el monto inicial sale precargado con lo que quedó en la caja al cerrar el turno anterior. Quien abre puede corregirlo con lo que contó, y la diferencia de apertura queda registrada.
 - **Cierre ciego:** quien cierra cuenta el efectivo sin ver cuánto debería haber. Opcionalmente registra un retiro al cierre, con motivo; lo que queda en la caja es lo contado menos ese retiro.
-- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos − gastos − retiros − efectivo de las ventas anuladas durante el turno. El vuelto no cuenta y las tarjetas y Mercado Pago no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Dos cuentas:** el **efectivo** del cajón y la **cuenta de Mercado Pago del kiosco**, donde caen las ventas con débito, crédito (Point), transferencias por alias y MP. Es una cuenta distinta de la cuenta personal del admin.
+- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − total de las ventas anuladas durante el turno. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
 - **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
+- **Cuenta de cada movimiento:** al registrar un gasto se elige si sale del **Efectivo** (lo preseleccionado) o de **Mercado Pago**. Los retiros e ingresos de Mercado Pago (por ejemplo, la plata que el admin pasa a su cuenta personal) son solo del admin, que los registra desde **Administración → Mercado Pago** aunque no haya un turno abierto. El retiro al cierre es siempre en efectivo.
+- **Saldo de Mercado Pago:** no se calcula a mano. Llega en la Etapa 5, leído desde la API de Mercado Pago, y lo ven el admin y el empleado.
 - **Categoría de los gastos:** cada gasto lleva una categoría fija, elegida con botones: **Servicios** (luz, internet, alquiler), **Insumos** (bolsas, rollos, limpieza) u **Otro**. No hay categoría de proveedor: los pagos a proveedores van por los pedidos (Etapa 3).
 - **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso que se envía por WhatsApp (ver "Avisos por WhatsApp").
 - El admin ve la lista de turnos con sus diferencias y el detalle de cada uno desde el celular.
