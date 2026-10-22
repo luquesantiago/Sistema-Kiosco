@@ -12,7 +12,7 @@ import {
   type EstadoCaja,
   type MovimientoCaja,
   type MovimientoCajaEntrada,
-  type TipoMovimientoCaja,
+  type TipoMovimientoSuelto,
 } from '@kiosco/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -268,10 +268,10 @@ const CLAVE_MOVIMIENTOS = ['caja', 'movimientos'] as const;
 /** F8: gasto o retiro (más ingreso para el admin) y los movimientos del turno. */
 export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar: () => void }) {
   const queryClient = useQueryClient();
-  const tipos: TipoMovimientoCaja[] = esAdmin
+  const tipos: TipoMovimientoSuelto[] = esAdmin
     ? ['gasto', 'retiro', 'ingreso']
     : ['gasto', 'retiro'];
-  const [tipo, setTipo] = useState<TipoMovimientoCaja>('gasto');
+  const [tipo, setTipo] = useState<TipoMovimientoSuelto>('gasto');
   const [monto, setMonto] = useState('');
   // Sin categoría preseleccionada, para que "Otro" no se llene por apuro.
   const [categoria, setCategoria] = useState<CategoriaGasto | null>(null);

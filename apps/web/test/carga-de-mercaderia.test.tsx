@@ -8,42 +8,61 @@ const GASEOSA = {
   id: '0198a5b0-0000-7000-8000-000000000201',
   codigoBarras: '7790001',
   nombre: 'Gaseosa cola',
-  precio: '1500.00',
-  stockActual: 3,
-};
-const GASEOSA_ADMIN = {
-  ...GASEOSA,
   costo: '900.00',
-  proveedor: SUR,
-  stockMinimo: 0,
-  stockMaximo: 0,
-  activo: true,
 };
 const ALFAJOR = {
   id: '0198a5b0-0000-7000-8000-000000000202',
   codigoBarras: null,
   nombre: 'Alfajor triple',
-  precio: '900.00',
-  stockActual: 0,
+  costo: null,
 };
 
-const busqueda = (q: string) => `GET /productos?q=${q}&pagina=1`;
+/** Pedido que llegó y falta cargar. */
+const PEDIDO = {
+  id: '0198a5b0-0000-7000-8000-000000000701',
+  numero: 12,
+  proveedor: SUR,
+  totalPedido: '310000.00',
+  total: '310000.00',
+  llegaEl: '2026-10-22',
+  nota: null,
+  estado: 'llego',
+  cuentaPago: 'efectivo',
+  cerradoEn: null,
+  creado: { usuario: { id: ADMIN.id, nombre: ADMIN.nombre }, en: '2026-10-20T12:00:00.000Z' },
+  recibido: {
+    usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
+    en: '2026-10-22T13:00:00.000Z',
+  },
+  notaRecepcion: null,
+  cancelado: null,
+  carga: null,
+  pago: {
+    usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
+    en: '2026-10-22T13:00:00.000Z',
+    cuenta: 'efectivo',
+    monto: '310000.00',
+  },
+};
+
+const busqueda = (q: string) => `GET /pedidos/productos?q=${q}`;
+const DETALLE = `GET /pedidos/${PEDIDO.id}`;
+const CARGA = `POST /pedidos/${PEDIDO.id}/carga`;
 
 function escaner() {
   return screen.findByRole('combobox', { name: 'Escaneá o buscá un producto' });
 }
 
-describe('ingreso de mercadería', () => {
+describe('carga de la mercadería de un pedido', () => {
   it('escanear dos veces el mismo producto deja una fila con cantidad 2', async () => {
     simularApi({
       'GET /auth/sesion': [200, EMPLEADO],
-      'GET /stock/proveedores': [200, [SUR]],
+      [DETALLE]: [200, PEDIDO],
       [busqueda('7790001')]: [200, [GASEOSA]],
     });
-    renderApp('/stock/ingreso');
+    renderApp(`/pedidos/${PEDIDO.id}`);
 
     const campo = await escaner();
-    expect(campo).toHaveFocus();
     await userEvent.type(campo, '7790001{Enter}');
     await screen.findByText('Gaseosa cola');
     await userEvent.type(campo, '7790001{Enter}');
@@ -59,11 +78,11 @@ describe('ingreso de mercadería', () => {
   it('un código inexistente avisa sin perder la lista', async () => {
     simularApi({
       'GET /auth/sesion': [200, EMPLEADO],
-      'GET /stock/proveedores': [200, [SUR]],
+      [DETALLE]: [200, PEDIDO],
       [busqueda('7790001')]: [200, [GASEOSA]],
       [busqueda('0000')]: [200, []],
     });
-    renderApp('/stock/ingreso');
+    renderApp(`/pedidos/${PEDIDO.id}`);
 
     const campo = await escaner();
     await userEvent.type(campo, '7790001{Enter}');
@@ -79,10 +98,10 @@ describe('ingreso de mercadería', () => {
   it('busca por nombre y elige con las flechas y Enter', async () => {
     simularApi({
       'GET /auth/sesion': [200, EMPLEADO],
-      'GET /stock/proveedores': [200, []],
+      [DETALLE]: [200, PEDIDO],
       [busqueda('a')]: [200, [GASEOSA, ALFAJOR]],
     });
-    renderApp('/stock/ingreso');
+    renderApp(`/pedidos/${PEDIDO.id}`);
 
     const campo = await escaner();
     await userEvent.type(campo, 'a{Enter}');
@@ -95,96 +114,86 @@ describe('ingreso de mercadería', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
-  it('el empleado no ve la columna de costo y confirma con Ctrl+Enter', async () => {
+  it('el empleado ve el costo precargado, lo corrige y confirma con Ctrl+Enter', async () => {
     let enviado: unknown;
     simularApi({
       'GET /auth/sesion': [200, EMPLEADO],
-      'GET /stock/proveedores': [200, [SUR]],
+      [DETALLE]: [200, PEDIDO],
       [busqueda('7790001')]: [200, [GASEOSA]],
-      'POST /stock/ingresos': (cuerpo) => {
+      [CARGA]: (cuerpo) => {
         enviado = cuerpo;
         return [
-          201,
+          200,
           {
-            id: '0198a5b0-0000-7000-8000-000000000301',
-            creadoEn: '2026-10-20T15:00:00.000Z',
-            proveedor: SUR,
-            usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
-            nota: null,
-            cantidadProductos: 1,
+            ...PEDIDO,
+            estado: 'cargado',
+            cerradoEn: '2026-10-22T13:40:00.000Z',
+            carga: {
+              usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
+              en: '2026-10-22T13:40:00.000Z',
+              ingresoId: '0198a5b0-0000-7000-8000-000000000301',
+              cantidadProductos: 1,
+            },
           },
         ];
       },
     });
-    renderApp('/stock/ingreso');
+    renderApp(`/pedidos/${PEDIDO.id}`);
 
-    await userEvent.selectOptions(
-      await screen.findByLabelText('Proveedor (opcional)'),
-      await screen.findByRole('option', { name: 'Distribuidora Sur' }),
-    );
     const campo = await escaner();
     await userEvent.type(campo, '7790001{Enter}');
-    const tabla = await screen.findByRole('table', { name: 'Productos del ingreso' });
-    expect(within(tabla).queryByText('Costo unitario')).not.toBeInTheDocument();
-    const cantidad = within(tabla).getByLabelText('Cantidad de Gaseosa cola');
-    await userEvent.clear(cantidad);
-    await userEvent.type(cantidad, '24');
-    await userEvent.keyboard('{Control>}{Enter}{/Control}');
-
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Ingreso registrado: 1 producto, 24 unidades.',
-    );
-    expect(enviado).toEqual({
-      proveedorId: SUR.id,
-      nota: '',
-      items: [{ productoId: GASEOSA.id, cantidad: 24 }],
-    });
-    expect(screen.queryByRole('table', { name: 'Productos del ingreso' })).not.toBeInTheDocument();
-  });
-
-  it('el admin ve el costo precargado y lo envía', async () => {
-    let enviado: { items: unknown[] } | undefined;
-    simularApi({
-      'GET /auth/sesion': [200, ADMIN],
-      'GET /stock/proveedores': [200, [SUR]],
-      [busqueda('7790001')]: [200, [GASEOSA_ADMIN]],
-      'POST /stock/ingresos': (cuerpo) => {
-        enviado = cuerpo as { items: unknown[] };
-        return [
-          201,
-          {
-            id: '0198a5b0-0000-7000-8000-000000000301',
-            creadoEn: '2026-10-20T15:00:00.000Z',
-            proveedor: null,
-            usuario: { id: ADMIN.id, nombre: ADMIN.nombre },
-            nota: null,
-            cantidadProductos: 1,
-          },
-        ];
-      },
-    });
-    renderApp('/stock/ingreso');
-
-    await userEvent.type(await escaner(), '7790001{Enter}');
     const tabla = await screen.findByRole('table', { name: 'Productos del ingreso' });
     const costo = within(tabla).getByLabelText('Costo de Gaseosa cola');
     expect(costo).toHaveValue('900,00');
     await userEvent.clear(costo);
     await userEvent.type(costo, '950');
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar ingreso' }));
+    const cantidad = within(tabla).getByLabelText('Cantidad de Gaseosa cola');
+    await userEvent.clear(cantidad);
+    await userEvent.type(cantidad, '24');
+    await userEvent.keyboard('{Control>}{Enter}{/Control}');
 
-    await screen.findByRole('status');
-    expect(enviado?.items).toEqual([{ productoId: GASEOSA.id, cantidad: 1, costoUnitario: '950' }]);
+    await waitFor(() =>
+      expect(enviado).toEqual({
+        nota: '',
+        items: [{ productoId: GASEOSA.id, cantidad: 24, costoUnitario: '950' }],
+      }),
+    );
+    // Ya cargado: el detalle lo muestra y desaparece el formulario de carga.
+    expect(await screen.findByText(/1 producto el/)).toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Carga de mercadería' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cerrado')).toBeInTheDocument();
   });
 
-  it('aparece en el menú del empleado', async () => {
+  it('el admin también ve el costo y deja vacío lo que no cambia', async () => {
+    let enviado: { items: unknown[] } | undefined;
+    simularApi({
+      'GET /auth/sesion': [200, ADMIN],
+      [DETALLE]: [200, PEDIDO],
+      [busqueda('Alfajor')]: [200, [ALFAJOR]],
+      [CARGA]: (cuerpo) => {
+        enviado = cuerpo as { items: unknown[] };
+        return [200, { ...PEDIDO, estado: 'cargado' }];
+      },
+    });
+    renderApp(`/pedidos/${PEDIDO.id}`);
+
+    await userEvent.type(await escaner(), 'Alfajor{Enter}');
+    await userEvent.keyboard('{Enter}');
+    const tabla = await screen.findByRole('table', { name: 'Productos del ingreso' });
+    expect(within(tabla).getByLabelText('Costo de Alfajor triple')).toHaveValue('');
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar carga' }));
+
+    await waitFor(() => expect(enviado?.items).toEqual([{ productoId: ALFAJOR.id, cantidad: 1 }]));
+  });
+
+  it('Pedidos aparece en el menú del empleado en lugar del ingreso suelto', async () => {
     simularApi({ 'GET /auth/sesion': [200, EMPLEADO] });
     renderApp('/venta');
 
     const menu = await screen.findByRole('navigation', { name: 'Principal' });
-    expect(within(menu).getByRole('link', { name: 'Ingreso de mercadería' })).toHaveAttribute(
-      'href',
-      '/stock/ingreso',
-    );
+    expect(within(menu).getByRole('link', { name: 'Pedidos' })).toHaveAttribute('href', '/pedidos');
+    expect(
+      within(menu).queryByRole('link', { name: 'Ingreso de mercadería' }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -61,9 +61,8 @@ describe('ventasSinSistemaSchema', () => {
 describe('ingresoMercaderiaSchema', () => {
   const item = { productoId: ID, cantidad: 24 };
 
-  it('acepta un ingreso sin proveedor ni costos', () => {
+  it('acepta una carga sin costos; el proveedor es el del pedido', () => {
     expect(ingresoMercaderiaSchema.parse({ items: [item] })).toEqual({
-      proveedorId: null,
       nota: null,
       items: [item],
     });

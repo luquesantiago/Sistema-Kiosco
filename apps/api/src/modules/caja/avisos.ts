@@ -83,6 +83,7 @@ export function textoAvisoCierre(d: DatosAvisoCierre): string {
     ['Ingresos', r.ingresos],
     ['Gastos', r.gastos],
     ['Retiros', r.retiros],
+    ['Pagos a proveedores', r.pagosProveedor],
     ['Devoluciones de anulaciones', r.devoluciones],
   ];
   for (const [nombre, monto] of movimientos) {

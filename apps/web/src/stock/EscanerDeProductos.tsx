@@ -1,8 +1,17 @@
-import type { ProductoVenta } from '@kiosco/shared';
 import { useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { ErrorDeApi, pedir } from '../api/cliente.js';
 
-interface Props<P extends ProductoVenta> {
+/** Lo mínimo que necesita el escáner de un producto. */
+interface ProductoEscaneable {
+  id: string;
+  codigoBarras: string | null;
+  nombre: string;
+}
+
+/** Por defecto, la búsqueda de productos del catálogo. */
+const busquedaDeProductos = (q: string) => `/productos?${new URLSearchParams({ q, pagina: '1' })}`;
+
+interface Props<P extends ProductoEscaneable> {
   /** Se llama con el producto escaneado o elegido de la lista. */
   alElegir: (producto: P) => void;
   /** Para quien no puede crear productos: qué hacer si el código no existe. */
@@ -12,6 +21,8 @@ interface Props<P extends ProductoVenta> {
   campoRef?: RefObject<HTMLInputElement | null>;
   /** Se llama cuando el código no existe (por ejemplo, para un sonido). */
   alNoEncontrar?: () => void;
+  /** Ruta de búsqueda (por ejemplo, la de la carga de pedidos, que trae costos). */
+  urlDeBusqueda?: (q: string) => string;
 }
 
 /**
@@ -19,12 +30,13 @@ interface Props<P extends ProductoVenta> {
  * un código exacto, muestra los resultados por nombre para elegir con las
  * flechas y Enter. El campo vuelve a quedar enfocado después de cada carga.
  */
-export function EscanerDeProductos<P extends ProductoVenta>({
+export function EscanerDeProductos<P extends ProductoEscaneable>({
   alElegir,
   avisoInexistente,
   etiqueta = 'Escaneá o buscá un producto',
   campoRef,
   alNoEncontrar,
+  urlDeBusqueda = busquedaDeProductos,
 }: Props<P>) {
   const campoPropio = useRef<HTMLInputElement>(null);
   const campo = campoRef ?? campoPropio;
@@ -46,10 +58,7 @@ export function EscanerDeProductos<P extends ProductoVenta>({
     setBuscando(true);
     setAviso(null);
     try {
-      const productos = await pedir<P[]>(
-        'GET',
-        `/productos?${new URLSearchParams({ q: consulta, pagina: '1' })}`,
-      );
+      const productos = await pedir<P[]>('GET', urlDeBusqueda(consulta));
       const exacto = productos.find((p) => p.codigoBarras === consulta);
       if (exacto) {
         elegir(exacto);

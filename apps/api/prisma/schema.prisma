@@ -24,28 +24,31 @@ enum Rol {
 }
 
 model Usuario {
-  id               String                  @id @default(uuid(7)) @db.Uuid
-  nombre           String
+  id                String                  @id @default(uuid(7)) @db.Uuid
+  nombre            String
   /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
-  usuario          String                  @unique
-  contrasenaHash   String                  @map("contrasena_hash")
-  rol              Rol
-  activo           Boolean                 @default(true)
-  intentosFallidos Int                     @default(0) @map("intentos_fallidos")
-  bloqueadoHasta   DateTime?               @map("bloqueado_hasta") @db.Timestamptz
-  ultimoIngreso    DateTime?               @map("ultimo_ingreso") @db.Timestamptz
-  creadoEn         DateTime                @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn    DateTime                @updatedAt @map("actualizado_en") @db.Timestamptz
-  sesiones         Sesion[]
-  cambiosPrecio    CambioPrecio[]
-  movimientosStock MovimientoStock[]
-  ingresos         IngresoMercaderia[]
-  ventas           Venta[]                 @relation("VentasVendidas")
-  ventasAnuladas   Venta[]                 @relation("VentasAnuladas")
-  turnosAbiertos   Turno[]                 @relation("TurnosAbiertos")
-  turnosCerrados   Turno[]                 @relation("TurnosCerrados")
-  movimientosCaja  MovimientoCaja[]
-  destinosWhatsapp ConfiguracionWhatsapp[]
+  usuario           String                  @unique
+  contrasenaHash    String                  @map("contrasena_hash")
+  rol               Rol
+  activo            Boolean                 @default(true)
+  intentosFallidos  Int                     @default(0) @map("intentos_fallidos")
+  bloqueadoHasta    DateTime?               @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso     DateTime?               @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn          DateTime                @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn     DateTime                @updatedAt @map("actualizado_en") @db.Timestamptz
+  sesiones          Sesion[]
+  cambiosPrecio     CambioPrecio[]
+  movimientosStock  MovimientoStock[]
+  ingresos          IngresoMercaderia[]
+  ventas            Venta[]                 @relation("VentasVendidas")
+  ventasAnuladas    Venta[]                 @relation("VentasAnuladas")
+  turnosAbiertos    Turno[]                 @relation("TurnosAbiertos")
+  turnosCerrados    Turno[]                 @relation("TurnosCerrados")
+  movimientosCaja   MovimientoCaja[]
+  destinosWhatsapp  ConfiguracionWhatsapp[]
+  pedidosCreados    Pedido[]                @relation("PedidosCreados")
+  pedidosRecibidos  Pedido[]                @relation("PedidosRecibidos")
+  pedidosCancelados Pedido[]                @relation("PedidosCancelados")
 
   @@map("usuarios")
 }
@@ -90,6 +93,7 @@ model Proveedor {
   actualizadoEn DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
   productos     Producto[]
   ingresos      IngresoMercaderia[]
+  pedidos       Pedido[]
 
   @@map("proveedores")
 }
@@ -189,6 +193,9 @@ model IngresoMercaderia {
   usuarioId   String            @map("usuario_id") @db.Uuid
   usuario     Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   nota        String?
+  /// La carga de un pedido. Vacío solo en ingresos anteriores a los pedidos.
+  pedidoId    String?           @unique @map("pedido_id") @db.Uuid
+  pedido      Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   creadoEn    DateTime          @default(now()) @map("creado_en") @db.Timestamptz
   items       ItemIngreso[]
   movimientos MovimientoStock[]
@@ -228,6 +235,7 @@ enum TipoNotificacion {
   gasto_caja
   retiro_caja
   cierre_turno
+  pedido_cerrado
 }
 
 enum EstadoNotificacion {
@@ -334,6 +342,8 @@ enum TipoMovimientoCaja {
   gasto
   retiro
   ingreso
+  /// Solo se crea al pagar un pedido.
+  pago_proveedor
 }
 
 /// De dónde sale o adónde entra la plata: el cajón o la cuenta de MP del kiosco.
@@ -364,10 +374,55 @@ model MovimientoCaja {
   motivo    String
   usuarioId String             @map("usuario_id") @db.Uuid
   usuario   Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  /// El pago de un pedido (tipo pago_proveedor). Único: un pedido se paga una vez.
+  pedidoId  String?            @unique @map("pedido_id") @db.Uuid
+  pedido    Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   creadoEn  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
 
   @@index([turnoId, creadoEn])
   @@map("movimientos_caja")
+}
+
+/// Estado de la mercadería del pedido. El pago va aparte (su MovimientoCaja).
+enum EstadoPedido {
+  por_llegar
+  llego
+  cargado
+  cancelado
+}
+
+/// Pedido a un proveedor. Cerrado = mercadería cargada y pagado (cerradoEn).
+model Pedido {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  /// Número legible ("el pedido 12").
+  numero            Int                @unique @default(autoincrement())
+  proveedorId       String             @map("proveedor_id") @db.Uuid
+  proveedor         Proveedor          @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  /// Lo que se espera pagar, cargado por el admin (o al recibir sin pedido).
+  totalPedido       Decimal            @map("total_pedido") @db.Decimal(12, 2)
+  llegaEl           DateTime           @map("llega_el") @db.Date
+  nota              String?
+  creadoPorId       String             @map("creado_por_id") @db.Uuid
+  creadoPor         Usuario            @relation("PedidosCreados", fields: [creadoPorId], references: [id], onDelete: Restrict)
+  creadoEn          DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+  estado            EstadoPedido       @default(por_llegar)
+  /// Total final: se fija al llegar y se puede corregir al pagar.
+  total             Decimal?           @db.Decimal(12, 2)
+  notaRecepcion     String?            @map("nota_recepcion")
+  llegoEn           DateTime?          @map("llego_en") @db.Timestamptz
+  recibidoPorId     String?            @map("recibido_por_id") @db.Uuid
+  recibidoPor       Usuario?           @relation("PedidosRecibidos", fields: [recibidoPorId], references: [id], onDelete: Restrict)
+  canceladoEn       DateTime?          @map("cancelado_en") @db.Timestamptz
+  canceladoPorId    String?            @map("cancelado_por_id") @db.Uuid
+  canceladoPor      Usuario?           @relation("PedidosCancelados", fields: [canceladoPorId], references: [id], onDelete: Restrict)
+  motivoCancelacion String?            @map("motivo_cancelacion")
+  cerradoEn         DateTime?          @map("cerrado_en") @db.Timestamptz
+  ingreso           IngresoMercaderia?
+  pago              MovimientoCaja?
+
+  @@index([estado])
+  @@index([cerradoEn])
+  @@map("pedidos")
 }
 
 /// Aviso para el admin. La tabla hace de cola de salida: el proceso de envío

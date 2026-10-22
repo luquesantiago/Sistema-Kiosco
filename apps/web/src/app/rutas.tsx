@@ -10,10 +10,10 @@ import { Proveedores } from '../admin/Proveedores.js';
 import { DetalleTurno, Turnos } from '../admin/Turnos.js';
 import { Usuarios } from '../admin/Usuarios.js';
 import { Whatsapp } from '../admin/Whatsapp.js';
-import { IngresoMercaderia } from '../stock/IngresoMercaderia.js';
 import { DetalleIngreso, Ingresos } from '../stock/Ingresos.js';
 import { StockAdmin } from '../stock/StockAdmin.js';
 import { VentasSinSistema } from '../stock/VentasSinSistema.js';
+import { DetallePedido, NuevoPedido, Pedidos, RecibirSinPedido } from '../pedidos/Pedidos.js';
 import { Venta } from '../pos/Venta.js';
 import { DetalleVenta, Ventas } from '../ventas/Ventas.js';
 import { CambiarContrasena } from './CambiarContrasena.js';
@@ -30,13 +30,16 @@ export const rutas: RouteObject[] = [
       { path: 'venta', element: <Venta /> },
       { path: 'ventas', element: <Ventas /> },
       { path: 'ventas/:id', element: <DetalleVenta /> },
-      { path: 'stock/ingreso', element: <IngresoMercaderia /> },
+      { path: 'pedidos', element: <Pedidos /> },
+      { path: 'pedidos/sin-pedido', element: <RecibirSinPedido /> },
+      { path: 'pedidos/:id', element: <DetallePedido /> },
       { path: 'cuenta/contrasena', element: <CambiarContrasena /> },
       {
         path: 'admin',
         element: <RequiereRol rol="admin" />,
         children: [
           { index: true, element: <PanelAdmin /> },
+          { path: 'pedidos/nuevo', element: <NuevoPedido /> },
           { path: 'productos', element: <ListaProductos /> },
           { path: 'productos/nuevo', element: <NuevoProducto /> },
           { path: 'productos/aumento', element: <AumentoPrecios /> },

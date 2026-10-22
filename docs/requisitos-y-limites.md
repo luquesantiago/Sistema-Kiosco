@@ -42,8 +42,9 @@
 
 ### Stock
 - La venta descuenta el stock automáticamente.
-- **Ingreso de mercadería** (compra a un proveedor): lo cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre. El proveedor es opcional y se puede agregar una nota (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
-- **Costo en el ingreso:** opcional y **solo visible para el admin**, que ve el costo actual precargado. Si lo cambia, se actualiza el costo del producto y queda en el historial de precios. El empleado no ve ni carga costos.
+- **Ingreso de mercadería:** la mercadería entra **solo como la carga de un pedido** (ver "Pedidos a proveedor"). La cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre, con una nota opcional (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
+- **Costo en la carga:** el admin y el empleado ven el costo actual precargado de cada producto y lo corrigen según el remito. Si cambia, se actualiza el costo del producto y queda en el historial de precios con quien lo cargó. Fuera de la carga, el empleado sigue sin ver costos.
+- **Mercadería que no se paga** (bonificaciones, muestras): se carga con un **ajuste de stock** del admin, porque un pedido siempre tiene un total mayor que cero.
 - Si se escanea un código que no está cargado, la pantalla avisa que lo tiene que cargar el admin, sin perder lo ya cargado.
 - **Ajustes manuales:** solo el admin, con un motivo obligatorio: rotura, vencimiento, robo, conteo, venta sin sistema, corrección u otro (con "otro" la nota es obligatoria).
 - **Conteo rápido:** el admin carga la cantidad contada y el sistema registra un ajuste por la diferencia (nada si coincide).
@@ -52,6 +53,16 @@
 - Los movimientos **no se editan ni se borran**: un error se corrige con otro movimiento (por ejemplo, un ajuste con motivo "corrección").
 - El admin tiene una carga rápida para descontar varios productos de una vez, con motivo "venta sin sistema" (ver "Corte de internet o de luz").
 - El admin ve el historial de movimientos de cada producto y la lista de ingresos con su detalle.
+
+### Pedidos a proveedor
+- **El admin pide** desde el celular: proveedor, total a pagar, cuándo llega (precargado con el próximo día de entrega del proveedor) y una nota. Mientras no llegue, lo puede editar o cancelar.
+- **Mercadería y pago avanzan por separado.** La mercadería pasa de *por llegar* a *llegó* y después a *cargada*. El pago se hace al recibir o después, siempre por la entrega entera (no hay pagos parciales ni cuenta corriente). El pedido queda **cerrado** cuando está cargado y pagado.
+- **Recibir:** el empleado marca que llegó, corrige el total si hace falta (por ejemplo, por faltantes, con una nota) y elige **Efectivo**, **Mercado Pago** o **Queda debiendo**. La mercadería se puede cargar en ese momento o después de atender; el pedido no se cierra hasta cargarla.
+- **Recibir sin pedido** (pan, hielo): con proveedor obligatorio, crea el pedido ya recibido.
+- **Pagar después:** lo que quedó debiendo lo paga el empleado desde la caja o el admin desde el celular (con Mercado Pago, aunque no haya turno). El total se puede corregir al pagar.
+- El pago es un movimiento de caja de tipo `pago_proveedor`: en efectivo resta del esperado del turno y aparece como "Pagos a proveedores" en el cierre.
+- **Recordatorios en el POS:** los pedidos que llegan hoy o están atrasados, y los que llegaron y falta cargar.
+- **Aviso al admin por WhatsApp** cuando un empleado deja un pedido cerrado (proveedor, total, cómo se pagó, productos cargados y quién hizo cada paso).
 
 ### Ventas (POS)
 - Venta rápida escaneando con el lector de código de barras: el campo de escaneo queda siempre listo y escanear de nuevo suma una unidad. Los productos sin código se buscan por nombre y se eligen con las flechas.
@@ -82,7 +93,7 @@
 - **Apertura:** el monto inicial sale precargado con lo que quedó en la caja al cerrar el turno anterior. Quien abre puede corregirlo con lo que contó, y la diferencia de apertura queda registrada.
 - **Cierre ciego:** quien cierra cuenta el efectivo sin ver cuánto debería haber. Opcionalmente registra un retiro al cierre, con motivo; lo que queda en la caja es lo contado menos ese retiro.
 - **Dos cuentas:** el **efectivo** del cajón y la **cuenta de Mercado Pago del kiosco**, donde caen las ventas con débito, crédito (Point), transferencias por alias y MP. Es una cuenta distinta de la cuenta personal del admin.
-- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − total de las ventas anuladas durante el turno. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − pagos a proveedores en efectivo − total de las ventas anuladas durante el turno. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
 - **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
 - **Cuenta de cada movimiento:** al registrar un gasto se elige si sale del **Efectivo** (lo preseleccionado) o de **Mercado Pago**. Los retiros e ingresos de Mercado Pago (por ejemplo, la plata que el admin pasa a su cuenta personal) son solo del admin, que los registra desde **Administración → Mercado Pago** aunque no haya un turno abierto. El retiro al cierre es siempre en efectivo.

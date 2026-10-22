@@ -29,7 +29,7 @@ export function crearUsuarioDePrueba(usuario: string, rol: Rol = 'empleado') {
   });
 }
 
-type App = Awaited<ReturnType<typeof crearAppDePrueba>>['app'];
+export type App = Awaited<ReturnType<typeof crearAppDePrueba>>['app'];
 
 export function ingresar(app: App, usuario: string, contrasena = CONTRASENA) {
   return app.inject({
@@ -49,7 +49,7 @@ export async function sesionDe(app: App, usuario: string, contrasena = CONTRASEN
   return { kiosco_sesion: cookie.value };
 }
 
-type Cookies = Awaited<ReturnType<typeof sesionDe>>;
+export type Cookies = Awaited<ReturnType<typeof sesionDe>>;
 
 /** Abre un turno de caja con la sesión dada (por defecto con $0) y devuelve su id. */
 export async function abrirTurnoDePrueba(app: App, cookies: Cookies, montoInicial = '0') {

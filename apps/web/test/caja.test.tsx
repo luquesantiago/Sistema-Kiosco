@@ -387,6 +387,7 @@ describe('turnos para el admin', () => {
         ingresos: '0.00',
         gastos: '8000.00',
         retiros: '10000.00',
+        pagosProveedor: '0.00',
         devoluciones: '0.00',
         esperado: '51500.00',
       },

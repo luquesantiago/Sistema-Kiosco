@@ -13,6 +13,7 @@ import { ErrorDeApi, pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { useSesion } from '../app/sesion.js';
 import { formatearPesos } from '../lib/montos.js';
+import { RecordatoriosPedidos } from '../pedidos/Recordatorios.js';
 import { EscanerDeProductos } from '../stock/EscanerDeProductos.js';
 import {
   cargarCarrito,
@@ -238,6 +239,7 @@ function PuntoDeVenta({
           </button>
         </span>
       </div>
+      <RecordatoriosPedidos />
       <div className="rounded-lg bg-white p-4 shadow">
         <EscanerDeProductos<ProductoVenta>
           campoRef={campo}

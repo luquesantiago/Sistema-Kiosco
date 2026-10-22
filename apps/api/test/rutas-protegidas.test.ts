@@ -21,16 +21,23 @@ const PREFIJOS_ADMIN = [
   '/api/notificaciones',
   '/api/caja',
   '/api/whatsapp',
+  '/api/pedidos',
 ];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
-  'POST /api/stock/ingresos',
   'GET /api/stock/proveedores',
   'GET /api/caja/estado',
   'POST /api/caja/turnos',
   'POST /api/caja/turnos/:id/cerrar',
   'GET /api/caja/movimientos',
   'POST /api/caja/movimientos',
+  'GET /api/pedidos',
+  'GET /api/pedidos/productos',
+  'GET /api/pedidos/:id',
+  'POST /api/pedidos/:id/llego',
+  'POST /api/pedidos/sin-pedido',
+  'POST /api/pedidos/:id/carga',
+  'POST /api/pedidos/:id/pago',
 ];
 
 const ID_CUALQUIERA = '0198a5b0-0000-7000-8000-000000000000';
@@ -82,7 +89,7 @@ describe('acceso a la API según sesión', () => {
     expect(res.json().error.codigo).toBe('SIN_PERMISO');
   });
 
-  it('los módulos de admin responden 403 al empleado, salvo búsqueda e ingreso', async () => {
+  it('los módulos de admin responden 403 al empleado, salvo búsqueda y pedidos', async () => {
     const { app } = await crearAppDePrueba();
     await crearUsuarioDePrueba('juan');
     const cookies = await sesionDe(app, 'juan');
@@ -108,6 +115,9 @@ describe('acceso a la API según sesión', () => {
         'GET /api/stock/ingresos',
         'GET /api/stock/productos/:id/movimientos',
         'GET /api/caja/movimientos-mp',
+        'POST /api/pedidos',
+        'PATCH /api/pedidos/:id',
+        'POST /api/pedidos/:id/cancelar',
         'POST /api/productos/aumento',
         'GET /api/productos/:id/historial-precios',
       ]),
@@ -134,13 +144,12 @@ describe('acceso a la API según sesión', () => {
         stockMaximo: 0,
       },
     });
-    const ingreso = await app.inject({
-      method: 'POST',
-      url: '/api/stock/ingresos',
+    const paraCargar = await app.inject({
+      method: 'GET',
+      url: '/api/pedidos/productos?q=agua',
       cookies,
-      payload: { items: [{ productoId: producto.id, cantidad: 6 }] },
     });
-    expect(ingreso.statusCode).toBe(201);
+    expect(paraCargar.json()).toMatchObject([{ id: producto.id, costo: null }]);
   });
 });
 

@@ -10,7 +10,11 @@ import {
   crearUsuarioDePrueba,
   sesionDe,
 } from './ayudas.js';
-import { crearProductoDePrueba, verificarStockConsistente } from './stock-ayudas.js';
+import {
+  crearProductoDePrueba,
+  ingresarMercaderia,
+  verificarStockConsistente,
+} from './stock-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -289,15 +293,12 @@ describe('costo de cada ítem vendido', () => {
     await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
     const primera = (await venderGaseosa(ctx)).json();
 
-    const ingreso = await ctx.app.inject({
-      method: 'POST',
-      url: '/api/stock/ingresos',
-      cookies: ctx.admin,
-      payload: { items: [{ productoId: ctx.gaseosa.id, cantidad: 12, costoUnitario: '1100' }] },
-    });
+    const ingreso = await ingresarMercaderia(ctx.app, ctx.admin, [
+      { productoId: ctx.gaseosa.id, cantidad: 12, costoUnitario: '1100' },
+    ]);
     const segunda = (await venderGaseosa(ctx)).json();
 
-    expect(ingreso.statusCode).toBe(201);
+    expect(ingreso.statusCode).toBe(200);
     expect(await costosGuardados(primera.id)).toEqual(['1000.00']);
     expect(await costosGuardados(segunda.id)).toEqual(['1100.00']);
   });

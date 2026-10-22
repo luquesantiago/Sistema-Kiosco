@@ -44,14 +44,19 @@ export const cierreSchema = z
   });
 export type Cierre = z.input<typeof cierreSchema>;
 
-export const TIPOS_MOVIMIENTO_CAJA = ['gasto', 'retiro', 'ingreso'] as const;
+/** `pago_proveedor` solo lo crea el pago de un pedido; no se registra suelto. */
+export const TIPOS_MOVIMIENTO_CAJA = ['gasto', 'retiro', 'ingreso', 'pago_proveedor'] as const;
 export const tipoMovimientoCajaSchema = z.enum(TIPOS_MOVIMIENTO_CAJA);
+/** Los que se registran sueltos, desde F8 o la pantalla de Mercado Pago. */
+export const TIPOS_MOVIMIENTO_SUELTO = ['gasto', 'retiro', 'ingreso'] as const;
+export type TipoMovimientoSuelto = (typeof TIPOS_MOVIMIENTO_SUELTO)[number];
 export type TipoMovimientoCaja = z.infer<typeof tipoMovimientoCajaSchema>;
 
 export const NOMBRE_MOVIMIENTO_CAJA: Record<TipoMovimientoCaja, string> = {
   gasto: 'Gasto',
   retiro: 'Retiro',
   ingreso: 'Ingreso',
+  pago_proveedor: 'Pago a proveedor',
 };
 
 /** Lista fija: los pagos a proveedor no son gastos (van por pedidos). */
@@ -172,6 +177,7 @@ export const resumenCajaSchema = z.object({
   ingresos: montoSalidaSchema,
   gastos: montoSalidaSchema,
   retiros: montoSalidaSchema,
+  pagosProveedor: montoSalidaSchema,
   devoluciones: montoSalidaSchema,
   esperado: montoSalidaSchema,
 });

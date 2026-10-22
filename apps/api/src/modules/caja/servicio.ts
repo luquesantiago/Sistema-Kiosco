@@ -7,6 +7,7 @@ import {
   TURNOS_POR_PAGINA,
   type aperturaSchema,
   type CierreRespuesta,
+  type Cuenta,
   type cierreSchema,
   type EstadoCaja,
   type listadoMovimientosMpQuerySchema,
@@ -74,6 +75,21 @@ export async function turnoParaOperar(tx: Tx, usuario: UsuarioSesion): Promise<T
 }
 
 /**
+ * Turno de un movimiento de caja (también el pago de un pedido): el admin
+ * mueve Mercado Pago aunque no haya turno abierto; todo lo demás va en el
+ * turno en que el usuario puede operar.
+ */
+export async function turnoParaMovimiento(
+  tx: Tx,
+  usuario: UsuarioSesion,
+  cuenta: Cuenta,
+): Promise<TurnoOperable | null> {
+  return usuario.rol === 'admin' && cuenta === 'mercado_pago'
+    ? turnoAbiertoBloqueado(tx)
+    : turnoParaOperar(tx, usuario);
+}
+
+/**
  * Cómo se llega al efectivo esperado. Las ventas del turno cuentan aunque se
  * hayan anulado después: la devolución resta en el turno donde se anuló, por el
  * total de la venta, porque siempre se devuelve en efectivo. Los movimientos de
@@ -108,6 +124,7 @@ export async function resumenDeCaja(
   const ingresos = deTipo('ingreso');
   const gastos = deTipo('gasto');
   const retiros = deTipo('retiro');
+  const pagosProveedor = deTipo('pago_proveedor');
   const devoluciones = monto(anulado._sum.total);
   return {
     cantidadVentas,
@@ -119,10 +136,11 @@ export async function resumenDeCaja(
     ingresos,
     gastos,
     retiros,
+    pagosProveedor,
     devoluciones,
     esperado: restar(
       sumar(montoInicial, efectivoVendido, ingresos),
-      sumar(gastos, retiros, devoluciones),
+      sumar(gastos, retiros, pagosProveedor, devoluciones),
     ),
   };
 }
@@ -300,10 +318,7 @@ export async function registrarMovimientoCaja(
     );
   }
   const movimiento = await prisma.$transaction(async (tx) => {
-    const turno =
-      esAdmin && cuenta === 'mercado_pago'
-        ? await turnoAbiertoBloqueado(tx)
-        : await turnoParaOperar(tx, usuario);
+    const turno = await turnoParaMovimiento(tx, usuario, cuenta);
     const creado = await tx.movimientoCaja.create({
       data: {
         turnoId: turno?.id ?? null,

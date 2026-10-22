@@ -162,6 +162,7 @@ export const TIPOS_NOTIFICACION = [
   'gasto_caja',
   'retiro_caja',
   'cierre_turno',
+  'pedido_cerrado',
 ] as const;
 export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
 

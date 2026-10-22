@@ -403,6 +403,7 @@ describe('efectivo esperado', () => {
       ingresos: '0.50',
       gastos: '8000.00',
       retiros: '10000.00',
+      pagosProveedor: '0.00',
       devoluciones: '0.00',
       esperado: '52000.50',
     });
@@ -679,6 +680,7 @@ describe('resumen del cierre de turno', () => {
         ingresos: '0.00',
         gastos: '8000.00',
         retiros: '10000.00',
+        pagosProveedor: '0.00',
         devoluciones: '0.00',
         esperado: '51500.00',
       },

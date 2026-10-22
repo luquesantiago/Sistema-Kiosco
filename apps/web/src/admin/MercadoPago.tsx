@@ -5,11 +5,11 @@ import {
   NOMBRE_CATEGORIA_GASTO,
   NOMBRE_MOVIMIENTO_CAJA,
   nombreMovimientoCaja,
-  TIPOS_MOVIMIENTO_CAJA,
+  TIPOS_MOVIMIENTO_SUELTO,
   type CategoriaGasto,
   type MovimientoCaja,
   type MovimientoCajaEntrada,
-  type TipoMovimientoCaja,
+  type TipoMovimientoSuelto,
 } from '@kiosco/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -38,7 +38,7 @@ export function MercadoPago() {
 
 function NuevoMovimientoMp() {
   const queryClient = useQueryClient();
-  const [tipo, setTipo] = useState<TipoMovimientoCaja>('gasto');
+  const [tipo, setTipo] = useState<TipoMovimientoSuelto>('gasto');
   const [categoria, setCategoria] = useState<CategoriaGasto | null>(null);
   const [monto, setMonto] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -88,7 +88,7 @@ function NuevoMovimientoMp() {
       <OpcionesBoton
         leyenda="Movimiento"
         nombre="tipo"
-        opciones={TIPOS_MOVIMIENTO_CAJA}
+        opciones={TIPOS_MOVIMIENTO_SUELTO}
         nombres={NOMBRE_MOVIMIENTO_CAJA}
         valor={tipo}
         alCambiar={setTipo}

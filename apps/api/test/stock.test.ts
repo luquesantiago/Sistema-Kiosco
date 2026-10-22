@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { limpiarBase, prismaTest } from './base.js';
 import { crearAppDePrueba, crearUsuarioDePrueba, sesionDe } from './ayudas.js';
-import { crearProductoDePrueba, verificarStockConsistente } from './stock-ayudas.js';
+import {
+  crearProductoDePrueba,
+  ingresarMercaderia,
+  verificarStockConsistente,
+} from './stock-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -35,8 +39,8 @@ async function stockDe(id: string) {
 /** Deja el producto con el stock indicado mediante un ingreso (así queda su movimiento). */
 async function conStock(ctx: Ctx, nombre: string, stock: number) {
   const p = await crearProductoDePrueba(nombre);
-  const res = await post(ctx, '/ingresos', { items: [{ productoId: p.id, cantidad: stock }] });
-  expect(res.statusCode).toBe(201);
+  const res = await ingresarMercaderia(ctx.app, ctx.admin, [{ productoId: p.id, cantidad: stock }]);
+  expect(res.statusCode).toBe(200);
   return p;
 }
 
@@ -135,7 +139,7 @@ describe('historial de movimientos', () => {
   it('muestra el ingreso y el ajuste, el más reciente primero, con quién los hizo', async () => {
     const ctx = await preparar();
     const p = await crearProductoDePrueba('Gaseosa');
-    await post(ctx, '/ingresos', { items: [{ productoId: p.id, cantidad: 24 }] }, ctx.empleado);
+    await ingresarMercaderia(ctx.app, ctx.empleado, [{ productoId: p.id, cantidad: 24 }]);
     await post(ctx, '/ajustes', {
       productoId: p.id,
       cantidad: -1,

@@ -64,17 +64,18 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **Producto** | código de barras (opcional, único si existe), nombre, nombre de búsqueda (sin acentos ni mayúsculas), precio de venta, costo (opcional), stock actual (puede ser negativo, empieza en 0), stock mínimo, stock máximo, activo | Proveedor (uno, opcional), CambiosPrecio |
 | **CambioPrecio** | producto, usuario, precio anterior y nuevo, costo anterior y nuevo, origen (manual/aumento_masivo), fecha | Producto, Usuario |
 | **MovimientoStock** | producto, tipo (venta/compra/ajuste/anulacion), motivo (obligatorio en los ajustes: rotura/vencimiento/robo/conteo/venta_sin_sistema/correccion/otro), cantidad con signo, stock resultante, nota, usuario, fecha; inmutable | Producto, Usuario, IngresoMercaderia (opcional) |
-| **IngresoMercaderia** | proveedor (opcional), usuario, nota, fecha | Proveedor, Usuario, ItemsIngreso, MovimientosStock |
+| **IngresoMercaderia** | proveedor, pedido (único; vacío solo en ingresos anteriores a los pedidos), usuario, nota, fecha | Proveedor, Pedido, Usuario, ItemsIngreso, MovimientosStock |
+| **Pedido** | número correlativo, proveedor, total del pedido, llega el, nota, creado por y fecha, estado de la mercadería (por_llegar/llego/cargado/cancelado), total final, nota de recepción, quién recibió y cuándo, cancelación (quién, cuándo, motivo), fecha de cierre (cargado + pagado) | Proveedor, Usuarios, IngresoMercaderia (la carga), MovimientoCaja (el pago) |
 | **ItemIngreso** | ingreso, producto, cantidad, costo unitario (opcional, solo si lo cargó el admin) | IngresoMercaderia, Producto |
 | **Turno** | responsable (quien abrió), apertura (fecha, monto sugerido, monto inicial contado), cierre (quién cerró, fecha, monto contado, retiro al cierre y motivo, esperado, diferencia, lo que quedó en caja); como máximo uno abierto | Usuario, Ventas, MovimientosCaja |
-| **MovimientoCaja** | turno (vacío solo en movimientos de Mercado Pago del admin sin turno abierto), tipo (gasto/retiro/ingreso), cuenta (efectivo/mercado_pago), categoría (solo en gastos: servicios/insumos/otro), monto, motivo, usuario, fecha; inmutable | Turno, Usuario |
+| **MovimientoCaja** | turno (vacío solo en movimientos de Mercado Pago del admin sin turno abierto), tipo (gasto/retiro/ingreso/pago_proveedor), cuenta (efectivo/mercado_pago), categoría (solo en gastos: servicios/insumos/otro), monto, motivo, usuario, pedido (único; solo en pago_proveedor), fecha; inmutable | Turno, Usuario, Pedido |
 | **Venta** | número correlativo, usuario, fecha, turno, total, estado (pagada/anulada; `pendiente` llega con Mercado Pago en la Etapa 5), anulación (usuario, fecha, motivo, turno abierto al anular) | Turno, Ítems, Pagos, MovimientosStock, Pago MP, Factura |
 | **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción (nombre al momento de vender), cantidad, precio unitario, costo unitario (copia fija del costo del producto al vender; vacío en "Varios" y en productos sin costo), subtotal | Venta, Producto |
 | **PagoVenta** | venta, medio (efectivo/debito/credito/mercado_pago), monto, monto recibido y vuelto (solo efectivo); uno por medio | Venta |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno/pedido_cerrado), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
 | **ConfiguracionWhatsapp** | número que recibe los avisos (10 dígitos), chat de WhatsApp, quién lo cargó (una sola fila) | Usuario |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
@@ -177,7 +178,7 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   │   ├── prisma/           # schema.prisma y migraciones
 │   │   └── src/
 │   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
-│   │       │                 # ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío), estado
+│   │       │                 # pedidos, ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío), estado
 │   │       ├── plugins/      # sesión y permisos por rol
 │   │       ├── lib/          # fechas en Argentina, formatos y utilidades
 │   │       ├── cli/          # comandos de consola (crear el primer admin)
@@ -187,7 +188,8 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │       └── src/
 │           ├── pos/          # pantalla de venta (escritorio, teclado y lector)
 │           ├── ventas/       # listado y detalle de ventas, anulación
-│           ├── stock/        # ingreso de mercadería y stock
+│           ├── pedidos/      # pedidos a proveedor, recepción, carga de mercadería y recordatorios
+│           ├── stock/        # stock, ajustes y escáner de productos
 │           ├── admin/        # pantallas de admin (turnos, avisos, WhatsApp...) y dashboard (responsive)
 │           └── app/          # ingreso, rutas y layout
 ├── packages/

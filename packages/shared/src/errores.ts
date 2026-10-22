@@ -27,7 +27,7 @@ export const CODIGOS_ERROR = {
   codigoExistente: 'CODIGO_EXISTENTE',
   proveedorInactivo: 'PROVEEDOR_INACTIVO',
   productoNoEncontrado: 'PRODUCTO_NO_ENCONTRADO',
-  costoNoPermitido: 'COSTO_NO_PERMITIDO',
+  pedidoEnOtroEstado: 'PEDIDO_EN_OTRO_ESTADO',
   productoNoDisponible: 'PRODUCTO_NO_DISPONIBLE',
   preciosCambiaron: 'PRECIOS_CAMBIARON',
   fueraDePlazo: 'FUERA_DE_PLAZO',
