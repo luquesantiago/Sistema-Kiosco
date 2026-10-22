@@ -276,6 +276,8 @@ model ItemVenta {
   descripcion    String
   cantidad       Int
   precioUnitario Decimal   @map("precio_unitario") @db.Decimal(12, 2)
+  /// Copia fija de Producto.costo al vender. Vacío en "Varios" y en productos sin costo.
+  costoUnitario  Decimal?  @map("costo_unitario") @db.Decimal(12, 2)
   subtotal       Decimal   @db.Decimal(12, 2)
 
   @@index([ventaId])
@@ -334,12 +336,21 @@ enum TipoMovimientoCaja {
   ingreso
 }
 
+/// Lista fija; los pagos a proveedor no son gastos (van por pedidos).
+enum CategoriaGasto {
+  servicios
+  insumos
+  otro
+}
+
 /// Plata que entra o sale del cajón fuera de las ventas. Inmutable.
 model MovimientoCaja {
   id        String             @id @default(uuid(7)) @db.Uuid
   turnoId   String             @map("turno_id") @db.Uuid
   turno     Turno              @relation(fields: [turnoId], references: [id], onDelete: Restrict)
   tipo      TipoMovimientoCaja
+  /// Obligatoria en los gastos; vacía en retiros e ingresos (lo valida la entrada).
+  categoria CategoriaGasto?
   monto     Decimal            @db.Decimal(12, 2)
   motivo    String
   usuarioId String             @map("usuario_id") @db.Uuid

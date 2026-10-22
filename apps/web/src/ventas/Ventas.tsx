@@ -255,6 +255,8 @@ export function DetalleVenta() {
     queryKey: ['ventas', 'detalle', id],
     queryFn: () => pedir<VentaDetalle>('GET', `/ventas/${id}`),
   });
+  // La API manda el costo solo al admin: si viene, se muestra la columna.
+  const conCostos = venta?.items.some((i) => i.costoUnitario !== undefined) ?? false;
 
   return (
     <section className="space-y-4">
@@ -290,6 +292,7 @@ export function DetalleVenta() {
                   <th className="p-3">Producto</th>
                   <th className="p-3 text-right">Cant.</th>
                   <th className="p-3 text-right">Precio</th>
+                  {conCostos && <th className="p-3 text-right">Costo</th>}
                   <th className="p-3 text-right">Subtotal</th>
                 </tr>
               </thead>
@@ -299,6 +302,11 @@ export function DetalleVenta() {
                     <td className="p-3">{item.descripcion}</td>
                     <td className="p-3 text-right">{item.cantidad}</td>
                     <td className="p-3 text-right">{formatearPesos(item.precioUnitario)}</td>
+                    {conCostos && (
+                      <td className="p-3 text-right text-slate-600">
+                        {item.costoUnitario ? formatearPesos(item.costoUnitario) : '—'}
+                      </td>
+                    )}
                     <td className="p-3 text-right">{formatearPesos(item.subtotal)}</td>
                   </tr>
                 ))}

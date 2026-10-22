@@ -63,6 +63,7 @@
 - **Vuelto opcional:** en efectivo, el empleado puede escribir con cuánto paga el cliente y ve el vuelto; si lo deja vacío, se cobra el total justo.
 - **Precios definidos por el servidor:** el precio de cada producto se toma del catálogo al registrar la venta. Si cambió mientras se armaba el carrito, la venta se rechaza, el carrito muestra los precios nuevos y se vuelve a cobrar.
 - Cada venta tiene un número correlativo, y la venta, sus pagos y el descuento de stock se guardan juntos o nada.
+- **Costo de lo vendido:** cada ítem guarda el costo que tenía el producto al venderse, para calcular la ganancia. Si el producto no tenía costo (o es "Varios"), el ítem queda sin costo y no se completa después. Solo el admin ve los costos en el detalle de la venta.
 - Con **Mercado Pago**: el sistema genera el cobro mediante la API de MP y **espera la confirmación del pago** antes de cerrar la venta (Etapa 5; antes se registra a mano).
 - No hay descuentos.
 - **Ticket solo a pedido:** después de cobrar (F9 o botón) o desde el detalle de una venta. Papel de 58 u 80 mm, con la leyenda "No válido como factura".
@@ -82,7 +83,8 @@
 - **Cierre ciego:** quien cierra cuenta el efectivo sin ver cuánto debería haber. Opcionalmente registra un retiro al cierre, con motivo; lo que queda en la caja es lo contado menos ese retiro.
 - **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos − gastos − retiros − efectivo de las ventas anuladas durante el turno. El vuelto no cuenta y las tarjetas y Mercado Pago no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
-- **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos (por ejemplo, el pago a un proveedor) y retiros; los ingresos son solo del admin. No se editan ni se borran.
+- **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
+- **Categoría de los gastos:** cada gasto lleva una categoría fija, elegida con botones: **Servicios** (luz, internet, alquiler), **Insumos** (bolsas, rollos, limpieza) u **Otro**. No hay categoría de proveedor: los pagos a proveedores van por los pedidos (Etapa 3).
 - **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso que se envía por WhatsApp (ver "Avisos por WhatsApp").
 - El admin ve la lista de turnos con sus diferencias y el detalle de cada uno desde el celular.
 

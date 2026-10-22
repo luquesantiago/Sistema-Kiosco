@@ -257,6 +257,78 @@ describe('ítem "Varios"', () => {
   });
 });
 
+describe('costo de cada ítem vendido', () => {
+  async function costosGuardados(ventaId: string) {
+    const items = await prismaTest.itemVenta.findMany({
+      where: { ventaId },
+      orderBy: { id: 'asc' },
+    });
+    return items.map((i) => i.costoUnitario?.toFixed(2) ?? null);
+  }
+
+  function venderGaseosa(ctx: Ctx) {
+    return vender(ctx, {
+      items: [{ productoId: ctx.gaseosa.id, cantidad: 1 }],
+      pagos: [{ medio: 'efectivo', monto: '1500' }],
+      totalEsperado: '1500',
+    });
+  }
+
+  it('copia el costo que tiene el producto al vender', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+
+    const res = await venderGaseosa(ctx);
+
+    expect(res.statusCode).toBe(201);
+    expect(await costosGuardados(res.json().id)).toEqual(['1000.00']);
+  });
+
+  it('el costo guardado no cambia cuando un ingreso cambia el costo del producto', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+    const primera = (await venderGaseosa(ctx)).json();
+
+    const ingreso = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/stock/ingresos',
+      cookies: ctx.admin,
+      payload: { items: [{ productoId: ctx.gaseosa.id, cantidad: 12, costoUnitario: '1100' }] },
+    });
+    const segunda = (await venderGaseosa(ctx)).json();
+
+    expect(ingreso.statusCode).toBe(201);
+    expect(await costosGuardados(primera.id)).toEqual(['1000.00']);
+    expect(await costosGuardados(segunda.id)).toEqual(['1100.00']);
+  });
+
+  it('un producto sin costo deja el ítem sin costo, aunque después se le cargue', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: null } });
+    const { id } = (await venderGaseosa(ctx)).json();
+
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+
+    expect(await costosGuardados(id)).toEqual([null]);
+  });
+
+  it('el ítem "Varios" queda sin costo', async () => {
+    const ctx = await preparar();
+
+    const res = await vender(ctx, {
+      items: [
+        { productoId: ctx.alfajor.id, cantidad: 1 },
+        { varios: { precio: '500' }, cantidad: 1 },
+      ],
+      pagos: [{ medio: 'efectivo', monto: '1400' }],
+      totalEsperado: '1400',
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(await costosGuardados(res.json().id)).toEqual(['600.00', null]);
+  });
+});
+
 describe('pagos de una venta', () => {
   it('acepta un pago mixto', async () => {
     const ctx = await preparar();
@@ -412,6 +484,48 @@ describe('listado de ventas según el rol', () => {
 
     expect(del20.json()).toHaveLength(1);
     expect(del21.json()).toHaveLength(0);
+  });
+
+  it('el admin ve el costo de cada ítem al vender, en el detalle y al anular', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+    const venta = {
+      items: [
+        { productoId: ctx.gaseosa.id, cantidad: 1 },
+        { varios: { precio: '500' }, cantidad: 1 },
+      ],
+      pagos: [{ medio: 'efectivo', monto: '2000' }],
+      totalEsperado: '2000',
+    };
+
+    const registrada = await vender(ctx, venta, ctx.admin);
+    const { id } = registrada.json();
+    const detalle = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
+    const anulada = await anular(ctx, id, 'prueba', ctx.admin);
+
+    for (const res of [registrada, detalle, anulada]) {
+      expect(res.statusCode).toBeLessThan(300);
+      expect(res.json().items.map((i: { costoUnitario: unknown }) => i.costoUnitario)).toEqual([
+        '1000.00',
+        null,
+      ]);
+    }
+  });
+
+  it('al empleado no le llega el costo ni al vender ni al anular', async () => {
+    const ctx = await preparar();
+
+    const registrada = await ventaTipica(ctx);
+    const anulada = await anular(ctx, registrada.json().id, 'cobré dos veces');
+
+    for (const res of [registrada, anulada]) {
+      expect(res.statusCode).toBeLessThan(300);
+      expect(res.body).not.toMatch(/costo/i);
+    }
   });
 
   it('el detalle no incluye costos y el empleado no ve el de días anteriores', async () => {

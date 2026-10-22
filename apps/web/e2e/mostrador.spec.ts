@@ -120,10 +120,14 @@ test('cambio de turno: cierre con retiro, apertura con lo que quedó y turno olv
   const caja = page.getByRole('dialog', { name: 'Caja' });
   await expect(caja.getByLabel('Monto')).toBeFocused();
   await page.keyboard.type('100');
+  // La categoría se elige con teclado: Tab entra al grupo y la flecha elige.
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('ArrowRight');
+  await expect(caja.getByRole('radio', { name: 'Insumos' })).toBeChecked();
   await caja.getByLabel('Motivo').fill('Hielo');
   await page.keyboard.press('Enter');
   await expect(caja.getByRole('list', { name: 'Movimientos del turno' })).toContainText(
-    'Gasto: Hielo',
+    'Gasto · Insumos: Hielo',
   );
   await page.keyboard.press('Escape');
 

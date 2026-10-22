@@ -222,7 +222,7 @@ describe('cerrar el turno desde el mostrador', () => {
 });
 
 describe('movimientos de caja desde el mostrador', () => {
-  it('F8 registra un gasto con el carrito intacto; el empleado no ve "Ingreso"', async () => {
+  it('F8 registra un gasto con categoría y el carrito intacto; el empleado no ve "Ingreso"', async () => {
     let movimiento: unknown;
     const registrados: unknown[] = [];
     simularApi({
@@ -248,14 +248,32 @@ describe('movimientos de caja desde el mostrador', () => {
     const dialogo = await screen.findByRole('dialog', { name: 'Caja' });
     expect(within(dialogo).queryByRole('radio', { name: 'Ingreso' })).not.toBeInTheDocument();
     expect(within(dialogo).getByRole('radio', { name: 'Gasto' })).toBeChecked();
+    const categorias = within(dialogo).getByRole('group', { name: 'Categoría' });
+    expect(
+      within(categorias)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('value')),
+    ).toEqual(['servicios', 'insumos', 'otro']);
+    expect(within(categorias).queryByRole('radio', { checked: true })).not.toBeInTheDocument();
     await userEvent.type(within(dialogo).getByLabelText('Monto'), '8000');
-    await userEvent.type(within(dialogo).getByLabelText('Motivo'), 'pago a proveedor');
+    await userEvent.type(within(dialogo).getByLabelText('Motivo'), 'bolsas');
     await userEvent.keyboard('{Enter}');
+    expect(within(dialogo).getByRole('alert')).toHaveTextContent('Elegí la categoría del gasto.');
+    expect(movimiento).toBeUndefined();
+
+    await userEvent.click(within(categorias).getByRole('radio', { name: 'Insumos' }));
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Registrar (Enter)' }));
 
     await waitFor(() =>
-      expect(movimiento).toEqual({ tipo: 'gasto', monto: '8000.00', motivo: 'pago a proveedor' }),
+      expect(movimiento).toEqual({
+        tipo: 'gasto',
+        categoria: 'insumos',
+        monto: '8000.00',
+        motivo: 'bolsas',
+      }),
     );
-    expect(await within(dialogo).findByText(/Gasto: pago a proveedor/)).toBeInTheDocument();
+    expect(await within(dialogo).findByText(/Gasto · Insumos: bolsas/)).toBeInTheDocument();
+    expect(within(categorias).queryByRole('radio', { checked: true })).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -345,8 +363,9 @@ describe('turnos para el admin', () => {
         {
           id: '0198a5b0-0000-7000-8000-000000000501',
           tipo: 'gasto',
+          categoria: 'insumos',
           monto: '8000.00',
-          motivo: 'pago a proveedor',
+          motivo: 'bolsas',
           usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
           creadoEn: '2026-10-20T13:15:00.000Z',
         },
@@ -365,7 +384,7 @@ describe('turnos para el admin', () => {
     expect(efectivo).toHaveTextContent(/Diferencia\s*-\$\s?500,00/);
     expect(efectivo).toHaveTextContent('Retiro al cierre (Al banco)');
     expect(screen.getByRole('list', { name: 'Movimientos' })).toHaveTextContent(
-      'Gasto: pago a proveedor',
+      'Gasto · Insumos: bolsas',
     );
   });
 

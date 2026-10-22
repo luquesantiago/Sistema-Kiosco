@@ -54,22 +54,52 @@ export const NOMBRE_MOVIMIENTO_CAJA: Record<TipoMovimientoCaja, string> = {
   ingreso: 'Ingreso',
 };
 
-export const movimientoCajaEntradaSchema = z.object({
-  tipo: tipoMovimientoCajaSchema,
-  monto: montoPositivoSchema,
-  motivo: motivoSchema,
+/** Lista fija: los pagos a proveedor no son gastos (van por pedidos). */
+export const CATEGORIAS_GASTO = ['servicios', 'insumos', 'otro'] as const;
+export const categoriaGastoSchema = z.enum(CATEGORIAS_GASTO, {
+  error: 'Elegí la categoría del gasto.',
 });
+export type CategoriaGasto = z.infer<typeof categoriaGastoSchema>;
+
+export const NOMBRE_CATEGORIA_GASTO: Record<CategoriaGasto, string> = {
+  servicios: 'Servicios',
+  insumos: 'Insumos',
+  otro: 'Otro',
+};
+
+/** El gasto exige categoría; el retiro y el ingreso no la aceptan. */
+export const movimientoCajaEntradaSchema = z.discriminatedUnion('tipo', [
+  z.object({
+    tipo: z.literal('gasto'),
+    categoria: categoriaGastoSchema,
+    monto: montoPositivoSchema,
+    motivo: motivoSchema,
+  }),
+  z.object({
+    tipo: z.enum(['retiro', 'ingreso']),
+    categoria: z.null({ error: 'Solo los gastos llevan categoría.' }).optional(),
+    monto: montoPositivoSchema,
+    motivo: motivoSchema,
+  }),
+]);
 export type MovimientoCajaEntrada = z.input<typeof movimientoCajaEntradaSchema>;
 
 export const movimientoCajaSchema = z.object({
   id: z.uuid(),
   tipo: tipoMovimientoCajaSchema,
+  categoria: categoriaGastoSchema.nullable(),
   monto: montoSalidaSchema,
   motivo: z.string(),
   usuario: referenciaSchema,
   creadoEn: z.iso.datetime(),
 });
 export type MovimientoCaja = z.infer<typeof movimientoCajaSchema>;
+
+/** "Gasto · Insumos" o "Retiro": cómo se nombra un movimiento en los listados. */
+export function nombreMovimientoCaja(m: Pick<MovimientoCaja, 'tipo' | 'categoria'>): string {
+  const tipo = NOMBRE_MOVIMIENTO_CAJA[m.tipo];
+  return m.categoria ? `${tipo} · ${NOMBRE_CATEGORIA_GASTO[m.categoria]}` : tipo;
+}
 
 /** Lo que necesita el mostrador para decidir si pide abrir, cerrar o deja vender. */
 export const estadoCajaSchema = z.object({

@@ -1,9 +1,14 @@
 import {
+  CATEGORIAS_GASTO,
   comparar,
+  NOMBRE_CATEGORIA_GASTO,
   NOMBRE_MOVIMIENTO_CAJA,
+  nombreMovimientoCaja,
+  type CategoriaGasto,
   type CierreRespuesta,
   type EstadoCaja,
   type MovimientoCaja,
+  type MovimientoCajaEntrada,
   type TipoMovimientoCaja,
 } from '@kiosco/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -264,6 +269,8 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
     : ['gasto', 'retiro'];
   const [tipo, setTipo] = useState<TipoMovimientoCaja>('gasto');
   const [monto, setMonto] = useState('');
+  // Sin categoría preseleccionada, para que "Otro" no se llene por apuro.
+  const [categoria, setCategoria] = useState<CategoriaGasto | null>(null);
   const [motivo, setMotivo] = useState('');
   const [problema, setProblema] = useState<string | null>(null);
   const movimientos = useQuery({
@@ -271,10 +278,11 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
     queryFn: () => pedir<MovimientoCaja[]>('GET', '/caja/movimientos'),
   });
   const registro = useMutation({
-    mutationFn: (datos: { tipo: TipoMovimientoCaja; monto: string; motivo: string }) =>
+    mutationFn: (datos: MovimientoCajaEntrada) =>
       pedir<MovimientoCaja>('POST', '/caja/movimientos', datos),
     onSuccess: () => {
       setMonto('');
+      setCategoria(null);
       setMotivo('');
       void queryClient.invalidateQueries({ queryKey: CLAVE_MOVIMIENTOS });
     },
@@ -293,12 +301,22 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
       setProblema('Escribí un monto mayor que cero.');
       return;
     }
+    if (tipo === 'gasto' && categoria === null) {
+      setProblema('Elegí la categoría del gasto.');
+      return;
+    }
     if (motivo.trim().length < 3) {
       setProblema('Escribí el motivo (al menos 3 letras).');
       return;
     }
     setProblema(null);
-    if (!registro.isPending) registro.mutate({ tipo, monto: valor, motivo: motivo.trim() });
+    if (registro.isPending) return;
+    const base = { monto: valor, motivo: motivo.trim() };
+    if (tipo === 'gasto') {
+      if (categoria !== null) registro.mutate({ tipo, categoria, ...base });
+    } else {
+      registro.mutate({ tipo, ...base });
+    }
   };
 
   return (
@@ -330,12 +348,36 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
             onChange={(e) => setMonto(e.target.value)}
           />
         </label>
+        {tipo === 'gasto' && (
+          // Radios con aspecto de botón: un toque con el mouse, o Tab y flechas.
+          <fieldset>
+            <legend className="text-sm font-medium">Categoría</legend>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {CATEGORIAS_GASTO.map((c) => (
+                <label
+                  key={c}
+                  className="cursor-pointer rounded border border-slate-300 bg-white px-4 py-2 has-checked:border-slate-800 has-checked:bg-slate-800 has-checked:text-white has-focus-visible:ring-2 has-focus-visible:ring-slate-500"
+                >
+                  <input
+                    type="radio"
+                    name="categoria"
+                    value={c}
+                    className="sr-only"
+                    checked={categoria === c}
+                    onChange={() => setCategoria(c)}
+                  />
+                  {NOMBRE_CATEGORIA_GASTO[c]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <label className="block">
           <span className="text-sm font-medium">Motivo</span>
           <input
             className="campo"
             autoComplete="off"
-            placeholder={tipo === 'gasto' ? 'Por ejemplo: pago a proveedor' : undefined}
+            placeholder={tipo === 'gasto' ? 'Por ejemplo: bolsas, luz, limpieza' : undefined}
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
           />
@@ -367,7 +409,7 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
           {movimientos.data?.map((m) => (
             <li key={m.id} className="flex justify-between gap-2 border-b py-1 last:border-0">
               <span>
-                {formatearHora(m.creadoEn)} · {NOMBRE_MOVIMIENTO_CAJA[m.tipo]}: {m.motivo}
+                {formatearHora(m.creadoEn)} · {nombreMovimientoCaja(m)}: {m.motivo}
               </span>
               <span className="font-medium">{formatearPesos(m.monto)}</span>
             </li>

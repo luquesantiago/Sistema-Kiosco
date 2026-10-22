@@ -1,8 +1,17 @@
-import { comparar, NOMBRE_MEDIO, restar, type ResumenCaja } from '@kiosco/shared';
+import {
+  comparar,
+  NOMBRE_CATEGORIA_GASTO,
+  NOMBRE_MEDIO,
+  restar,
+  type CategoriaGasto,
+  type ResumenCaja,
+} from '@kiosco/shared';
 import { formatearFechaHora, formatearHora, formatearPesos } from '../../lib/formato.js';
 
 export interface DatosAvisoMovimiento {
   tipo: 'gasto' | 'retiro';
+  /** Solo en los gastos. */
+  categoria: CategoriaGasto | null;
   monto: string;
   motivo: string;
   usuario: string;
@@ -12,13 +21,16 @@ export interface DatosAvisoMovimiento {
 /** Aviso al admin por un gasto o retiro que registró un empleado. */
 export function textoAvisoMovimiento({
   tipo,
+  categoria,
   monto,
   motivo,
   usuario,
   creadoEn,
 }: DatosAvisoMovimiento): string {
+  const titulo = tipo === 'gasto' ? 'Gasto de caja' : 'Retiro de caja';
+  const encabezado = categoria ? `${titulo} · ${NOMBRE_CATEGORIA_GASTO[categoria]}` : titulo;
   return [
-    `*${tipo === 'gasto' ? 'Gasto' : 'Retiro'} de caja: ${formatearPesos(monto)}*`,
+    `*${encabezado}: ${formatearPesos(monto)}*`,
     `Fecha y hora: ${formatearFechaHora(creadoEn)}`,
     `Registró: ${usuario}`,
     `Motivo: ${motivo}`,

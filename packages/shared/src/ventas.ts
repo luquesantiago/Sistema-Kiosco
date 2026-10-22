@@ -132,6 +132,8 @@ export const ventaDetalleSchema = ventaResumenSchema.extend({
       descripcion: z.string(),
       cantidad: z.number().int(),
       precioUnitario: montoSalidaSchema,
+      /** Solo para el admin: vacío si el ítem no tiene costo; ausente para el empleado. */
+      costoUnitario: montoSalidaSchema.nullable().optional(),
       subtotal: montoSalidaSchema,
     }),
   ),

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { aperturaSchema, cierreSchema, movimientoCajaEntradaSchema } from '../src/caja.js';
+import {
+  aperturaSchema,
+  cierreSchema,
+  movimientoCajaEntradaSchema,
+  nombreMovimientoCaja,
+} from '../src/caja.js';
 
 describe('aperturaSchema', () => {
   it('acepta un monto escrito con coma o con punto de miles, también $0', () => {
@@ -43,17 +48,44 @@ describe('cierreSchema', () => {
 });
 
 describe('movimientoCajaEntradaSchema', () => {
-  it('acepta un gasto con motivo', () => {
+  it('acepta un gasto con categoría y motivo', () => {
     expect(
-      movimientoCajaEntradaSchema.parse({ tipo: 'gasto', monto: '8000', motivo: 'Hielo' }),
-    ).toEqual({ tipo: 'gasto', monto: '8000.00', motivo: 'Hielo' });
+      movimientoCajaEntradaSchema.parse({
+        tipo: 'gasto',
+        categoria: 'insumos',
+        monto: '8000',
+        motivo: 'Hielo',
+      }),
+    ).toEqual({ tipo: 'gasto', categoria: 'insumos', monto: '8000.00', motivo: 'Hielo' });
+  });
+
+  it('acepta un retiro sin categoría', () => {
+    expect(
+      movimientoCajaEntradaSchema.parse({ tipo: 'retiro', monto: '100', motivo: 'Al banco' }),
+    ).toEqual({ tipo: 'retiro', monto: '100.00', motivo: 'Al banco' });
   });
 
   it.each([
-    ['monto cero', { tipo: 'gasto', monto: '0', motivo: 'Hielo' }],
+    ['monto cero', { tipo: 'gasto', categoria: 'otro', monto: '0', motivo: 'Hielo' }],
     ['sin motivo', { tipo: 'retiro', monto: '100', motivo: '  ' }],
     ['tipo desconocido', { tipo: 'prestamo', monto: '100', motivo: 'algo' }],
+    ['un gasto sin categoría', { tipo: 'gasto', monto: '100', motivo: 'Hielo' }],
+    [
+      'un gasto de proveedor',
+      { tipo: 'gasto', categoria: 'proveedor', monto: '100', motivo: 'Coca' },
+    ],
+    [
+      'un retiro con categoría',
+      { tipo: 'retiro', categoria: 'otro', monto: '100', motivo: 'Al banco' },
+    ],
   ])('rechaza %s', (_caso, entrada) => {
     expect(movimientoCajaEntradaSchema.safeParse(entrada).success).toBe(false);
+  });
+});
+
+describe('nombreMovimientoCaja', () => {
+  it('suma la categoría solo a los gastos', () => {
+    expect(nombreMovimientoCaja({ tipo: 'gasto', categoria: 'insumos' })).toBe('Gasto · Insumos');
+    expect(nombreMovimientoCaja({ tipo: 'retiro', categoria: null })).toBe('Retiro');
   });
 });

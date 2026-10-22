@@ -2,7 +2,7 @@ import {
   comparar,
   MEDIOS_PAGO,
   NOMBRE_MEDIO,
-  NOMBRE_MOVIMIENTO_CAJA,
+  nombreMovimientoCaja,
   type TurnoDetalle,
   type TurnoResumen,
 } from '@kiosco/shared';
@@ -176,7 +176,7 @@ export function DetalleTurno() {
           {turno.movimientos.map((m) => (
             <li key={m.id} className="flex justify-between gap-2 py-1">
               <span>
-                {formatearHora(m.creadoEn)} · {NOMBRE_MOVIMIENTO_CAJA[m.tipo]}: {m.motivo} (
+                {formatearHora(m.creadoEn)} · {nombreMovimientoCaja(m)}: {m.motivo} (
                 {m.usuario.nombre})
               </span>
               <span className="font-medium">{formatearPesos(m.monto)}</span>

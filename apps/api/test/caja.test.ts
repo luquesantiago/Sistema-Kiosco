@@ -56,12 +56,20 @@ function abrir(ctx: Ctx, cookies: Cookies, montoInicial: string) {
   });
 }
 
-function movimiento(ctx: Ctx, cookies: Cookies, tipo: string, monto: string, motivo = 'motivo') {
+/** Los gastos van como "otro" salvo que se indique la categoría. */
+function movimiento(
+  ctx: Ctx,
+  cookies: Cookies,
+  tipo: string,
+  monto: string,
+  motivo = 'motivo',
+  categoria = tipo === 'gasto' ? 'otro' : undefined,
+) {
   return ctx.app.inject({
     method: 'POST',
     url: '/api/caja/movimientos',
     cookies,
-    payload: { tipo, monto, motivo },
+    payload: { tipo, categoria, monto, motivo },
   });
 }
 
@@ -183,7 +191,13 @@ describe('estado de la caja para quien opera', () => {
     });
 
     expect(z.array(movimientoCajaSchema).parse(movs.json())).toMatchObject([
-      { tipo: 'gasto', monto: '500.00', motivo: 'Hielo', usuario: { id: ctx.usuarios.ana.id } },
+      {
+        tipo: 'gasto',
+        categoria: 'otro',
+        monto: '500.00',
+        motivo: 'Hielo',
+        usuario: { id: ctx.usuarios.ana.id },
+      },
     ]);
     expect(lista.statusCode).toBe(403);
     expect(JSON.stringify((await estado(ctx, ctx.ana)).json())).not.toContain('esperado');
@@ -243,7 +257,7 @@ describe('quién opera en el turno abierto', () => {
 });
 
 describe('movimientos de caja', () => {
-  it('el empleado registra un gasto con monto, motivo, usuario y fecha', async () => {
+  it('el empleado registra un gasto con categoría, monto, motivo, usuario y fecha', async () => {
     const ctx = await preparar();
     const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
 
@@ -252,6 +266,7 @@ describe('movimientos de caja', () => {
     expect(res.statusCode).toBe(201);
     expect(movimientoCajaSchema.parse(res.json())).toMatchObject({
       tipo: 'gasto',
+      categoria: 'otro',
       monto: '8000.00',
       motivo: 'pago a proveedor - Coca',
       creadoEn: MARTES_0702.toISOString(),
@@ -268,8 +283,17 @@ describe('movimientos de caja', () => {
   });
 
   it.each([
-    ['sin motivo', { tipo: 'gasto', monto: '100', motivo: '' }],
+    ['sin motivo', { tipo: 'gasto', categoria: 'otro', monto: '100', motivo: '' }],
     ['con monto cero', { tipo: 'retiro', monto: '0', motivo: 'algo' }],
+    ['de gasto sin categoría', { tipo: 'gasto', monto: '100', motivo: 'Hielo' }],
+    [
+      'de gasto con la categoría proveedor',
+      { tipo: 'gasto', categoria: 'proveedor', monto: '100', motivo: 'Coca' },
+    ],
+    [
+      'de retiro con categoría',
+      { tipo: 'retiro', categoria: 'otro', monto: '100', motivo: 'algo' },
+    ],
   ])('un movimiento %s responde 400', async (_caso, payload) => {
     const ctx = await preparar();
     await abrirTurnoDePrueba(ctx.app, ctx.ana);
@@ -280,6 +304,19 @@ describe('movimientos de caja', () => {
       payload,
     });
     expect(res.statusCode).toBe(400);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('el admin registra un gasto de Servicios y el retiro queda sin categoría', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.admin);
+
+    const gasto = await movimiento(ctx, ctx.admin, 'gasto', '45000', 'luz de octubre', 'servicios');
+    const retiro = await movimiento(ctx, ctx.admin, 'retiro', '1000', 'Al banco');
+
+    expect(gasto.statusCode).toBe(201);
+    expect(gasto.json()).toMatchObject({ tipo: 'gasto', categoria: 'servicios' });
+    expect(retiro.json()).toMatchObject({ tipo: 'retiro', categoria: null });
   });
 });
 
@@ -288,7 +325,7 @@ describe('aviso por gasto o retiro del empleado', () => {
     const ctx = await preparar();
     await abrirTurnoDePrueba(ctx.app, ctx.ana);
 
-    await movimiento(ctx, ctx.ana, 'gasto', '8000', 'pago a proveedor - Coca');
+    await movimiento(ctx, ctx.ana, 'gasto', '8000', 'bolsas de camiseta', 'insumos');
     await movimiento(ctx, ctx.ana, 'retiro', '5000', 'Lo pidió el dueño');
     await movimiento(ctx, ctx.admin, 'retiro', '1000', 'Para cambio');
     await movimiento(ctx, ctx.admin, 'gasto', '1000', 'Hielo');
@@ -298,26 +335,30 @@ describe('aviso por gasto o retiro del empleado', () => {
     const gasto = avisos.find((a) => a.tipo === 'gasto_caja')!;
     expect(gasto).toMatchObject({ destino: 'admin', estado: 'pendiente' });
     expect(gasto.texto).toContain('8.000');
-    expect(gasto.texto).toContain('pago a proveedor - Coca');
+    expect(gasto.texto).toContain('Insumos');
+    expect(gasto.texto).toContain('bolsas de camiseta');
     expect(gasto.texto).toContain('Nombre ana');
     expect(gasto.texto).toContain('07:02');
+    const retiro = avisos.find((a) => a.tipo === 'retiro_caja')!;
+    expect(retiro.texto).toMatch(/^\*Retiro de caja: /);
   });
 
   it('texto del aviso de gasto', () => {
     expect(
       textoAvisoMovimiento({
         tipo: 'gasto',
+        categoria: 'insumos',
         monto: '8000.00',
-        motivo: 'pago a proveedor - Coca',
+        motivo: 'bolsas de camiseta',
         usuario: 'Juan',
         creadoEn: new Date('2026-10-21T13:15:00Z'),
       }),
     ).toBe(
       [
-        '*Gasto de caja: $ 8.000,00*',
+        '*Gasto de caja · Insumos: $ 8.000,00*',
         'Fecha y hora: 21/10/2026 10:15',
         'Registró: Juan',
-        'Motivo: pago a proveedor - Coca',
+        'Motivo: bolsas de camiseta',
       ].join('\n'),
     );
   });
@@ -662,7 +703,9 @@ describe('turnos para el admin', () => {
     const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
 
     expect(turno.resumen.esperado).toBe('70.00');
-    expect(turno.movimientos).toMatchObject([{ tipo: 'gasto', monto: '30.00', motivo: 'Hielo' }]);
+    expect(turno.movimientos).toMatchObject([
+      { tipo: 'gasto', categoria: 'otro', monto: '30.00', motivo: 'Hielo' },
+    ]);
     expect(turno.montoContado).toBe(null);
   });
 

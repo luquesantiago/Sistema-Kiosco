@@ -206,7 +206,7 @@ describe('ventas para admin y empleado', () => {
       method: 'POST',
       url: '/api/caja/movimientos',
       cookies,
-      payload: { tipo: 'gasto', monto: '100', motivo: 'Hielo' },
+      payload: { tipo: 'gasto', categoria: 'otro', monto: '100', motivo: 'Hielo' },
     });
     const cierre = await cerrarTurnoDePrueba(app, cookies, turnoId);
 

@@ -256,6 +256,7 @@ function aMovimiento(m: MovimientoConUsuario): MovimientoCaja {
   return {
     id: m.id,
     tipo: m.tipo,
+    categoria: m.categoria,
     monto: m.monto.toFixed(2),
     motivo: m.motivo,
     usuario: m.usuario,
@@ -269,10 +270,12 @@ function aMovimiento(m: MovimientoConUsuario): MovimientoCaja {
  */
 export async function registrarMovimientoCaja(
   prisma: PrismaClient,
-  { tipo, monto: montoMovimiento, motivo }: z.output<typeof movimientoCajaEntradaSchema>,
+  entrada: z.output<typeof movimientoCajaEntradaSchema>,
   usuario: UsuarioSesion,
   ahora: Date,
 ): Promise<MovimientoCaja> {
+  const { tipo, monto: montoMovimiento, motivo } = entrada;
+  const categoria = entrada.tipo === 'gasto' ? entrada.categoria : null;
   if (tipo === 'ingreso' && usuario.rol !== 'admin') {
     throw new ErrorHttp(
       403,
@@ -286,6 +289,7 @@ export async function registrarMovimientoCaja(
       data: {
         turnoId: turno.id,
         tipo,
+        categoria,
         monto: montoMovimiento,
         motivo,
         usuarioId: usuario.id,
@@ -300,6 +304,7 @@ export async function registrarMovimientoCaja(
           destino: 'admin',
           texto: textoAvisoMovimiento({
             tipo,
+            categoria,
             monto: montoMovimiento,
             motivo,
             usuario: usuario.nombre,

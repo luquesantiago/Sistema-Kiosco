@@ -48,7 +48,9 @@ function aResumen(v: VentaConResumen | VentaConDetalle): VentaResumen {
   };
 }
 
-function aDetalle(v: VentaConDetalle): VentaDetalle {
+/** El costo de cada ítem va solo al admin: al empleado no le llega ni la clave. */
+function aDetalle(v: VentaConDetalle, usuario: UsuarioSesion): VentaDetalle {
+  const conCostos = usuario.rol === 'admin';
   return {
     ...aResumen(v),
     items: v.items.map((i) => ({
@@ -56,6 +58,7 @@ function aDetalle(v: VentaConDetalle): VentaDetalle {
       descripcion: i.descripcion,
       cantidad: i.cantidad,
       precioUnitario: i.precioUnitario.toFixed(2),
+      ...(conCostos && { costoUnitario: i.costoUnitario?.toFixed(2) ?? null }),
       subtotal: i.subtotal.toFixed(2),
     })),
     pagos: v.pagos.map((p) => ({
@@ -109,7 +112,7 @@ export async function registrarVenta(
       const turno = await turnoParaOperar(tx, usuario);
       const productos = await tx.producto.findMany({
         where: { id: { in: [...porProducto.keys()] } },
-        select: { id: true, nombre: true, precio: true, activo: true },
+        select: { id: true, nombre: true, precio: true, costo: true, activo: true },
       });
       const productoPorId = new Map(productos.map((p) => [p.id, p]));
       for (const productoId of porProducto.keys()) {
@@ -126,20 +129,28 @@ export async function registrarVenta(
         }
       }
 
+      // El costo se copia fijo junto con el precio; "Varios" no tiene costo.
       const itemsData = agrupados.map((item) => {
-        const { productoId, descripcion, precioUnitario } =
+        const { productoId, descripcion, precioUnitario, costoUnitario } =
           'productoId' in item
             ? {
                 productoId: item.productoId,
                 descripcion: productoPorId.get(item.productoId)!.nombre,
                 precioUnitario: productoPorId.get(item.productoId)!.precio.toFixed(2),
+                costoUnitario: productoPorId.get(item.productoId)!.costo,
               }
-            : { productoId: null, ...item.varios, precioUnitario: item.varios.precio };
+            : {
+                productoId: null,
+                ...item.varios,
+                precioUnitario: item.varios.precio,
+                costoUnitario: null,
+              };
         return {
           productoId,
           descripcion,
           cantidad: item.cantidad,
           precioUnitario,
+          costoUnitario,
           subtotal: multiplicar(precioUnitario, item.cantidad),
         };
       });
@@ -189,7 +200,10 @@ export async function registrarVenta(
     { timeout: 30_000 },
   );
 
-  return aDetalle(await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }));
+  return aDetalle(
+    await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
+    usuario,
+  );
 }
 
 const fueraDePlazo = (mensaje: string) => new ErrorHttp(403, CODIGOS_ERROR.fueraDePlazo, mensaje);
@@ -244,7 +258,7 @@ export async function obtenerVenta(
   if (usuario.rol !== 'admin' && !esDeHoy(venta, ahora)) {
     throw fueraDePlazo('Solo podés ver las ventas de hoy.');
   }
-  return aDetalle(venta);
+  return aDetalle(venta, usuario);
 }
 
 /**
@@ -330,5 +344,8 @@ export async function anularVenta(
     { timeout: 30_000 },
   );
 
-  return aDetalle(await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }));
+  return aDetalle(
+    await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
+    usuario,
+  );
 }
