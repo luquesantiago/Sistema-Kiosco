@@ -2,13 +2,14 @@
 
 Sistema de gestión para un kiosco familiar: ventas con lector de código de barras, stock por proveedor, control de caja por turno, avisos diarios de reposición por WhatsApp, facturación electrónica ARCA y dashboard de ventas.
 
-> **Estado:** en desarrollo (Etapa 2). La Etapa 1 está terminada; ya hay caja por turno y falta instalar el sistema en el servidor. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
+> **Estado:** en desarrollo. Las Etapas 1 y 2 están terminadas en código: hay ventas, stock, caja por turno y avisos al admin por WhatsApp. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
 
 ## Funcionalidades previstas
 
 - **Ventas (POS):** cobro rápido con lector de código de barras; efectivo, débito, crédito y Mercado Pago (integrado con su API).
 - **Stock y proveedores:** cada proveedor con sus productos, día de toma de pedido y día de entrega.
 - **Caja y turnos:** 2 turnos de 6 horas, apertura, cierre, arqueo y retiros por empleado.
+- **Avisos al admin por WhatsApp:** anulaciones, gastos y retiros de los empleados y el resumen de cada cierre de turno, desde un chip dedicado que se vincula por QR desde el sistema.
 - **Usuarios y roles:** admin y empleado.
 - **Dashboard:** ventas, productos más vendidos, ingresos y egresos (usable desde el celular).
 - **Reposición:** recomendaciones agrupadas por proveedor, enviadas por WhatsApp ([WAHA](https://waha.devlike.pro/)) todos los días a las 12:00.
@@ -17,10 +18,10 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 ## Etapas
 
 1. ✅ **Base**, en 5 cambios: `esqueleto-monorepo`, `usuarios-y-roles`, `productos-y-proveedores`, `stock` y `venta-pos`. Terminada y unida a `main`.
-2. 🚧 **Caja y puesta en marcha** (rama `etapa-2`), en 3 cambios:
+2. 🚧 **Caja y puesta en marcha** (rama `etapa-2`), en 3 cambios. Todo el código está terminado; solo falta la instalación en el servidor:
    - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
-   - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño.
-   - 🚧 `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre). Implementado y probado con el chip.
+   - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño. Se deja para cuando el sistema esté completo, así no se paga el servidor antes.
+   - ✅ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre), con vinculación del chip por QR desde **Administración → WhatsApp**. Probado con el chip.
 3. Dashboard
 4. Reposición: aviso diario de las 12:00 por WhatsApp
 5. Facturación electrónica ARCA e integración con Mercado Pago
@@ -31,7 +32,7 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
 
 - [Node.js 24](https://nodejs.org/) (ver `.nvmrc`).
 - pnpm, activado con Corepack, que viene con Node.
-- [Docker](https://www.docker.com/) para la base de datos.
+- [Docker](https://www.docker.com/) para la base de datos (y WhatsApp, si se quieren probar los avisos).
 
 ### Activar pnpm
 
