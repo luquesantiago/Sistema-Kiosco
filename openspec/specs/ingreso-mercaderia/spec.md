@@ -7,12 +7,12 @@ Registra la mercadería que llega al kiosco: qué productos y cuántas unidades 
 ## Requirements
 
 ### Requirement: Registro de un ingreso de mercadería
-Admin y empleado SHALL poder registrar un ingreso con proveedor (opcional, activo), una nota opcional (por ejemplo, el número de remito) y uno o más productos con su cantidad (entero mayor que cero). Al confirmar, el sistema MUST guardar el ingreso con su usuario y fecha y registrar un movimiento `compra` por cada producto, todo en una sola operación.
+Admin y empleado SHALL registrar un ingreso solo como la carga de un pedido (ver la capacidad `pedidos`), con uno o más productos con su cantidad (entero mayor que cero) y una nota opcional (por ejemplo, el número de remito). El proveedor del ingreso MUST ser el del pedido. Al confirmar, el sistema MUST guardar el ingreso atado al pedido con su usuario y fecha y registrar un movimiento `compra` por cada producto, todo en una sola operación. No hay ingresos sueltos sin pedido.
 
 #### Scenario: El empleado recibe al proveedor
-- **WHEN** un empleado registra un ingreso del proveedor "Distribuidora Sur" con 24 gaseosas y 12 alfajores
+- **WHEN** un empleado carga en el pedido del proveedor "Distribuidora Sur" 24 gaseosas y 12 alfajores
 - **THEN** el stock de la gaseosa sube 24 y el del alfajor sube 12
-- **AND** el ingreso queda registrado con el empleado como responsable
+- **AND** el ingreso queda registrado con el empleado como responsable, el proveedor del pedido y atado a ese pedido
 
 #### Scenario: Ingreso sin productos
 - **WHEN** se intenta registrar un ingreso sin productos o con una cantidad cero o negativa
@@ -35,7 +35,7 @@ La pantalla de ingreso SHALL permitir agregar productos escaneando el código de
 - **AND** los productos ya cargados en la lista se conservan
 
 ### Requirement: Costo opcional y precargado para el admin
-Para el admin, cada producto del ingreso SHALL mostrar su costo actual precargado y editable, y dejarlo vacío MUST significar "sin cambios". Si el admin envía un costo distinto del actual, el sistema MUST actualizar el costo del producto y registrarlo en el historial de precios con origen manual. El empleado MUST NOT ver ni enviar costos.
+Para el admin y el empleado, cada producto del ingreso SHALL mostrar su costo actual precargado y editable, y dejarlo vacío MUST significar "sin cambios". Si se envía un costo distinto del actual, el sistema MUST actualizar el costo del producto y registrarlo en el historial de precios con origen manual y el usuario que lo cargó.
 
 #### Scenario: Llegó con otro costo
 - **WHEN** el admin registra un ingreso donde el alfajor tiene costo $650 y su costo actual es $600
@@ -47,12 +47,12 @@ Para el admin, cada producto del ingreso SHALL mostrar su costo actual precargad
 - **THEN** el costo del producto no cambia y no se agrega nada al historial de precios
 
 #### Scenario: El empleado envía un costo
-- **WHEN** un ingreso de un empleado incluye costos
-- **THEN** el sistema responde `400` y no registra nada
+- **WHEN** un empleado carga un pedido donde el remito dice que la gaseosa cuesta $1.100 y su costo actual es $1.000
+- **THEN** el costo de la gaseosa pasa a $1.100 y el historial registra el cambio con el empleado como usuario
 
 ### Requirement: Consulta de ingresos
-El admin SHALL poder ver la lista de ingresos, del más reciente al más antiguo, con fecha en hora de Argentina, proveedor, usuario, cantidad de productos y nota, y el detalle de cada uno con sus productos, cantidades y costos.
+El admin SHALL poder ver la lista de ingresos, del más reciente al más antiguo, con fecha en hora de Argentina, proveedor, usuario, cantidad de productos, nota y el número del pedido al que pertenecen, y el detalle de cada uno con sus productos, cantidades y costos.
 
 #### Scenario: Revisar lo que recibió un empleado
 - **WHEN** el admin abre un ingreso cargado por un empleado
-- **THEN** ve cada producto con la cantidad recibida y quién lo registró
+- **THEN** ve cada producto con la cantidad recibida, quién lo registró y el pedido al que pertenece
