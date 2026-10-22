@@ -45,7 +45,7 @@
 ## 5. Infraestructura y documentación
 
 - [x] 5.1 Sumar `waha` a `infra/docker-compose.dev.yml` con el perfil `whatsapp`, en `127.0.0.1:${WAHA_PORT:-3200}`, con la sesión en un volumen. Agregar los scripts `whatsapp:up` y `whatsapp:down` y las variables comentadas en `apps/api/.env.example`. Verificar con `pnpm whatsapp:up` que WAHA responde con la API key y rechaza sin ella, y que `pnpm db:up` no lo levanta.
-- [ ] 5.2 Sumar `waha` a `infra/docker-compose.prod.yml`:
+- [x] 5.2 Sumar `waha` a `infra/docker-compose.prod.yml`:
   - Imagen GOWS fijada, sin puertos, dashboard y Swagger desactivados, volumen de sesión, logs y zona horaria.
   - `WAHA_URL` y `WAHA_API_KEY` en la `app`, sin `depends_on`.
   - `WAHA_API_KEY` en `infra/.env.example`.
