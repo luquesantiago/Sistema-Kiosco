@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 import { configurarAlNoAutenticado } from '../src/api/cliente.js';
 import { rutas } from '../src/app/rutas.js';
+import { hoyEnArgentina } from '../src/lib/fechas.js';
 import { CLAVE_SESION } from '../src/app/sesion.js';
 
 type Respuesta = [status: number, cuerpo?: unknown];
@@ -52,4 +53,44 @@ export function renderApp(ruta: string) {
     </QueryClientProvider>,
   );
   return { router, desmontar: unmount };
+}
+
+/** Dashboard de hoy sin movimientos, para las pantallas que abren el panel de admin. */
+export function dashboardVacio(): Record<string, Respuesta> {
+  const hoy = hoyEnArgentina();
+  const cero = '0.00';
+  const rango = { desde: hoy, hasta: hoy };
+  return {
+    [`GET /dashboard?desde=${hoy}&hasta=${hoy}`]: [
+      200,
+      {
+        periodo: rango,
+        anterior: rango,
+        ahora: {
+          efectivoEnCaja: cero,
+          turnoAbierto: false,
+          pendiente: {
+            total: cero,
+            porLlegar: { cantidad: 0, total: cero },
+            deben: { cantidad: 0, total: cero },
+          },
+        },
+        ventas: { total: cero, cantidad: 0, anterior: cero, variacion: null },
+        ganancia: { total: cero, anterior: cero, variacion: null, margen: null },
+        sinCosto: cero,
+        gastos: { total: cero, porCategoria: { servicios: cero, insumos: cero, otro: cero } },
+        resultado: cero,
+        serie: { agrupacion: 'hora', puntos: [] },
+        medios: { efectivo: cero, debito: cero, credito: cero, mercado_pago: cero },
+        masVendidos: { unidades: [], importe: [], ganancia: [] },
+        movimientos: {
+          pagosProveedor: { total: cero, efectivo: cero, mercadoPago: cero },
+          retiros: cero,
+          ingresos: cero,
+          diferencias: { total: cero, turnos: 0 },
+          anuladas: { cantidad: 0, total: cero },
+        },
+      },
+    ],
+  };
 }

@@ -2,7 +2,7 @@
 
 Sistema de gestión para un kiosco familiar: ventas con lector de código de barras, stock por proveedor, control de caja por turno, avisos diarios de reposición por WhatsApp, facturación electrónica ARCA y dashboard de ventas.
 
-> **Estado:** en desarrollo. Las Etapas 1 y 2 están terminadas en código: hay ventas, stock, caja por turno y avisos al admin por WhatsApp. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
+> **Estado:** en desarrollo. Las Etapas 1, 2 y 3 están terminadas en código: hay ventas, stock, caja por turno, avisos al admin por WhatsApp, pedidos a proveedor y dashboard. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
 
 ## Funcionalidades previstas
 
@@ -22,7 +22,11 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
    - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
    - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño. Se deja para cuando el sistema esté completo, así no se paga el servidor antes.
    - ✅ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre), con vinculación del chip por QR desde **Administración → WhatsApp**. Probado con el chip.
-3. Dashboard
+3. ✅ **Dashboard** (rama `etapa-3`), en 4 cambios, todos implementados:
+   - ✅ `costo-y-gastos`: costo guardado en cada venta y categoría de los gastos.
+   - ✅ `cuenta-mercado-pago`: efectivo y cuenta de MP separados; devoluciones siempre en efectivo.
+   - ✅ `pedidos-proveedor`: pedidos, recepción en dos tiempos, pagos ahora o después y recordatorios en el POS.
+   - ✅ `dashboard`: ventas, ganancia, gastos, resultado, más vendidos, efectivo en caja y pendiente de pagar.
 4. Reposición: aviso diario de las 12:00 por WhatsApp
 5. Facturación electrónica ARCA e integración con Mercado Pago
 

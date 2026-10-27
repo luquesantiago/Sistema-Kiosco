@@ -59,6 +59,8 @@ export const busquedaProductosSchema = z.object({
   pagina: z.coerce.number().int().min(1).default(1),
   /** Solo para el admin; se ignora para el empleado. */
   incluirInactivos: z.stringbool().default(false),
+  /** Solo para el admin: solo los activos sin costo cargado (para completarlos). */
+  sinCosto: z.stringbool().default(false),
 });
 export type BusquedaProductos = z.input<typeof busquedaProductosSchema>;
 

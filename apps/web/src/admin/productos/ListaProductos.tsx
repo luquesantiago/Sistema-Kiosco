@@ -20,6 +20,7 @@ export function ListaProductos() {
   const consulta = params.get('q') ?? '';
   const pagina = Number(params.get('pagina') ?? '1') || 1;
   const incluirInactivos = params.get('inactivos') === '1';
+  const sinCosto = params.get('sinCosto') === '1';
   const [texto, setTexto] = useState(consulta);
   const navigate = useNavigate();
   const creado = (useLocation().state as { creado?: string } | null)?.creado;
@@ -28,14 +29,23 @@ export function ListaProductos() {
     data: productos,
     isPending,
     error,
-  } = useBusquedaProductos(consulta, pagina, incluirInactivos);
+  } = useBusquedaProductos(consulta, pagina, incluirInactivos, sinCosto);
 
-  const actualizar = (cambios: { q?: string; pagina?: number; inactivos?: boolean }) => {
+  const actualizar = (cambios: {
+    q?: string;
+    pagina?: number;
+    inactivos?: boolean;
+    sinCosto?: boolean;
+  }) => {
     const siguiente = new URLSearchParams(params);
     if (cambios.q !== undefined) siguiente.set('q', cambios.q);
-    if (cambios.inactivos !== undefined) {
-      if (cambios.inactivos) siguiente.set('inactivos', '1');
-      else siguiente.delete('inactivos');
+    for (const [clave, valor] of [
+      ['inactivos', cambios.inactivos],
+      ['sinCosto', cambios.sinCosto],
+    ] as const) {
+      if (valor === undefined) continue;
+      if (valor) siguiente.set(clave, '1');
+      else siguiente.delete(clave);
     }
     siguiente.set('pagina', String(cambios.pagina ?? 1));
     setParams(siguiente, { replace: true });
@@ -101,6 +111,15 @@ export function ListaProductos() {
             onChange={(e) => actualizar({ inactivos: e.target.checked })}
           />
           Incluir desactivados
+        </label>
+        <label className="flex items-center gap-1.5 text-sm">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={sinCosto}
+            onChange={(e) => actualizar({ sinCosto: e.target.checked })}
+          />
+          Sin costo
         </label>
       </form>
 

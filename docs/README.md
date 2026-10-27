@@ -44,7 +44,9 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
    deploy en el VPS, backups, WAHA y envío de avisos
    [código terminado en la rama etapa-2; falta instalar en el servidor]
         |
-3. Dashboard: ventas, top productos, ingresos/egresos
+3. Dashboard: ventas, ganancia, gastos, top productos, efectivo y pendiente
+   de pagar; pedidos a proveedor y cuenta de Mercado Pago
+   [código terminado en la rama etapa-3]
         |
 4. Reposición + aviso diario de las 12:00 por WhatsApp
         |
@@ -66,6 +68,13 @@ La Etapa 2 se divide en 3 cambios:
 3. `envio-whatsapp`: WAHA y envío de los avisos, con la vinculación del chip por QR desde el sistema.
 
 Los tres están implementados. La instalación en el servidor (contratar el Cloud Server, instalar y configurar los backups con la cuenta del dueño) se hace cuando el sistema esté completo, para no pagar el servidor antes de usarlo. Hasta entonces el sistema no se usa en el kiosco.
+
+La Etapa 3 se divide en 4 cambios:
+
+1. `costo-y-gastos`: costo fijo en cada ítem vendido y categoría (Servicios, Insumos u Otro) en los gastos.
+2. `cuenta-mercado-pago`: cada movimiento indica si es de efectivo o de la cuenta de MP del kiosco; las anulaciones se devuelven siempre en efectivo.
+3. `pedidos-proveedor`: pedidos del admin, recepción y carga de la mercadería por el empleado, pago al recibir o después; se adelantó desde la Etapa 4.
+4. `dashboard`: el tablero del admin.
 
 **WAHA se adelanta a la Etapa 2.** El primer día real ya hace falta avisar las anulaciones por WhatsApp. La Etapa 4 solo agrega el contenido del aviso de reposición.
 

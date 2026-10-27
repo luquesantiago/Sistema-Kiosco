@@ -111,11 +111,14 @@
 - Puede llegar algún aviso repetido (si WhatsApp tarda en confirmar el envío): es preferible a perder uno.
 
 ### Dashboard (admin)
-- Ventas por día, semana y mes.
-- Productos más vendidos.
-- Ingresos y egresos.
-- Resumen de turnos y diferencias de caja.
-- Accesible desde el celular.
+- Solo para el admin, arriba de todo en el panel de administración y pensado para el celular. El empleado no lo ve, para que el cierre siga siendo ciego.
+- **Ahora:** efectivo en caja (el esperado del turno abierto o lo que quedó en el último cierre) y pendiente de pagar (pedidos por llegar más entregas que deben).
+- **Período:** Hoy (por defecto), Ayer, Semana (de lunes a hoy), Mes (del 1 a hoy), Mes anterior o fechas elegidas, en hora de Argentina.
+- **Ventas y ganancia**, comparadas con el período anterior. El mes en curso se compara contra los mismos días del mes anterior. La ganancia se calcula solo sobre los ítems con costo, y lo vendido sin costo se muestra aparte, con un enlace a los productos sin costo para completarlos.
+- **Gastos** de las dos cuentas por categoría y **resultado** = ganancia − gastos. Los pagos a proveedores, los retiros y los ingresos se muestran aparte y no cambian el resultado.
+- Ventas por día (por hora en un solo día), por medio de pago y los 10 más vendidos (por unidades, importe o ganancia; sin "Varios").
+- Diferencias de caja de los turnos cerrados en el período, con enlace a Turnos, y ventas anuladas.
+- **Mercado Pago no aparece** hasta la Etapa 5, que trae el saldo real desde la API.
 
 ### Reposición
 - **Fase A (inicial):** un producto necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual.

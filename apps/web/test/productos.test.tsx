@@ -54,6 +54,21 @@ describe('lista de productos', () => {
     expect(within(tabla).getByText(/900,00/)).toBeInTheDocument();
   });
 
+  it('abierta con ?sinCosto=1 muestra el filtro activo y pide solo los productos sin costo', async () => {
+    const fetchMock = simularApi({
+      ...comunes,
+      'GET /productos?q=&pagina=1&sinCosto=true': [200, [{ ...ALFAJOR, costo: null }]],
+    });
+    renderApp('/admin/productos?sinCosto=1');
+
+    expect(await screen.findByRole('checkbox', { name: 'Sin costo' })).toBeChecked();
+    await screen.findByRole('table');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/productos?q=&pagina=1&sinCosto=true',
+      expect.anything(),
+    );
+  });
+
   it('alta rápida: un código escaneado que no existe abre el alta con el código cargado', async () => {
     let creado: unknown;
     simularApi({

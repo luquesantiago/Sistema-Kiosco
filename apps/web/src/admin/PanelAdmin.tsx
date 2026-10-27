@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Dashboard } from './Dashboard.js';
 import { EstadoSistema } from './EstadoSistema.js';
 import { CartelWhatsapp } from './Whatsapp.js';
 
@@ -24,6 +25,7 @@ export function PanelAdmin() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Administración</h1>
       <CartelWhatsapp />
+      <Dashboard />
       <nav className="grid gap-3 sm:grid-cols-2">
         {SECCIONES.map((s) => (
           <Link key={s.a} to={s.a} className="rounded-lg bg-white p-4 shadow hover:bg-slate-50">

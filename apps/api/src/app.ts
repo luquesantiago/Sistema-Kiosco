@@ -11,6 +11,7 @@ import { registrarManejoDeErrores, respuestaNoEncontrado } from './errores.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rutasAuth } from './modules/auth/rutas.js';
 import { rutasCaja } from './modules/caja/rutas.js';
+import { rutasDashboard } from './modules/dashboard/rutas.js';
 import { rutasPedidos } from './modules/pedidos/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
 import { rutasProductos } from './modules/productos/rutas.js';
@@ -82,6 +83,7 @@ export async function crearApp({
       await api.register(rutasStock, { prefix: '/stock', prisma });
       await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora });
       await api.register(rutasPedidos, { prefix: '/pedidos', prisma, ahora });
+      await api.register(rutasDashboard, { prefix: '/dashboard', prisma, ahora });
       await api.register(rutasCaja, { prefix: '/caja', prisma, ahora });
       await api.register(rutasNotificaciones, { prefix: '/notificaciones', prisma });
       await api.register(rutasWhatsapp, { prefix: '/whatsapp', prisma, whatsapp });

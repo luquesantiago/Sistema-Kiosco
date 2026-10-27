@@ -22,6 +22,7 @@ const PREFIJOS_ADMIN = [
   '/api/caja',
   '/api/whatsapp',
   '/api/pedidos',
+  '/api/dashboard',
 ];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
@@ -116,6 +117,7 @@ describe('acceso a la API según sesión', () => {
         'GET /api/stock/productos/:id/movimientos',
         'GET /api/caja/movimientos-mp',
         'POST /api/pedidos',
+        'GET /api/dashboard',
         'PATCH /api/pedidos/:id',
         'POST /api/pedidos/:id/cancelar',
         'POST /api/productos/aumento',

@@ -323,6 +323,21 @@ describe('búsqueda de productos', () => {
     expect(await buscar(ctx, ctx.empleado, 'q=0000000000000')).toEqual([]);
   });
 
+  it('el filtro sin costo da al admin los activos sin costo y se ignora para el empleado', async () => {
+    const ctx = await preparar();
+    await crearOk(ctx, { nombre: 'Alfajor', precio: 900, costo: 600 });
+    await crearOk(ctx, { nombre: 'Alfajor casero', precio: 700 });
+    const viejo = await crearOk(ctx, { nombre: 'Alfajor viejo', precio: 500 });
+    await editar(ctx, viejo.id, { activo: false });
+
+    const delAdmin = await buscar(ctx, ctx.admin, 'q=alfajor&sinCosto=true&incluirInactivos=true');
+    const delEmpleado = await buscar(ctx, ctx.empleado, 'q=alfajor&sinCosto=true');
+
+    expect(delAdmin.map((p) => p.nombre)).toEqual(['Alfajor casero']);
+    expect(delEmpleado.map((p) => p.nombre)).toEqual(['Alfajor', 'Alfajor casero']);
+    expect(delEmpleado[0]).not.toHaveProperty('costo');
+  });
+
   it('el admin ve costo, proveedor y estado, e incluye los desactivados si lo pide', async () => {
     const ctx = await preparar();
     await crearOk(ctx, {

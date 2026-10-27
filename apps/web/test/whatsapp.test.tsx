@@ -2,7 +2,7 @@ import type { EstadoWhatsappRespuesta, Notificacion } from '@kiosco/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { ADMIN, EMPLEADO, renderApp, simularApi } from './ayudas.js';
+import { ADMIN, dashboardVacio, EMPLEADO, renderApp, simularApi } from './ayudas.js';
 
 const CONECTADO: EstadoWhatsappRespuesta = {
   estado: 'conectado',
@@ -165,6 +165,7 @@ describe('cartel de WhatsApp en el panel del admin', () => {
       'GET /auth/sesion': [200, ADMIN],
       'GET /whatsapp': [200, { ...CONECTADO, estado: 'desvinculado', cuenta: null, pendientes: 3 }],
       'GET /health': [200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() }],
+      ...dashboardVacio(),
     });
     renderApp('/admin');
 
@@ -182,6 +183,7 @@ describe('cartel de WhatsApp en el panel del admin', () => {
       'GET /auth/sesion': [200, ADMIN],
       'GET /whatsapp': [200, { ...CONECTADO, destino: null }],
       'GET /health': [200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() }],
+      ...dashboardVacio(),
     });
     renderApp('/admin');
 
@@ -197,6 +199,7 @@ describe('cartel de WhatsApp en el panel del admin', () => {
         'GET /auth/sesion': [200, ADMIN],
         'GET /whatsapp': [200, estado],
         'GET /health': [200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() }],
+        ...dashboardVacio(),
       });
       renderApp('/admin');
 
