@@ -43,10 +43,11 @@ export function Layout() {
           >
             Menú
           </button>
+          {/* En fila desde md; si no entran todos (el menú del admin es largo), pasan a otra línea. */}
           <nav
             id="menu-principal"
             aria-label="Principal"
-            className={`${menuAbierto ? 'flex' : 'hidden'} absolute top-12 right-0 left-0 flex-col gap-1 bg-slate-800 p-3 md:static md:flex md:flex-1 md:flex-row md:p-0`}
+            className={`${menuAbierto ? 'flex' : 'hidden'} absolute top-12 right-0 left-0 flex-col gap-1 bg-slate-800 p-3 md:static md:flex md:min-w-0 md:flex-1 md:flex-row md:flex-wrap md:p-0`}
           >
             {enlaces.map((e) => (
               <NavLink
@@ -54,16 +55,18 @@ export function Layout() {
                 to={e.a}
                 onClick={() => setMenuAbierto(false)}
                 className={({ isActive }) =>
-                  `rounded px-3 py-1 ${isActive ? 'bg-slate-600' : 'hover:bg-slate-700'}`
+                  `rounded px-3 py-1 whitespace-nowrap ${isActive ? 'bg-slate-600' : 'hover:bg-slate-700'}`
                 }
               >
                 {e.texto}
               </NavLink>
             ))}
-            <span className="px-3 py-1 text-slate-300 md:ml-auto">{sesion.nombre}</span>
+            <span className="px-3 py-1 whitespace-nowrap text-slate-300 md:ml-auto">
+              {sesion.nombre}
+            </span>
             <button
               type="button"
-              className="rounded px-3 py-1 text-left hover:bg-slate-700"
+              className="rounded px-3 py-1 text-left whitespace-nowrap hover:bg-slate-700"
               onClick={() =>
                 salir.mutate(undefined, {
                   onSettled: () => navigate('/ingresar', { replace: true }),
