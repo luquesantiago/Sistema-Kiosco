@@ -16,6 +16,7 @@ import { Link, useSearchParams } from 'react-router';
 import { pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { OpcionesBoton } from '../app/OpcionesBoton.js';
+import { DetalleSaldoMercadoPago, useSaldoMercadoPago } from '../app/SaldoMercadoPago.js';
 import { hoyEnArgentina } from '../lib/fechas.js';
 import { formatearPesos } from '../lib/montos.js';
 
@@ -180,10 +181,14 @@ function usePeriodo(hoy: string) {
   return { elegido: esAtajo ? elegido : 'fechas', rango, cambiar };
 }
 
-/** Cómo va el kiosco, para el admin desde el celular. Mercado Pago llega en la Etapa 5. */
+/**
+ * Cómo va el kiosco, para el admin desde el celular. El saldo de Mercado Pago
+ * tiene su propia consulta: no depende del período ni demora el resto.
+ */
 export function Dashboard() {
   const hoy = hoyEnArgentina();
   const { elegido, rango, cambiar } = usePeriodo(hoy);
+  const saldoMp = useSaldoMercadoPago();
   const {
     data: d,
     isPending,
@@ -265,6 +270,10 @@ export function Dashboard() {
               valor={formatearPesos(d.ahora.efectivoEnCaja)}
               fuerte
             />
+            <div>
+              <p className="font-semibold">Saldo de Mercado Pago</p>
+              <DetalleSaldoMercadoPago consulta={saldoMp} />
+            </div>
             <Link to="/pedidos" className="block rounded hover:bg-slate-50">
               <Fila
                 nombre="Pendiente de pagar"

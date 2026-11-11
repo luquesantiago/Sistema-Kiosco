@@ -188,11 +188,15 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   │   └── src/
 │   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
 │   │       │                 # pedidos, ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío),
-│   │       │                 # reposicion (cálculo y texto del aviso, sin rutas), dashboard, estado
+│   │       │                 # reposicion (cálculo y texto del aviso, sin rutas), dashboard, estado,
+│   │       │                 # mercadopago (saldo con caché de 60 s y GET /api/mercado-pago/saldo)
 │   │       ├── plugins/      # sesión y permisos por rol
 │   │       ├── lib/          # fechas en Argentina, formatos y utilidades
 │   │       ├── cli/          # comandos de consola (crear el primer admin)
-│   │       ├── integrations/ # (Etapa 5) clientes de ARCA y Mercado Pago
+│   │       ├── integrations/ # clientes de servicios externos que usan varios módulos:
+│   │       │                 # mercadopago/ (cliente HTTP con timeout de 10 s, errores "no responde"
+│   │       │                 # y "rechazó"; la lectura del saldo, aislada en saldo-cuenta.ts).
+│   │       │                 # ARCA llega con la facturación
 │   │       └── jobs/         # tareas por horario, arrancadas desde server.ts (nunca en los tests):
 │   │                         # ciclo.ts (ciclo común) y aviso-reposicion.ts (aviso de las 12:00)
 │   └── web/                  # Frontend React + Vite

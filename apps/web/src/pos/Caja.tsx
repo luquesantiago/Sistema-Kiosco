@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router';
 import { pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { OpcionesBoton } from '../app/OpcionesBoton.js';
+import { LineaSaldoMercadoPago } from '../app/SaldoMercadoPago.js';
 import { useSalir } from '../app/sesion.js';
 import { formatearHora } from '../lib/fechas.js';
 import { entradaAMonto, formatearPesos, montoParaEditar } from '../lib/montos.js';
@@ -410,7 +411,9 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
         </div>
         <MensajeError error={registro.error} />
       </form>
-      <div>
+      <div className="space-y-2">
+        {/* Solo el saldo de MP: el esperado de la caja nunca se muestra en el mostrador. */}
+        <LineaSaldoMercadoPago />
         <h3 className="text-sm font-semibold text-slate-600">Movimientos del turno</h3>
         {movimientos.data?.length === 0 && <p className="text-sm text-slate-600">Ninguno.</p>}
         <ul aria-label="Movimientos del turno" className="max-h-40 overflow-y-auto text-sm">

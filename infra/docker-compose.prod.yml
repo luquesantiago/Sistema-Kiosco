@@ -58,6 +58,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WAHA_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY:?Falta WAHA_API_KEY en infra/.env}
+      # Opcional, sin valor acá: si falta en infra/.env la app no la recibe (y no
+      # llega vacía, que la haría no arrancar). Sin ella, el saldo dice "no configurado".
+      MP_ACCESS_TOKEN:
     healthcheck:
       test:
         - CMD

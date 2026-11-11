@@ -97,7 +97,10 @@
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
 - **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
 - **Cuenta de cada movimiento:** al registrar un gasto se elige si sale del **Efectivo** (lo preseleccionado) o de **Mercado Pago**. Los retiros e ingresos de Mercado Pago (por ejemplo, la plata que el admin pasa a su cuenta personal) son solo del admin, que los registra desde **Administración → Mercado Pago** aunque no haya un turno abierto. El retiro al cierre es siempre en efectivo.
-- **Saldo de Mercado Pago:** no se calcula a mano. Llega en la Etapa 5, leído desde la API de Mercado Pago, y lo ven el admin y el empleado.
+- **Saldo de Mercado Pago:** se lee de la API de Mercado Pago (lo disponible y, si MP lo informa, lo que está a liberar, con la hora de la lectura). Nunca se calcula con las ventas ni los movimientos del sistema, ni se ajusta a mano.
+  - **Caché de 60 s** en el servidor: varias pantallas abiertas hacen como mucho una consulta a MP por minuto. Si MP no responde en 10 s o rechaza la consulta, se muestra el último saldo leído, marcado como desactualizado y con el motivo ("Mercado Pago no responde" o "Mercado Pago rechazó las credenciales"); si nunca se pudo leer, "Saldo no disponible". Sin credenciales dice "Mercado Pago no configurado" y todo lo demás funciona igual.
+  - **Quién lo ve:** el admin en **Administración → Mercado Pago** (con **Actualizar**) y en el dashboard; el empleado (y el admin) en **Caja (F8)**, que solo existe con un turno abierto. No afecta el efectivo esperado.
+  - **Plan B:** el recurso de saldo de MP no está en la documentación oficial vigente y hay que probarlo con las credenciales reales. Si no funciona, el admin cargaría un saldo de referencia que el sistema actualiza con los movimientos de MP (o se lee el reporte "Dinero liberado"), como cambio aparte.
 - **Categoría de los gastos:** cada gasto lleva una categoría fija, elegida con botones: **Servicios** (luz, internet, alquiler), **Insumos** (bolsas, rollos, limpieza) u **Otro**. No hay categoría de proveedor: los pagos a proveedores van por los pedidos (Etapa 3).
 - **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso que se envía por WhatsApp (ver "Avisos por WhatsApp").
 - El admin ve la lista de turnos con sus diferencias y el detalle de cada uno desde el celular.
@@ -112,13 +115,12 @@
 
 ### Dashboard (admin)
 - Solo para el admin, arriba de todo en el panel de administración y pensado para el celular. El empleado no lo ve, para que el cierre siga siendo ciego.
-- **Ahora:** efectivo en caja (el esperado del turno abierto o lo que quedó en el último cierre) y pendiente de pagar (pedidos por llegar más entregas que deben).
+- **Ahora:** efectivo en caja (el esperado del turno abierto o lo que quedó en el último cierre), el saldo de Mercado Pago tal como lo informa MP, con su hora (no depende del período, y si MP falla o tarda el resto del dashboard se muestra igual), y pendiente de pagar (pedidos por llegar más entregas que deben).
 - **Período:** Hoy (por defecto), Ayer, Semana (de lunes a hoy), Mes (del 1 a hoy), Mes anterior o fechas elegidas, en hora de Argentina.
 - **Ventas y ganancia**, comparadas con el período anterior. El mes en curso se compara contra los mismos días del mes anterior. La ganancia se calcula solo sobre los ítems con costo, y lo vendido sin costo se muestra aparte, con un enlace a los productos sin costo para completarlos.
 - **Gastos** de las dos cuentas por categoría y **resultado** = ganancia − gastos. Los pagos a proveedores, los retiros y los ingresos se muestran aparte y no cambian el resultado.
 - Ventas por día (por hora en un solo día), por medio de pago y los 10 más vendidos (por unidades, importe o ganancia; sin "Varios").
 - Diferencias de caja de los turnos cerrados en el período, con enlace a Turnos, y ventas anuladas.
-- **Mercado Pago no aparece** hasta la Etapa 5, que trae el saldo real desde la API.
 
 ### Reposición
 - **Fase A (inicial):** un producto activo necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual (con stock negativo, el sugerido supera al máximo).

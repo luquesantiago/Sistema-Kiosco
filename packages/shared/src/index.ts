@@ -4,6 +4,7 @@ export * from './dashboard.js';
 export * from './decimales.js';
 export * from './errores.js';
 export * from './estado.js';
+export * from './mercadopago.js';
 export * from './montos.js';
 export * from './pedidos.js';
 export * from './productos.js';

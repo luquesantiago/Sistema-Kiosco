@@ -73,6 +73,10 @@ Lo detiene. La sesión vinculada queda en el volumen `waha-sesiones`. Si el 3200
 
 Sin `WAHA_URL`, la API funciona igual: los avisos quedan pendientes y la pantalla de WhatsApp dice que no está configurado.
 
+## Mercado Pago de desarrollo
+
+Para leer el saldo real hace falta el **Access Token** de la aplicación del kiosco (Mercado Pago Developers → Tus integraciones → la aplicación → Credenciales). Descomentar `MP_ACCESS_TOKEN` en `apps/api/.env` con el token de prueba (o el de producción, para comparar con la app de MP) y reiniciar `pnpm dev`. El token nunca se sube al repositorio ni se pasa por chat. Sin `MP_ACCESS_TOKEN`, la API funciona igual y el saldo dice "Mercado Pago no configurado"; definida y vacía, la API no arranca.
+
 ## Producción (runbook)
 
 ```
@@ -327,6 +331,19 @@ Un aviso con **Error al enviar** (5 fallas con WhatsApp conectado, por ejemplo c
 
 - **Chip:** **Administración → WhatsApp → Desvincular** y vincular el nuevo (paso 7). Mientras tanto los avisos esperan.
 - **Número del dueño:** cargar el nuevo en la misma pantalla y mandar la prueba. Los avisos pendientes van al número nuevo.
+
+#### Cargar o cambiar el token de Mercado Pago
+
+El saldo de Mercado Pago (Administración → Mercado Pago, dashboard y Caja F8) se lee con el **Access Token de producción** de la aplicación del kiosco. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+nano infra/.env   # descomentar MP_ACCESS_TOKEN=APP_USR-... (sin comillas, sin espacios)
+docker compose -f infra/docker-compose.prod.yml up -d app   # recrea la app con el token nuevo
+```
+
+- El token queda solo en `infra/.env` (fuera del repositorio): la app no lo manda a la web, no lo guarda en la base ni lo escribe en los logs.
+- Sin el token, todo funciona y el saldo dice "Mercado Pago no configurado". Si la línea queda descomentada pero vacía, la app no arranca: dejarla comentada.
+- Si el saldo dice "Mercado Pago rechazó las credenciales", el token está mal copiado o se renovó en Mercado Pago: cargar el actual y repetir.
 
 #### Restaurar un backup
 

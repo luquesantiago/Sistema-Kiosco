@@ -9,6 +9,8 @@ const configSchema = z
     // WhatsApp es opcional: sin WAHA la app funciona y los avisos quedan pendientes.
     WAHA_URL: z.url({ protocol: /^https?$/ }).optional(),
     WAHA_API_KEY: z.string().min(1).optional(),
+    // Mercado Pago es opcional: sin token el saldo aparece como "no configurado".
+    MP_ACCESS_TOKEN: z.string().min(1).optional(),
   })
   .superRefine((config, ctx) => {
     // Una sin la otra es un error de instalación: mejor no arrancar que no enviar en silencio.

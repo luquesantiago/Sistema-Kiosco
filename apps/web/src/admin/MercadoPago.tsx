@@ -17,21 +17,47 @@ import { useSearchParams } from 'react-router';
 import { pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { OpcionesBoton } from '../app/OpcionesBoton.js';
+import { DetalleSaldoMercadoPago, useSaldoMercadoPago } from '../app/SaldoMercadoPago.js';
 import { formatearFechaHora, hoyEnArgentina } from '../lib/fechas.js';
 import { entradaAMonto, formatearPesos } from '../lib/montos.js';
 
 const CLAVE_MP = ['caja', 'movimientos-mp'] as const;
 
 /**
- * Lo que entra o sale de la cuenta de Mercado Pago del kiosco, pensado para el
- * celular del admin: no hace falta un turno abierto. El saldo llega en la Etapa 5.
+ * El saldo de la cuenta de Mercado Pago del kiosco (leído de MP) y lo que entra
+ * o sale de ella, pensado para el celular del admin: no hace falta un turno abierto.
  */
 export function MercadoPago() {
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Mercado Pago</h1>
+      <TarjetaSaldo />
       <NuevoMovimientoMp />
       <ListaMovimientosMp />
+    </section>
+  );
+}
+
+/** "Actualizar" pide el saldo a la API, que respeta su caché de 60 s. */
+function TarjetaSaldo() {
+  const consulta = useSaldoMercadoPago();
+  return (
+    <section
+      className="space-y-2 rounded-lg bg-white p-4 shadow"
+      aria-label="Saldo de Mercado Pago"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-semibold">Saldo</h2>
+        <button
+          type="button"
+          className="boton-secundario"
+          disabled={consulta.isFetching}
+          onClick={() => void consulta.refetch()}
+        >
+          Actualizar
+        </button>
+      </div>
+      <DetalleSaldoMercadoPago consulta={consulta} />
     </section>
   );
 }

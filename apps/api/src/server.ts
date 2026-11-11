@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { crearApp } from './app.js';
 import { cargarConfig } from './config.js';
 import { crearPrisma } from './db.js';
+import { clienteMercadoPago } from './integrations/mercadopago/cliente.js';
 import { iniciarAvisoReposicion } from './jobs/aviso-reposicion.js';
 import { esperarBase } from './lib/esperar-base.js';
 import { clienteWaha } from './modules/whatsapp/cliente.js';
@@ -19,6 +20,8 @@ const whatsapp =
   config.WAHA_URL && config.WAHA_API_KEY
     ? clienteWaha(config.WAHA_URL, config.WAHA_API_KEY)
     : undefined;
+// Sin token, el saldo de Mercado Pago queda "no configurado" y todo lo demás funciona.
+const mercadoPago = config.MP_ACCESS_TOKEN ? clienteMercadoPago(config.MP_ACCESS_TOKEN) : undefined;
 
 // Hasta 60 s; si la base no responde, sale y Docker vuelve a intentar.
 if (!(await esperarBase(() => prisma.$queryRaw`SELECT 1`))) {
@@ -29,6 +32,7 @@ if (!(await esperarBase(() => prisma.$queryRaw`SELECT 1`))) {
 const app = await crearApp({
   prisma,
   whatsapp,
+  mercadoPago,
   cookieSegura: config.NODE_ENV === 'production',
   // En producción solo se llega a la app a través de Caddy.
   trustProxy: config.NODE_ENV === 'production',

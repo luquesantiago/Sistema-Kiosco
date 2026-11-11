@@ -9,29 +9,29 @@
 
 ## 2. Integración con Mercado Pago
 
-- [ ] 2.1 Sumar `MP_ACCESS_TOKEN` opcional a `cargarConfig` y comentada a `apps/api/.env.example` e `infra/.env.example`. Verificar con los tests de 1.3.
-- [ ] 2.2 Crear `apps/api/src/integrations/mercadopago/cliente.ts` con la interfaz `ClienteMercadoPago` (`saldo()`), `MercadoPagoNoDisponible`, `MercadoPagoRechazo` y `clienteMercadoPago(token, { baseUrl, timeoutMs })` según el design (usuario de `/users/me` en memoria, montos por `Decimal`, mensajes sin token). Verificar con `mercadopago-cliente.test.ts` contra el servidor HTTP local: saldo con y sin `unavailable_balance`, 401, 500, error de red y timeout.
-- [ ] 2.3 Crear `apps/api/test/mercadopago-falso.ts` con saldo, demora y errores programables y contador de llamadas, pensado para que `cobro-mercado-pago` le sume las órdenes. Verificar que lo usan los tests de 1.1 y 1.2.
+- [x] 2.1 Sumar `MP_ACCESS_TOKEN` opcional a `cargarConfig` y comentada a `apps/api/.env.example` e `infra/.env.example`. Verificar con los tests de 1.3.
+- [x] 2.2 Crear `apps/api/src/integrations/mercadopago/cliente.ts` con la interfaz `ClienteMercadoPago` (`saldo()`), `MercadoPagoNoDisponible`, `MercadoPagoRechazo` y `clienteMercadoPago(token, { baseUrl, timeoutMs })` según el design (usuario de `/users/me` en memoria, montos por `Decimal`, mensajes sin token). Verificar con `mercadopago-cliente.test.ts` contra el servidor HTTP local: saldo con y sin `unavailable_balance`, 401, 500, error de red y timeout.
+- [x] 2.3 Crear `apps/api/test/mercadopago-falso.ts` con saldo, demora y errores programables y contador de llamadas, pensado para que `cobro-mercado-pago` le sume las órdenes. Verificar que lo usan los tests de 1.1 y 1.2.
 
 ## 3. Saldo en la API
 
-- [ ] 3.1 Agregar `packages/shared/src/mercadopago.ts` (esquema `SaldoMercadoPago` y `textoSaldoNoDisponible`) y exportarlo en `index.ts`. Verificar con un test unitario de los tres textos.
-- [ ] 3.2 Implementar `crearServicioSaldo` en `apps/api/src/modules/mercadopago/saldo.ts` (vigencia de 60 s, `< 60_000` vigente, promesa compartida, fallas sin guardar). Verificar que pasan los tests de 1.1 y 1.2.
-- [ ] 3.3 Implementar `GET /api/mercado-pago/saldo` en `modules/mercadopago/rutas.ts`, aceptar `mercadoPago?` en `crearApp` y crear el cliente en `server.ts` solo si hay token. Verificar que pasan los tests de 1.4 y `rutas-protegidas.test.ts`.
+- [x] 3.1 Agregar `packages/shared/src/mercadopago.ts` (esquema `SaldoMercadoPago` y `textoSaldoNoDisponible`) y exportarlo en `index.ts`. Verificar con un test unitario de los tres textos.
+- [x] 3.2 Implementar `crearServicioSaldo` en `apps/api/src/modules/mercadopago/saldo.ts` (vigencia de 60 s, `< 60_000` vigente, promesa compartida, fallas sin guardar). Verificar que pasan los tests de 1.1 y 1.2.
+- [x] 3.3 Implementar `GET /api/mercado-pago/saldo` en `modules/mercadopago/rutas.ts`, aceptar `mercadoPago?` en `crearApp` y crear el cliente en `server.ts` solo si hay token. Verificar que pasan los tests de 1.4 y `rutas-protegidas.test.ts`.
 
 ## 4. Web
 
-- [ ] 4.1 Crear el componente del saldo (consulta con `refetchInterval` y `staleTime` de 60 s; disponible, a liberar, hora, desactualizado y textos de no disponible) y usarlo en `admin/MercadoPago.tsx` con **Actualizar**, sacando el texto "el saldo llega en la Etapa 5". Verificar con tests de Testing Library los estados `disponible`, desactualizado, `no_disponible` y `no_configurado`.
+- [x] 4.1 Crear el componente del saldo (consulta con `refetchInterval` y `staleTime` de 60 s; disponible, a liberar, hora, desactualizado y textos de no disponible) y usarlo en `admin/MercadoPago.tsx` con **Actualizar**, sacando el texto "el saldo llega en la Etapa 5". Verificar con tests de Testing Library los estados `disponible`, desactualizado, `no_disponible` y `no_configurado`.
   - Tests ya escritos (antes del código) en `apps/web/test/saldo-mercado-pago.test.tsx`, bloque "Administración → Mercado Pago".
-- [ ] 4.2 Mostrar el saldo en `admin/Dashboard.tsx`, en la fila de "ahora", con su propia consulta. Verificar con tests que el resto del dashboard se muestra aunque la consulta del saldo falle o tarde, y que cambiar el período no vuelve a pedir el saldo.
+- [x] 4.2 Mostrar el saldo en `admin/Dashboard.tsx`, en la fila de "ahora", con su propia consulta. Verificar con tests que el resto del dashboard se muestra aunque la consulta del saldo falle o tarde, y que cambiar el período no vuelve a pedir el saldo.
   - Tests ya escritos (antes del código) en `apps/web/test/saldo-mercado-pago.test.tsx`, bloque "dashboard".
-- [ ] 4.3 Sumar la línea del saldo en `DialogoCaja` (`pos/Caja.tsx`), oculta si no está configurado. Verificar con tests de Testing Library los escenarios del requisito "Saldo de Mercado Pago desde la caja del mostrador" y que el empleado no ve el esperado.
+- [x] 4.3 Sumar la línea del saldo en `DialogoCaja` (`pos/Caja.tsx`), oculta si no está configurado. Verificar con tests de Testing Library los escenarios del requisito "Saldo de Mercado Pago desde la caja del mostrador" y que el empleado no ve el esperado.
   - Tests ya escritos (antes del código) en `apps/web/test/saldo-mercado-pago.test.tsx`, bloque "Caja (F8)".
 
 ## 5. Verificación y documentación
 
 - [ ] 5.1 Correr `pnpm --filter api test`, `pnpm --filter web test`, `pnpm typecheck` y `pnpm lint`, y verificar que todo pasa.
-- [ ] 5.2 Actualizar `docs/requisitos-y-limites.md` (saldo leído de la API, caché de 60 s, quién lo ve, plan B), `docs/estructura-proyecto.md` (`src/integrations/mercadopago/` y `modules/mercadopago/`) e `infra/README.md` (dónde cargar el token). Verificar que coinciden con los specs del cambio.
+- [x] 5.2 Actualizar `docs/requisitos-y-limites.md` (saldo leído de la API, caché de 60 s, quién lo ve, plan B), `docs/estructura-proyecto.md` (`src/integrations/mercadopago/` y `modules/mercadopago/`) e `infra/README.md` (dónde cargar el token). Verificar que coinciden con los specs del cambio.
 
 ## 6. Prueba con credenciales reales (cuando el dueño las tenga)
 
