@@ -42,6 +42,20 @@ describe('estado de la conexión', () => {
     });
   });
 
+  it('desvinculado con 1 aviso pendiente y 3 reemplazada informa 1 pendiente', async () => {
+    const { falso, pedir } = await preparar();
+    falso.estadoActual = 'desvinculado';
+    for (const estado of ['reemplazada', 'reemplazada', 'reemplazada', 'pendiente'] as const) {
+      await prismaTest.notificacion.create({
+        data: { tipo: 'reposicion', destino: 'admin', texto: 'Reposición', estado },
+      });
+    }
+
+    const res = await pedir('GET', '');
+
+    expect(res.json()).toMatchObject({ estado: 'desvinculado', pendientes: 1 });
+  });
+
   it('con WAHA caído responde no_disponible sin detalles internos', async () => {
     const { falso, pedir } = await preparar();
     falso.estadoActual = 'no_disponible';
@@ -294,6 +308,31 @@ describe('reintento manual', () => {
     expect(
       (await prismaTest.notificacion.findUniqueOrThrow({ where: { id: aviso.id } })).estado,
     ).toBe('enviada');
+  });
+
+  it('un aviso reemplazada no se puede reintentar y no cambia', async () => {
+    const { app, cookies } = await preparar();
+    const aviso = await prismaTest.notificacion.create({
+      data: {
+        tipo: 'reposicion',
+        destino: 'admin',
+        texto: 'Reposición del 09/11',
+        estado: 'reemplazada',
+        intentos: 2,
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/notificaciones/${aviso.id}/reintentar`,
+      cookies,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.codigo).toBe('AVISO_NO_REINTENTABLE');
+    expect(await prismaTest.notificacion.findUniqueOrThrow({ where: { id: aviso.id } })).toEqual(
+      aviso,
+    );
   });
 
   it('un aviso inexistente responde 404 y un empleado 403', async () => {

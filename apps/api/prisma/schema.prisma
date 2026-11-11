@@ -236,12 +236,15 @@ enum TipoNotificacion {
   retiro_caja
   cierre_turno
   pedido_cerrado
+  reposicion
 }
 
 enum EstadoNotificacion {
   pendiente
   enviada
   error
+  /// Aviso de reposición que no se envía porque se generó uno más nuevo.
+  reemplazada
 }
 
 model Venta {
@@ -442,6 +445,7 @@ model Notificacion {
   intentos         Int                @default(0)
   /// Si está, el aviso no se reintenta antes de esta hora.
   proximoIntentoEn DateTime?          @map("proximo_intento_en") @db.Timestamptz
+  ejecucionTarea   EjecucionTarea?
 
   @@index([creadaEn])
   @@index([estado, creadaEn])
@@ -460,4 +464,21 @@ model ConfiguracionWhatsapp {
   actualizadoPor   Usuario  @relation(fields: [actualizadoPorId], references: [id], onDelete: Restrict)
 
   @@map("configuracion_whatsapp")
+}
+
+/// Registro de las tareas por horario: una fila por tarea y día de Argentina.
+/// La restricción única garantiza que una tarea diaria corra una sola vez.
+model EjecucionTarea {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// "aviso_reposicion"; es texto y no enum para sumar tareas sin ALTER TYPE.
+  tarea          String
+  /// Día de Argentina.
+  fecha          DateTime      @db.Date
+  ejecutadaEn    DateTime      @map("ejecutada_en") @db.Timestamptz
+  /// Aviso que generó la tarea, si generó uno.
+  notificacionId String?       @unique @map("notificacion_id") @db.Uuid
+  notificacion   Notificacion? @relation(fields: [notificacionId], references: [id], onDelete: Restrict)
+
+  @@unique([tarea, fecha])
+  @@map("ejecuciones_tarea")
 }

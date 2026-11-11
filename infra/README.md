@@ -288,6 +288,12 @@ cd /opt/kiosco
   2. Restaurar la copia previa al deploy: `./infra/restaurar.sh /var/backups/kiosco/kiosco-<fecha-hora>-predeploy.dump`. No usar "la última": después de las 03:00, la última es la del timer, que ya tiene la migración aplicada.
   3. Lo vendido desde el deploy se carga como en un corte de luz (ver `docs/requisitos-y-limites.md`).
   4. Corregir la migración en `main` antes de volver a desplegar.
+- **Volver a una versión anterior al aviso de reposición** (`aviso-reposicion-diario`): esas versiones no conocen el estado `reemplazada` y la lista de **Avisos** fallaría. Antes de `./infra/deploy.sh <commit anterior>`, pasar esos avisos a enviados (como `kiosco`, en `/opt/kiosco`):
+
+  ```bash
+  docker compose -f infra/docker-compose.prod.yml exec db psql -U kiosco -d kiosco \
+    -c "UPDATE notificaciones SET estado = 'enviada' WHERE estado = 'reemplazada'"
+  ```
 
 #### Revisión semanal (hasta que lleguen las alertas por WhatsApp)
 

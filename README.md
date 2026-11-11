@@ -27,7 +27,8 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
    - ✅ `cuenta-mercado-pago`: efectivo y cuenta de MP separados; devoluciones siempre en efectivo.
    - ✅ `pedidos-proveedor`: pedidos, recepción en dos tiempos, pagos ahora o después y recordatorios en el POS.
    - ✅ `dashboard`: ventas, ganancia, gastos, resultado, más vendidos, efectivo en caja y pendiente de pagar.
-4. Reposición: aviso diario de las 12:00 por WhatsApp
+4. 🚧 **Reposición** (rama `etapa-4`):
+   - 🚧 `aviso-reposicion-diario`: aviso de las 12:00 por WhatsApp con lo que hay que reponer, agrupado por proveedor, con recuperación hasta las 19:00 y uno solo por día. Está implementado; falta probarlo con el chip.
 5. Facturación electrónica ARCA e integración con Mercado Pago
 
 ## Desarrollo

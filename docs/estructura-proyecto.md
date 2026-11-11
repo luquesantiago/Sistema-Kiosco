@@ -75,12 +75,14 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
 | **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno/pedido_cerrado), destino, texto, estado (pendiente/enviada/error), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno/pedido_cerrado/reposicion), destino, texto, estado (pendiente/enviada/error/reemplazada), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
 | **ConfiguracionWhatsapp** | número que recibe los avisos (10 dígitos), chat de WhatsApp, quién lo cargó (una sola fila) | Usuario |
+| **EjecucionTarea** | tarea (texto, por ejemplo `aviso_reposicion`), fecha (día de Argentina), cuándo se ejecutó, aviso generado (único, opcional); única por tarea y fecha | Notificacion |
 
 - Se asume **un proveedor por producto**. Si más adelante un producto puede venir de varios proveedores, se agrega una tabla intermedia ProductoProveedor.
 - **IDs:** UUID v7 en todas las entidades. Montos en `Decimal`, cantidades y stock enteros, fechas en UTC (ver las convenciones en `apps/api/prisma/schema.prisma`).
-- **Notificacion:** se crea como pendiente en la misma transacción que la anulación, el gasto o retiro de un empleado o el cierre de turno, y la envía después el proceso de envío (ver "Avisos por WhatsApp"). Nunca se borra.
+- **Notificacion:** se crea como pendiente en la misma transacción que la anulación, el gasto o retiro de un empleado o el cierre de turno, y la envía después el proceso de envío (ver "Avisos por WhatsApp"). Nunca se borra. El estado `reemplazada` es solo para los avisos de reposición: al generarse el del día, los anteriores que seguían pendientes pasan a `reemplazada` y no se envían ni se reintentan.
+- **EjecucionTarea** (`ejecuciones_tarea`): registro de las tareas por horario. Su índice único `(tarea, fecha)` garantiza que una tarea diaria corra una sola vez por día, aunque dos pasadas coincidan o la app se reinicie. `tarea` es texto para que la Etapa 5 sume las suyas sin migrar enums.
 - **Turno:** el esperado y la diferencia se guardan al cerrar, como foto del cierre. Un índice único parcial (`turnos_un_solo_abierto`) garantiza que haya un solo turno abierto.
 
 ## Flujos principales
@@ -159,12 +161,19 @@ Proceso de envío, cada 15 s:
 ### Aviso diario de reposición (12:00)
 
 ```
-Tarea programada 12:00
-   --> productos con stock actual <= stock mínimo
-   --> cantidad sugerida = stock máximo - stock actual
-   --> agrupar por proveedor
-   --> ordenar: primero los proveedores que toman pedido HOY
-   --> armar mensaje --> Notificacion pendiente --> proceso de envío --> WhatsApp
+Tarea diaria (jobs/aviso-reposicion.ts), revisa cada 60 s, también sin WAHA:
+   ¿entre las 12:00 y las 18:59:59 de Argentina? -- no --> nada
+      | sí
+   ¿ya hay ejecución "aviso_reposicion" de hoy? -- sí --> nada
+      | no
+   --> productos activos con stock actual <= stock mínimo (sin mínimo y máximo en 0)
+   --> cantidad sugerida = stock máximo - stock actual (si es 0 o menos, no va)
+   --> agrupar por proveedor (sin proveedor o desactivado --> "Sin proveedor", al final)
+   --> ordenar: primero los proveedores que toman pedido HOY, después el resto por nombre
+   --> marca "pedido por llegar" con la fecha más cercana
+   --> en una transacción: reposiciones pendientes anteriores --> "reemplazada",
+       Notificacion pendiente y EjecucionTarea del día (si otra pasada ganó: se deshace todo)
+   --> proceso de envío --> WhatsApp
 ```
 
 ## Estructura de carpetas
@@ -178,12 +187,14 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   │   ├── prisma/           # schema.prisma y migraciones
 │   │   └── src/
 │   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
-│   │       │                 # pedidos, ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío), estado
+│   │       │                 # pedidos, ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío),
+│   │       │                 # reposicion (cálculo y texto del aviso, sin rutas), dashboard, estado
 │   │       ├── plugins/      # sesión y permisos por rol
 │   │       ├── lib/          # fechas en Argentina, formatos y utilidades
 │   │       ├── cli/          # comandos de consola (crear el primer admin)
 │   │       ├── integrations/ # (Etapa 5) clientes de ARCA y Mercado Pago
-│   │       └── jobs/         # (Etapa 4) tareas programadas: aviso de reposición 12:00
+│   │       └── jobs/         # tareas por horario, arrancadas desde server.ts (nunca en los tests):
+│   │                         # ciclo.ts (ciclo común) y aviso-reposicion.ts (aviso de las 12:00)
 │   └── web/                  # Frontend React + Vite
 │       └── src/
 │           ├── pos/          # pantalla de venta (escritorio, teclado y lector)

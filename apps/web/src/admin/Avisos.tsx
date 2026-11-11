@@ -11,6 +11,7 @@ const ESTADO: Record<EstadoNotificacion, { texto: string; clase: string }> = {
   pendiente: { texto: 'Pendiente de envío', clase: 'bg-amber-100 text-amber-900' },
   enviada: { texto: 'Enviado', clase: 'bg-green-100 text-green-900' },
   error: { texto: 'Error al enviar', clase: 'bg-red-100 text-red-900' },
+  reemplazada: { texto: 'No enviado', clase: 'bg-slate-100 text-slate-700' },
 };
 
 function Envio({ aviso }: { aviso: Notificacion }) {
@@ -22,6 +23,11 @@ function Envio({ aviso }: { aviso: Notificacion }) {
 
   if (aviso.estado === 'enviada' && aviso.enviadaEn) {
     return <p className="text-sm text-slate-600">Enviado {formatearFechaHora(aviso.enviadaEn)}</p>;
+  }
+  if (aviso.estado === 'reemplazada') {
+    return (
+      <p className="text-sm text-slate-600">Hubo un aviso de reposición más nuevo; se mandó ese.</p>
+    );
   }
   if (aviso.estado === 'pendiente' && aviso.intentos > 0) {
     return (
@@ -63,8 +69,9 @@ export function Avisos() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Avisos</h1>
       <p className="text-slate-600">
-        Las anulaciones, los gastos y retiros de los empleados y cada cierre de turno dejan un aviso
-        que se manda por WhatsApp. La conexión y el número se configuran en{' '}
+        Se avisa por WhatsApp cada anulación, gasto o retiro de los empleados y cada cierre de
+        turno, y todos los días a las 12:00, lo que hay que reponer. La conexión y el número se
+        configuran en{' '}
         <Link to="/admin/whatsapp" className="text-blue-700 underline">
           WhatsApp
         </Link>
@@ -73,20 +80,22 @@ export function Avisos() {
       {isPending && <p>Cargando avisos…</p>}
       <MensajeError error={error} />
       {avisos?.length === 0 && <p className="text-slate-600">No hay avisos.</p>}
-      <ul className="space-y-3" aria-label="Avisos">
-        {avisos?.map((a) => (
-          <li key={a.id} className="space-y-2 rounded-lg bg-white p-4 shadow">
-            <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="text-slate-600">{formatearFechaHora(a.creadaEn)}</span>
-              <span className={`rounded px-2 py-0.5 ${ESTADO[a.estado].clase}`}>
-                {ESTADO[a.estado].texto}
-              </span>
-            </p>
-            <p className="whitespace-pre-wrap">{a.texto.replace(/\*/g, '')}</p>
-            <Envio aviso={a} />
-          </li>
-        ))}
-      </ul>
+      {avisos && avisos.length > 0 && (
+        <ul className="space-y-3" aria-label="Avisos">
+          {avisos.map((a) => (
+            <li key={a.id} className="space-y-2 rounded-lg bg-white p-4 shadow">
+              <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="text-slate-600">{formatearFechaHora(a.creadaEn)}</span>
+                <span className={`rounded px-2 py-0.5 ${ESTADO[a.estado].clase}`}>
+                  {ESTADO[a.estado].texto}
+                </span>
+              </p>
+              <p className="whitespace-pre-wrap">{a.texto.replace(/\*/g, '')}</p>
+              <Envio aviso={a} />
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

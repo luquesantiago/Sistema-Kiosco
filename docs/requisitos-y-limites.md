@@ -121,11 +121,21 @@
 - **Mercado Pago no aparece** hasta la Etapa 5, que trae el saldo real desde la API.
 
 ### Reposición
-- **Fase A (inicial):** un producto necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual.
+- **Fase A (inicial):** un producto activo necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual (con stock negativo, el sugerido supera al máximo).
+  - **Mínimo y máximo en 0** significa "no reponer nunca": el producto no aparece, cualquiera sea su stock. Con mínimo 0 y máximo mayor que 0, entra al llegar a 0 o menos.
+  - Un renglón con **sugerido 0** (mínimo igual al máximo y el stock en ese valor) no aparece.
 - **Fase B (futura):** la sugerencia se calcula según el promedio de ventas diarias y los días hasta la próxima entrega del proveedor.
-- Las recomendaciones se agrupan **por proveedor**.
-- Todos los días a las **12:00** se envía un WhatsApp, vía WAHA, al número que recibe los avisos.
-- Primero aparecen los proveedores que toman pedido ese día.
+- Las recomendaciones se agrupan **por proveedor**. Primero los proveedores que toman pedido ese día (en Argentina), después el resto, cada parte por nombre; los productos, por nombre, sin distinguir mayúsculas ni acentos.
+- Los productos sin proveedor o con el proveedor desactivado van al final, en el grupo **Sin proveedor**, siempre con el detalle de cada producto.
+- Si el proveedor ya tiene un pedido **por llegar**, sus productos aparecen igual con la marca "Ya hay un pedido por llegar el <día>" (la fecha más cercana, aunque esté atrasada).
+- No hay pantalla de reposición: todo llega por WhatsApp.
+
+#### Aviso diario
+- Todos los días a las **12:00** de Argentina se genera un aviso, que se envía por WhatsApp (WAHA) al número que recibe los avisos. Un solo mensaje con la fecha, "Stock a las HH:MM", el detalle de los proveedores que piden hoy y del grupo Sin proveedor, y de los demás cuántos productos les faltan. Un día sin faltantes llega igual: "Hoy no hay nada para reponer".
+- **Recuperación:** si el sistema estaba apagado a las 12:00, el aviso se genera al volver, siempre que sea el mismo día y antes de las **19:00**. El aviso de un día que ya pasó no se genera nunca.
+- **Uno solo por día**, aunque el sistema revise varias veces o se reinicie: lo garantiza la base (`ejecuciones_tarea`).
+- Sin WhatsApp configurado o caído, el aviso se genera igual y queda pendiente en **Avisos**. **Con WhatsApp caído varios días, al volver llega solo el último aviso de reposición:** los anteriores que seguían pendientes pasan a `reemplazada` ("No enviado" en Avisos, sin Reintentar). Los avisos de reposición ya enviados o en error, y los de otros tipos, no cambian.
+- La hora del aviso y el límite de recuperación son fijos (no se configuran desde el panel).
 
 ### Facturación
 - Factura electrónica mediante los web services de ARCA (WSFE), con obtención de CAE.

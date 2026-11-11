@@ -49,6 +49,7 @@ El kiosco va a empezar a contratar empleados. El objetivo principal es **poder d
    [código terminado en la rama etapa-3]
         |
 4. Reposición + aviso diario de las 12:00 por WhatsApp
+   [implementado en la rama etapa-4; falta probarlo con el chip]
         |
 5. Facturación electrónica ARCA + integración Mercado Pago
 ```
@@ -75,6 +76,8 @@ La Etapa 3 se divide en 4 cambios:
 2. `cuenta-mercado-pago`: cada movimiento indica si es de efectivo o de la cuenta de MP del kiosco; las anulaciones se devuelven siempre en efectivo.
 3. `pedidos-proveedor`: pedidos del admin, recepción y carga de la mercadería por el empleado, pago al recibir o después; se adelantó desde la Etapa 4.
 4. `dashboard`: el tablero del admin.
+
+La Etapa 4 es un solo cambio, `aviso-reposicion-diario`: el cálculo de qué reponer (Fase A) y el aviso diario de las 12:00, sin pantalla propia (el dueño eligió "solo WhatsApp"). Crea la carpeta `apps/api/src/jobs/` y la tabla `ejecuciones_tarea`, que reutilizan las tareas periódicas de la Etapa 5.
 
 **WAHA se adelanta a la Etapa 2.** El primer día real ya hace falta avisar las anulaciones por WhatsApp. La Etapa 4 solo agrega el contenido del aviso de reposición.
 

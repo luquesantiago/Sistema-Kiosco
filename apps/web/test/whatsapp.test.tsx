@@ -266,3 +266,64 @@ describe('avisos con su envío', () => {
     expect(await screen.findByText(/^Enviado \d/)).toBeInTheDocument();
   });
 });
+
+describe('avisos de reposición', () => {
+  const REPOSICION: Notificacion = {
+    id: '0198a5b0-0000-7000-8000-000000000501',
+    tipo: 'reposicion',
+    destino: 'admin',
+    texto: '*Reposición - lunes 09/11*\nStock a las 12:00\n\nHoy no hay nada para reponer',
+    estado: 'reemplazada',
+    creadaEn: '2026-11-09T15:00:00.000Z',
+    enviadaEn: null,
+    error: null,
+    intentos: 0,
+  };
+
+  it('un aviso reemplazada se ve con "No enviado" y la aclaración, sin Reintentar', async () => {
+    simularApi({
+      'GET /auth/sesion': [200, ADMIN],
+      'GET /notificaciones': [200, [REPOSICION]],
+    });
+    renderApp('/admin/avisos');
+
+    const aviso = within(await screen.findByRole('list', { name: 'Avisos' })).getByRole('listitem');
+    expect(await within(aviso).findByText('No enviado')).toBeInTheDocument();
+    expect(
+      within(aviso).getByText('Hubo un aviso de reposición más nuevo; se mandó ese.'),
+    ).toBeInTheDocument();
+    expect(within(aviso).getByText(/Reposición - lunes 09\/11/)).toBeInTheDocument();
+    expect(within(aviso).queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+  });
+
+  it('un aviso reemplazada que había fallado tampoco ofrece Reintentar', async () => {
+    simularApi({
+      'GET /auth/sesion': [200, ADMIN],
+      'GET /notificaciones': [
+        200,
+        [{ ...REPOSICION, intentos: 2, error: 'WhatsApp rechazó el pedido (HTTP 500).' }],
+      ],
+    });
+    renderApp('/admin/avisos');
+
+    expect(
+      await screen.findByText('Hubo un aviso de reposición más nuevo; se mandó ese.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
+  });
+
+  it('el aviso de reposición pendiente se muestra como los demás y el párrafo menciona el de las 12:00', async () => {
+    simularApi({
+      'GET /auth/sesion': [200, ADMIN],
+      'GET /notificaciones': [
+        200,
+        [{ ...REPOSICION, estado: 'pendiente', texto: '*Reposición - martes 10/11*' }],
+      ],
+    });
+    renderApp('/admin/avisos');
+
+    expect(await screen.findByText('Pendiente de envío')).toBeInTheDocument();
+    expect(screen.getByText('Reposición - martes 10/11')).toBeInTheDocument();
+    expect(screen.getByText(/todos los días a las 12:00, lo que hay que reponer/)).toBeInTheDocument();
+  });
+});

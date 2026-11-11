@@ -163,10 +163,11 @@ export const TIPOS_NOTIFICACION = [
   'retiro_caja',
   'cierre_turno',
   'pedido_cerrado',
+  'reposicion',
 ] as const;
 export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
 
-export const ESTADOS_NOTIFICACION = ['pendiente', 'enviada', 'error'] as const;
+export const ESTADOS_NOTIFICACION = ['pendiente', 'enviada', 'error', 'reemplazada'] as const;
 export type EstadoNotificacion = (typeof ESTADOS_NOTIFICACION)[number];
 
 export const notificacionSchema = z.object({

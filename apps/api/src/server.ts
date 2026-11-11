@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { crearApp } from './app.js';
 import { cargarConfig } from './config.js';
 import { crearPrisma } from './db.js';
+import { iniciarAvisoReposicion } from './jobs/aviso-reposicion.js';
 import { esperarBase } from './lib/esperar-base.js';
 import { clienteWaha } from './modules/whatsapp/cliente.js';
 import { iniciarEnvio } from './modules/whatsapp/envio.js';
@@ -46,6 +47,11 @@ if (whatsapp) {
 } else {
   app.log.warn('WhatsApp no está configurado (WAHA_URL): los avisos quedan pendientes.');
 }
+
+// El aviso diario de reposición se genera aunque no haya WhatsApp: queda pendiente en Avisos.
+const avisoReposicion = iniciarAvisoReposicion({ prisma, ahora: () => new Date(), log: app.log });
+app.log.info('Tarea del aviso de reposición iniciada (todos los días a las 12:00).');
+app.addHook('onClose', () => avisoReposicion.detener());
 
 app.addHook('onClose', async () => {
   await prisma.$disconnect();
