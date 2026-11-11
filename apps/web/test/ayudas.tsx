@@ -8,7 +8,8 @@ import { hoyEnArgentina } from '../src/lib/fechas.js';
 import { CLAVE_SESION } from '../src/app/sesion.js';
 
 type Respuesta = [status: number, cuerpo?: unknown];
-type Manejador = (cuerpo: unknown) => Respuesta;
+/** Puede devolver una promesa: sirve para simular una API que tarda o no contesta. */
+type Manejador = (cuerpo: unknown) => Respuesta | Promise<Respuesta>;
 
 /** Simula la API: claves como `GET /auth/sesion`. Devuelve el mock de fetch. */
 export function simularApi(manejadores: Record<string, Manejador | Respuesta>) {
@@ -17,7 +18,8 @@ export function simularApi(manejadores: Record<string, Manejador | Respuesta>) {
     const manejador = manejadores[clave];
     if (!manejador) throw new Error(`Pedido no simulado: ${clave}`);
     const cuerpo = init?.body ? JSON.parse(init.body as string) : undefined;
-    const [status, datos] = typeof manejador === 'function' ? manejador(cuerpo) : manejador;
+    const [status, datos] =
+      typeof manejador === 'function' ? await manejador(cuerpo) : manejador;
     return new Response(datos === undefined ? null : JSON.stringify(datos), { status });
   });
   vi.stubGlobal('fetch', fetchMock);

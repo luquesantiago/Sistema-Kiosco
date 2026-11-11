@@ -63,6 +63,8 @@ function base(datos: object = CON_DATOS) {
       unknown,
     ],
     [CLAVE_HOY]: [200, datos] as [number, unknown],
+    // El saldo de MP tiene su propia consulta (cambio saldo-mercado-pago).
+    'GET /mercado-pago/saldo': [200, { estado: 'no_configurado' }] as [number, unknown],
   };
 }
 
@@ -88,7 +90,6 @@ describe('dashboard del admin', () => {
       '/admin/productos?sinCosto=1',
     );
     expect(ventas).toHaveTextContent(/Resultado.*10\.000,00/);
-    expect(screen.queryByText(/Mercado Pago:/)).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('region', { name: 'Plata que se movió' })).getByRole('link', {
         name: /Diferencias de caja \(2\)/,

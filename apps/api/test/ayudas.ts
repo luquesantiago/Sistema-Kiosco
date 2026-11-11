@@ -8,7 +8,7 @@ export const CONTRASENA = 'clave-segura-1';
 /** App de test con un reloj que se puede adelantar. */
 export async function crearAppDePrueba(
   inicio = new Date('2026-10-20T12:00:00Z'),
-  opciones: Pick<OpcionesApp, 'whatsapp'> = {},
+  opciones: Pick<OpcionesApp, 'whatsapp' | 'mercadoPago'> = {},
 ) {
   let ahora = inicio;
   const app = await crearApp({ prisma: prismaTest, ahora: () => ahora, ...opciones });
