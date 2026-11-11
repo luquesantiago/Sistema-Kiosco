@@ -394,7 +394,9 @@ const BOLSAS = {
   creadoEn: '2026-11-11T13:15:00.000Z',
 };
 
-async function abrirCaja(usuario = userEvent) {
+async function abrirCaja(
+  usuario: Pick<ReturnType<typeof userEvent.setup>, 'click'> = userEvent,
+) {
   await usuario.click(await screen.findByRole('button', { name: 'Caja (F8)' }));
   return screen.findByRole('dialog', { name: 'Caja' });
 }

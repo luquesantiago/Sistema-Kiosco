@@ -114,7 +114,8 @@ describe('cargarConfig: facturación con ARCA (todas juntas o ninguna)', () => {
   const VARIABLES = Object.keys(ARCA) as (keyof typeof ARCA)[];
 
   function sin(variable: keyof typeof ARCA) {
-    const { [variable]: _quitada, ...resto } = ARCA;
+    const resto: Partial<typeof ARCA> = { ...ARCA };
+    delete resto[variable];
     return resto;
   }
 
