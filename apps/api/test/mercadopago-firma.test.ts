@@ -90,7 +90,10 @@ describe('firma de las notificaciones de Mercado Pago', () => {
     ['sin v1', `ts=${AHORA_S}`],
     ['sin ts', `v1=${hmac(manifest({ dataId: DATA_ID, requestId: REQUEST_ID, ts: '' }))}`],
     ['basura', 'cualquier cosa'],
-    ['ts no numérico', `ts=ayer,v1=${hmac(manifest({ dataId: DATA_ID, requestId: REQUEST_ID, ts: 'ayer' }))}`],
+    [
+      'ts no numérico',
+      `ts=ayer,v1=${hmac(manifest({ dataId: DATA_ID, requestId: REQUEST_ID, ts: 'ayer' }))}`,
+    ],
     // Una firma de otro largo no tiene que romper la comparación de tiempo constante.
     ['v1 más corto', `ts=${AHORA_S - 10},v1=abc123`],
     ['v1 vacío', `ts=${AHORA_S - 10},v1=`],

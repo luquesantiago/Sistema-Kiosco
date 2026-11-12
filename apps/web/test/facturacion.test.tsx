@@ -92,7 +92,13 @@ describe('pantalla de Facturación', () => {
       'GET /auth/sesion': [200, ADMIN],
       'GET /facturacion': () => [200, estado],
       [`POST /facturas/${RECHAZADA.id}/reintentar`]: () => {
-        const reintentada = { ...RECHAZADA, estado: 'pendiente', intentos: 0, codigoError: null, error: null };
+        const reintentada = {
+          ...RECHAZADA,
+          estado: 'pendiente',
+          intentos: 0,
+          codigoError: null,
+          error: null,
+        };
         estado = {
           ...estado,
           pendientes: 3,
@@ -121,8 +127,9 @@ describe('pantalla de Facturación', () => {
       ).toHaveTextContent(/pendiente/i),
     );
     expect(
-      fetchMock.mock.calls.filter(([url, init]) =>
-        url === `/api/facturas/${RECHAZADA.id}/reintentar` && init?.method === 'POST',
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          url === `/api/facturas/${RECHAZADA.id}/reintentar` && init?.method === 'POST',
       ),
     ).toHaveLength(1);
   });
@@ -178,7 +185,12 @@ describe('Facturación en el panel del admin', () => {
       'GET /facturacion': [200, estadoFacturacion],
       'GET /whatsapp': [
         200,
-        { estado: 'conectado', cuenta: { numero: '1100000000' }, destino: { numero: '1123456789' }, pendientes: 0 },
+        {
+          estado: 'conectado',
+          cuenta: { numero: '1100000000' },
+          destino: { numero: '1123456789' },
+          pendientes: 0,
+        },
       ],
       'GET /health': [200, { estado: 'ok', baseDeDatos: 'ok', hora: new Date().toISOString() }],
       ...dashboardVacio(),
@@ -191,10 +203,9 @@ describe('Facturación en el panel del admin', () => {
 
     const cartel = (await screen.findByText(/1 factura con error/)).closest('[role="alert"]');
     expect(cartel).not.toBeNull();
-    expect(within(cartel as HTMLElement).getByRole('link', { name: 'Ir a Facturación' })).toHaveAttribute(
-      'href',
-      '/admin/facturacion',
-    );
+    expect(
+      within(cartel as HTMLElement).getByRole('link', { name: 'Ir a Facturación' }),
+    ).toHaveAttribute('href', '/admin/facturacion');
   });
 
   it('la entrada "Facturación" está en la lista del panel', async () => {

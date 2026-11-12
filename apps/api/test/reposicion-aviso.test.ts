@@ -193,16 +193,19 @@ describe('texto del aviso de reposición', () => {
     ['2026-11-15', 'domingo 15/11'],
     ['2026-01-01', 'jueves 01/01'],
     ['2026-12-31', 'jueves 31/12'],
-  ])('la fecha %s se escribe "%s" en el título y en la marca, sin correrse de día', (fecha, dia) => {
-    const texto = textoAvisoReposicion(
-      reposicion(
-        [grupo('Arcor', varios(2), { pedidoPorLlegarEl: fecha })],
-        new Date(`${fecha}T15:00:00Z`),
-        fecha,
-      ),
-    );
+  ])(
+    'la fecha %s se escribe "%s" en el título y en la marca, sin correrse de día',
+    (fecha, dia) => {
+      const texto = textoAvisoReposicion(
+        reposicion(
+          [grupo('Arcor', varios(2), { pedidoPorLlegarEl: fecha })],
+          new Date(`${fecha}T15:00:00Z`),
+          fecha,
+        ),
+      );
 
-    expect(texto.split('\n')[0]).toBe(`*Reposición - ${dia}*`);
-    expect(texto).toContain(`- Arcor: 2 productos (pedido por llegar el ${dia})`);
-  });
+      expect(texto.split('\n')[0]).toBe(`*Reposición - ${dia}*`);
+      expect(texto).toContain(`- Arcor: 2 productos (pedido por llegar el ${dia})`);
+    },
+  );
 });

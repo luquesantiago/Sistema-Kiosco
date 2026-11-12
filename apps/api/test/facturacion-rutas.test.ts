@@ -29,10 +29,7 @@ beforeEach(async () => {
   await limpiarBase();
 });
 
-async function preparar({
-  conFacturacion = true,
-  estado = 'disponible' as EstadoArca,
-} = {}) {
+async function preparar({ conFacturacion = true, estado = 'disponible' as EstadoArca } = {}) {
   const arca = crearArcaFalso({ ultimo: 41, fechaUltimo: '2026-11-09' });
   const facturacion = conFacturacion ? opcionesFacturacion(arca.cliente, estado) : undefined;
   const { app } = await crearAppConFacturacion(HOY, facturacion);
@@ -85,7 +82,11 @@ describe('GET /api/facturacion', () => {
     const p2 = await ventaConFactura(ctx, {}, { importe: '200.00', minuto: 1 });
     const tope = await ventaConFactura(
       ctx,
-      { estado: 'error', codigoError: 'tope', error: 'Alcanza el tope para no identificar al cliente.' },
+      {
+        estado: 'error',
+        codigoError: 'tope',
+        error: 'Alcanza el tope para no identificar al cliente.',
+      },
       { importe: '10000000.00', minuto: 2 },
     );
     await ventaConFactura(ctx, AUTORIZADA(41), { minuto: 3 });
@@ -144,9 +145,9 @@ describe('GET /api/facturacion', () => {
 
     const res = await estadoFacturacion(ctx);
 
-    expect(res.json().facturas.map((f: { id: string; estado: string }) => [f.id, f.estado])).toEqual(
-      [[enCurso.factura.id, 'en_curso']],
-    );
+    expect(
+      res.json().facturas.map((f: { id: string; estado: string }) => [f.id, f.estado]),
+    ).toEqual([[enCurso.factura.id, 'en_curso']]);
   });
 
   it.each<EstadoArca>(['no_disponible', 'autenticacion_bloqueada'])(
@@ -210,12 +211,14 @@ describe('POST /api/facturas/:id/reintentar', () => {
     const res = await reintentar(ctx, factura.id);
 
     expect(res.statusCode).toBe(200);
-    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject({
-      estado: 'pendiente',
-      intentos: 0,
-      proximoIntentoEn: null,
-      numero: null,
-    });
+    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject(
+      {
+        estado: 'pendiente',
+        intentos: 0,
+        proximoIntentoEn: null,
+        numero: null,
+      },
+    );
 
     const { procesarFacturas } = await emision();
     await procesarFacturas({
@@ -224,10 +227,12 @@ describe('POST /api/facturas/:id/reintentar', () => {
       config: configArca(),
       ahora: () => HOY,
     });
-    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject({
-      estado: 'autorizada',
-      numero: 42,
-    });
+    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject(
+      {
+        estado: 'autorizada',
+        numero: 42,
+      },
+    );
   });
 
   it('una en error por numeración inconsistente se puede reintentar', async () => {
@@ -243,10 +248,12 @@ describe('POST /api/facturas/:id/reintentar', () => {
     const res = await reintentar(ctx, factura.id);
 
     expect(res.statusCode).toBe(200);
-    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject({
-      estado: 'pendiente',
-      numero: null,
-    });
+    expect(await prismaTest.factura.findUniqueOrThrow({ where: { id: factura.id } })).toMatchObject(
+      {
+        estado: 'pendiente',
+        numero: null,
+      },
+    );
   });
 
   it.each([

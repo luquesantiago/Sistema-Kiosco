@@ -158,20 +158,20 @@ describe('el token nunca llega a la web', () => {
     { status: 200, esperado: { estado: 'disponible' } },
     { status: 401, esperado: { estado: 'no_disponible', motivo: 'credenciales' } },
     { status: 500, esperado: { estado: 'no_disponible', motivo: 'no_responde' } },
-  ])('MP responde $status: la respuesta no incluye el token ni el detalle de MP', async ({
-    status,
-    esperado,
-  }) => {
-    const { app, cookies } = await conMpLocal(status);
+  ])(
+    'MP responde $status: la respuesta no incluye el token ni el detalle de MP',
+    async ({ status, esperado }) => {
+      const { app, cookies } = await conMpLocal(status);
 
-    const res = await app.inject({ method: 'GET', url: '/api/mercado-pago/saldo', cookies });
+      const res = await app.inject({ method: 'GET', url: '/api/mercado-pago/saldo', cookies });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject(esperado);
-    expect(res.body).not.toContain(TOKEN);
-    expect(res.body).not.toContain('APP_USR');
-    expect(res.body).not.toContain('detalle interno');
-  });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject(esperado);
+      expect(res.body).not.toContain(TOKEN);
+      expect(res.body).not.toContain('APP_USR');
+      expect(res.body).not.toContain('detalle interno');
+    },
+  );
 });
 
 describe('sistema sin Mercado Pago configurado', () => {

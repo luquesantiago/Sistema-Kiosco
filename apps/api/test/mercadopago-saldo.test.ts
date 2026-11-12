@@ -31,10 +31,7 @@ async function consultar(servicio: ReturnType<typeof preparar>['servicio']) {
 }
 
 /** Consulta mientras el cliente falso tarda `ms` en contestar. */
-async function consultarConDemora(
-  servicio: ReturnType<typeof preparar>['servicio'],
-  ms: number,
-) {
+async function consultarConDemora(servicio: ReturnType<typeof preparar>['servicio'], ms: number) {
   const pendiente = consultar(servicio);
   await vi.advanceTimersByTimeAsync(ms);
   return pendiente;
@@ -211,16 +208,19 @@ describe('saldo cuando Mercado Pago no responde o rechaza', () => {
     { status: 403, motivo: 'credenciales' },
     { status: 400, motivo: 'rechazo' },
     { status: 404, motivo: 'rechazo' },
-  ])('MP rechaza con $status sin saldo anterior: no disponible por $motivo', async ({ status, motivo }) => {
-    const { falso, servicio } = preparar('10:00:00.000');
-    falso.falla = status;
+  ])(
+    'MP rechaza con $status sin saldo anterior: no disponible por $motivo',
+    async ({ status, motivo }) => {
+      const { falso, servicio } = preparar('10:00:00.000');
+      falso.falla = status;
 
-    const saldo = await consultar(servicio);
+      const saldo = await consultar(servicio);
 
-    expect(saldo).toEqual({ estado: 'no_disponible', motivo });
-    // Ni el detalle que mandó MP ni nada de las credenciales.
-    expect(JSON.stringify(saldo)).not.toContain('detalle-interno-de-mp');
-  });
+      expect(saldo).toEqual({ estado: 'no_disponible', motivo });
+      // Ni el detalle que mandó MP ni nada de las credenciales.
+      expect(JSON.stringify(saldo)).not.toContain('detalle-interno-de-mp');
+    },
+  );
 
   it('credenciales rechazadas con un saldo anterior: ese saldo, desactualizado por credenciales', async () => {
     const { falso, servicio, irA } = preparar('09:58:00.000');

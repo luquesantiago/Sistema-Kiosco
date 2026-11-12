@@ -112,17 +112,18 @@ describe('importePorParte', () => {
     ],
     ['100% efectivo', [{ medio: 'efectivo', monto: '3300' }], '0.00', '3300.00'],
     ['débito de $0,00', [{ medio: 'debito', monto: '0' }], '0.00', '0.00'],
-  ])('%s: separa la parte electrónica y la de efectivo', async (_caso, pagos, electronica, efectivo) => {
-    const { importePorParte } = await encolado();
+  ])(
+    '%s: separa la parte electrónica y la de efectivo',
+    async (_caso, pagos, electronica, efectivo) => {
+      const { importePorParte } = await encolado();
 
-    const partes = importePorParte(pagos);
+      const partes = importePorParte(pagos);
 
-    expect(partes).toEqual({ electronica, efectivo });
-    // Las dos partes suman siempre el total de la venta.
-    expect(sumar(partes.electronica, partes.efectivo)).toBe(
-      sumar(...pagos.map((p) => p.monto)),
-    );
-  });
+      expect(partes).toEqual({ electronica, efectivo });
+      // Las dos partes suman siempre el total de la venta.
+      expect(sumar(partes.electronica, partes.efectivo)).toBe(sumar(...pagos.map((p) => p.monto)));
+    },
+  );
 });
 
 describe('factura automática al registrar una venta', () => {
@@ -189,16 +190,19 @@ describe('factura automática al registrar una venta', () => {
       ],
       '5000.00',
     ],
-  ])('venta mixta %s → factura automática solo por la parte electrónica', async (_caso, total, pagos, importe) => {
-    const ctx = await preparar();
+  ])(
+    'venta mixta %s → factura automática solo por la parte electrónica',
+    async (_caso, total, pagos, importe) => {
+      const ctx = await preparar();
 
-    const venta = await vender(ctx, total, pagos);
+      const venta = await vender(ctx, total, pagos);
 
-    const facturas = await facturasDe(venta.id);
-    expect(facturas.map((f) => [f.parte, f.estado, f.importe.toFixed(2)])).toEqual([
-      ['electronica', 'pendiente', importe],
-    ]);
-  });
+      const facturas = await facturasDe(venta.id);
+      expect(facturas.map((f) => [f.parte, f.estado, f.importe.toFixed(2)])).toEqual([
+        ['electronica', 'pendiente', importe],
+      ]);
+    },
+  );
 
   it('venta 100% en efectivo → no tiene factura', async () => {
     const ctx = await preparar();
@@ -214,9 +218,7 @@ describe('factura automática al registrar una venta', () => {
     const venta = await vender(ctx, '0.01', [{ medio: 'debito', monto: '0.01' }]);
 
     const facturas = await facturasDe(venta.id);
-    expect(facturas.map((f) => [f.estado, f.importe.toFixed(2)])).toEqual([
-      ['pendiente', '0.01'],
-    ]);
+    expect(facturas.map((f) => [f.estado, f.importe.toFixed(2)])).toEqual([['pendiente', '0.01']]);
   });
 
   it('venta en débito de $0,00 → no tiene factura', async () => {
@@ -282,37 +284,34 @@ describe('tope por factura para no identificar al cliente', () => {
   it.each([
     ['en el tope ($10.000.000,00 hoy), en débito', 'borde', 'debito'],
     ['un centavo arriba ($10.000.000,01 hoy), en crédito', 'arriba', 'credito'],
-  ] as const)(
-    '%s → error por tope, con aviso y sin llegar a ARCA',
-    async (_caso, cual, medio) => {
-      const importe = (await bordesDelTope())[cual];
-      const ctx = await preparar();
+  ] as const)('%s → error por tope, con aviso y sin llegar a ARCA', async (_caso, cual, medio) => {
+    const importe = (await bordesDelTope())[cual];
+    const ctx = await preparar();
 
-      const venta = await vender(ctx, importe, [{ medio, monto: importe }]);
+    const venta = await vender(ctx, importe, [{ medio, monto: importe }]);
 
-      const [factura] = await facturasDe(venta.id);
-      expect(factura).toMatchObject({
-        parte: 'electronica',
-        estado: 'error',
-        codigoError: 'tope',
-        intentos: 0,
-        numero: null,
-      });
-      expect(factura!.importe.toFixed(2)).toBe(importe);
-      expect(factura!.error).toEqual(expect.any(String));
+    const [factura] = await facturasDe(venta.id);
+    expect(factura).toMatchObject({
+      parte: 'electronica',
+      estado: 'error',
+      codigoError: 'tope',
+      intentos: 0,
+      numero: null,
+    });
+    expect(factura!.importe.toFixed(2)).toBe(importe);
+    expect(factura!.error).toEqual(expect.any(String));
 
-      const avisos = await avisosDeFactura();
-      expect(avisos).toHaveLength(1);
-      expect(avisos[0]).toMatchObject({ destino: 'admin', estado: 'pendiente' });
-      expect(avisos[0]!.texto).toContain(`#${venta.numero}`);
-      expect(avisos[0]!.texto).toContain('10.000.000,0');
-      expect(avisos[0]!.texto).toMatch(/no se emitió/i);
-      expect(avisos[0]!.texto).toMatch(/tope/i);
-      expect(avisos[0]!.texto).toContain('Administración → Facturación');
+    const avisos = await avisosDeFactura();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toMatchObject({ destino: 'admin', estado: 'pendiente' });
+    expect(avisos[0]!.texto).toContain(`#${venta.numero}`);
+    expect(avisos[0]!.texto).toContain('10.000.000,0');
+    expect(avisos[0]!.texto).toMatch(/no se emitió/i);
+    expect(avisos[0]!.texto).toMatch(/tope/i);
+    expect(avisos[0]!.texto).toContain('Administración → Facturación');
 
-      expect(ctx.falso.llamadas).toEqual([]);
-    },
-  );
+    expect(ctx.falso.llamadas).toEqual([]);
+  });
 
   it('$10.000.000 en crédito + $1 en efectivo → la automática por el tope queda en error', async () => {
     const { borde } = await bordesDelTope();
@@ -325,9 +324,9 @@ describe('tope por factura para no identificar al cliente', () => {
     ]);
 
     const facturas = await facturasDe(venta.id);
-    expect(facturas.map((f) => [f.parte, f.estado, f.codigoError, f.importe.toFixed(2)])).toEqual(
-      [['electronica', 'error', 'tope', borde]],
-    );
+    expect(facturas.map((f) => [f.parte, f.estado, f.codigoError, f.importe.toFixed(2)])).toEqual([
+      ['electronica', 'error', 'tope', borde],
+    ]);
     expect(await avisosDeFactura()).toHaveLength(1);
   });
 });

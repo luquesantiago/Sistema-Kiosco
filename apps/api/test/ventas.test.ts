@@ -1061,7 +1061,11 @@ describe('facturas en el detalle y el listado', () => {
       });
     }
 
-    const lista = await ctx.app.inject({ method: 'GET', url: '/api/ventas', cookies: ctx.empleado });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
     expect(lista.json()[0]).toMatchObject({ id, importeFacturado: '3000.00' });
   });
 
@@ -1070,7 +1074,11 @@ describe('facturas en el detalle y el listado', () => {
     const { id } = (await ventaMixta(ctx)).json();
     await dejarFacturas(id, [autorizada(42, '3000.00'), autorizada(43, '2000.00', 'efectivo')]);
 
-    const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies: ctx.admin });
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
 
     expect(res.json()).toMatchObject({ sinFacturar: '0.00', puedePedirFactura: false });
     expect(res.json().facturas.map((f: { parte: string }) => f.parte)).toEqual([
@@ -1086,14 +1094,22 @@ describe('facturas en el detalle y el listado', () => {
     const { id } = (await ventaTipica(ctx)).json();
     await dejarFacturas(id, [{ importe: '3300.00' }]);
 
-    const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies: ctx.empleado });
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
 
     expect(res.json()).toMatchObject({
       facturas: [{ estado: 'pendiente', numero: null, cae: null, qrUrl: null, importe: '3300.00' }],
       sinFacturar: '3300.00',
       puedePedirFactura: false,
     });
-    const lista = await ctx.app.inject({ method: 'GET', url: '/api/ventas', cookies: ctx.empleado });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
     expect(lista.json()[0]).toMatchObject({ importeFacturado: '0.00' });
   });
 
@@ -1110,7 +1126,11 @@ describe('facturas en el detalle y el listado', () => {
       },
     ]);
 
-    const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies: ctx.admin });
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
 
     expect(res.json().facturas).toMatchObject([{ estado, qrUrl: null }]);
   });
@@ -1119,7 +1139,11 @@ describe('facturas en el detalle y el listado', () => {
     const ctx = await prepararConFacturacion();
     const { id } = (await ventaTipica(ctx, { medio: 'efectivo', monto: '3300' })).json();
 
-    const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies: ctx.empleado });
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
 
     expect(res.json()).toMatchObject({
       facturas: [],
@@ -1132,7 +1156,11 @@ describe('facturas en el detalle y el listado', () => {
     const ctx = await preparar();
     const { id } = (await ventaTipica(ctx, { medio: 'efectivo', monto: '3300' })).json();
 
-    const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies: ctx.empleado });
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
 
     expect(res.json()).toMatchObject({
       facturas: [],
@@ -1140,7 +1168,11 @@ describe('facturas en el detalle y el listado', () => {
       puedePedirFactura: false,
       emisor: null,
     });
-    const lista = await ctx.app.inject({ method: 'GET', url: '/api/ventas', cookies: ctx.empleado });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
     expect(lista.json()[0]).toMatchObject({ importeFacturado: '0.00' });
   });
 });

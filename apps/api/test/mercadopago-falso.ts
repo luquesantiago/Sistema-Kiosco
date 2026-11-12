@@ -25,13 +25,7 @@ import {
 
 /** Estado de una orden Point ya traducido por el cliente (ver la tabla del design). */
 export type EstadoOrden =
-  | 'en_espera'
-  | 'cancelando'
-  | 'aprobado'
-  | 'rechazado'
-  | 'vencido'
-  | 'cancelado'
-  | 'a_revisar';
+  'en_espera' | 'cancelando' | 'aprobado' | 'rechazado' | 'vencido' | 'cancelado' | 'a_revisar';
 
 export type MedioPoint = 'debito' | 'credito' | 'mercado_pago';
 

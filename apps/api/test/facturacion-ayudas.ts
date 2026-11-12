@@ -114,10 +114,7 @@ export async function crearVentaDirecta({
 }
 
 /** Factura guardada directo en la base: por defecto, automática y `pendiente` de $3.300. */
-export function crearFacturaDirecta(
-  ventaId: string,
-  datos: Record<string, unknown> = {},
-) {
+export function crearFacturaDirecta(ventaId: string, datos: Record<string, unknown> = {}) {
   return prismaTest.factura.create({
     data: {
       ventaId,

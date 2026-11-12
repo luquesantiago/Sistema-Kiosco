@@ -136,7 +136,11 @@ describe('armarReposicion: agrupación por proveedor', () => {
     const arcor = proveedor('Arcor');
 
     const grupos = armarReposicion(
-      [faltante('Coca 500 ml', coca), faltante('Bon o Bon', arcor), faltante('Sprite 500 ml', coca)],
+      [
+        faltante('Coca 500 ml', coca),
+        faltante('Bon o Bon', arcor),
+        faltante('Sprite 500 ml', coca),
+      ],
       [],
       'martes',
     );
@@ -240,7 +244,12 @@ describe('armarReposicion: orden', () => {
     const zeta = proveedor('Zeta');
 
     const grupos = armarReposicion(
-      [faltante('Hielo'), faltante('Z1', zeta), faltante('Bon o Bon', arcor), faltante('Coca', coca)],
+      [
+        faltante('Hielo'),
+        faltante('Z1', zeta),
+        faltante('Bon o Bon', arcor),
+        faltante('Coca', coca),
+      ],
       [],
       'martes',
     );
@@ -318,7 +327,10 @@ describe('armarReposicion: orden', () => {
 
 describe('armarReposicion: pedido por llegar', () => {
   const coca = proveedor('Coca-Cola', { diasPedido: ['martes'] });
-  const llega = (fecha: string) => ({ proveedorId: coca.id, llegaEl: new Date(`${fecha}T00:00:00Z`) });
+  const llega = (fecha: string) => ({
+    proveedorId: coca.id,
+    llegaEl: new Date(`${fecha}T00:00:00Z`),
+  });
 
   it('con un pedido por llegar el jueves 12/11, los productos aparecen igual y con la marca', () => {
     const grupos = armarReposicion(
@@ -343,7 +355,11 @@ describe('armarReposicion: pedido por llegar', () => {
   });
 
   it('un pedido atrasado (lunes 09/11, hoy martes 10/11) marca el 09/11', () => {
-    const grupos = armarReposicion([faltante('Coca 500 ml', coca)], [llega('2026-11-09')], 'martes');
+    const grupos = armarReposicion(
+      [faltante('Coca 500 ml', coca)],
+      [llega('2026-11-09')],
+      'martes',
+    );
 
     expect(grupos[0]!.pedidoPorLlegarEl).toBe('2026-11-09');
   });

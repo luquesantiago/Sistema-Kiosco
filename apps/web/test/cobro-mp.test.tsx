@@ -117,8 +117,20 @@ function venta(
     cobro = null as unknown,
     total = '3300.00',
     items = [
-      { productoId: ALFAJOR.id, descripcion: 'Alfajor', cantidad: 2, precioUnitario: '900.00', subtotal: '1800.00' },
-      { productoId: GASEOSA.id, descripcion: 'Gaseosa', cantidad: 1, precioUnitario: '1500.00', subtotal: '1500.00' },
+      {
+        productoId: ALFAJOR.id,
+        descripcion: 'Alfajor',
+        cantidad: 2,
+        precioUnitario: '900.00',
+        subtotal: '1800.00',
+      },
+      {
+        productoId: GASEOSA.id,
+        descripcion: 'Gaseosa',
+        cantidad: 1,
+        precioUnitario: '1500.00',
+        subtotal: '1500.00',
+      },
     ] as unknown[],
   } = {},
 ) {
@@ -521,7 +533,9 @@ describe('pantalla de espera del cobro', () => {
     await usuario.keyboard('{Enter}');
 
     await waitFor(() =>
-      expect(dialogo).toHaveTextContent('El Point está ocupado con otro cobro: terminalo o cancelalo.'),
+      expect(dialogo).toHaveTextContent(
+        'El Point está ocupado con otro cobro: terminalo o cancelalo.',
+      ),
     );
     expect(filas()).toHaveLength(2);
   });
@@ -532,7 +546,10 @@ describe('sin el Point configurado', () => {
     let enviado: { pagos: unknown } | undefined;
     const fetchMock = simularApi({
       'GET /auth/sesion': [200, EMPLEADO],
-      'GET /caja/estado': [200, { ...ESTADO_POINT, pointHabilitado: undefined, devolucionesPendientes: undefined }],
+      'GET /caja/estado': [
+        200,
+        { ...ESTADO_POINT, pointHabilitado: undefined, devolucionesPendientes: undefined },
+      ],
       [busqueda('111')]: [200, [ALFAJOR]],
       [busqueda('222')]: [200, [GASEOSA]],
       'POST /ventas': (cuerpo) => {
@@ -579,12 +596,29 @@ describe('pago mixto con el Point', () => {
       { medio: 'debito', monto: '3000.00', montoRecibido: null, vuelto: null },
     ];
     const itemsMixtos = [
-      { productoId: GASEOSA.id, descripcion: 'Gaseosa', cantidad: 2, precioUnitario: '1500.00', subtotal: '3000.00' },
-      { productoId: VINO.id, descripcion: 'Vino', cantidad: 1, precioUnitario: '2000.00', subtotal: '2000.00' },
+      {
+        productoId: GASEOSA.id,
+        descripcion: 'Gaseosa',
+        cantidad: 2,
+        precioUnitario: '1500.00',
+        subtotal: '3000.00',
+      },
+      {
+        productoId: VINO.id,
+        descripcion: 'Vino',
+        cantidad: 1,
+        precioUnitario: '2000.00',
+        subtotal: '2000.00',
+      },
     ];
     const cobro = { actual: cobroMp('en_espera', { monto: '3000.00' }) };
     const ventaMixta = (estado: string) =>
-      venta(estado, { pagos: pagosMixtos, cobro: cobro.actual, total: '5000.00', items: itemsMixtos });
+      venta(estado, {
+        pagos: pagosMixtos,
+        cobro: cobro.actual,
+        total: '5000.00',
+        items: itemsMixtos,
+      });
     simularApi({
       ...BASE,
       'POST /ventas': (cuerpo) => {
@@ -635,8 +669,14 @@ describe('retomar un cobro en espera', () => {
   it('al recargar con un cobro esperando en el Point, vuelve a la pantalla de espera con su estado', async () => {
     simularApi({
       ...BASE,
-      'GET /ventas/en-espera': [200, venta('pendiente', { cobro: cobroMp('rechazado', { motivo: 'Fondos insuficientes' }) })],
-      [`GET /ventas/${VENTA_ID}/cobro`]: [200, cobroMp('rechazado', { motivo: 'Fondos insuficientes' })],
+      'GET /ventas/en-espera': [
+        200,
+        venta('pendiente', { cobro: cobroMp('rechazado', { motivo: 'Fondos insuficientes' }) }),
+      ],
+      [`GET /ventas/${VENTA_ID}/cobro`]: [
+        200,
+        cobroMp('rechazado', { motivo: 'Fondos insuficientes' }),
+      ],
     });
     renderApp('/venta');
 
@@ -670,7 +710,9 @@ describe('retomar un cobro en espera', () => {
     const espera = await screen.findByRole('dialog', { name: 'Cobro en el Point' });
     cobro.actual = cobroMp('rechazado', { motivo: 'Tarjeta rechazada por el banco' });
     await avanzar(1_000);
-    await usuario.click(await within(espera).findByRole('button', { name: /Cobrar de otra forma/ }));
+    await usuario.click(
+      await within(espera).findByRole('button', { name: /Cobrar de otra forma/ }),
+    );
 
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Cobro en el Point' })).not.toBeInTheDocument(),
@@ -706,7 +748,9 @@ describe('ticket de una venta en espera', () => {
     const espera = await cobrarConPoint();
     cobro.actual = cobroMp('rechazado', { motivo: 'Tarjeta rechazada por el banco' });
     await avanzar(1_000);
-    await usuario.click(await within(espera).findByRole('button', { name: /Cobrar de otra forma/ }));
+    await usuario.click(
+      await within(espera).findByRole('button', { name: /Cobrar de otra forma/ }),
+    );
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Cobro en el Point' })).not.toBeInTheDocument(),
     );
@@ -800,8 +844,12 @@ describe('aviso de devolución pendiente en el mostrador', () => {
     await usuario.click(within(modal).getByRole('button', { name: 'El cliente ya se fue' }));
 
     await waitFor(sinAviso);
-    expect(llamadas(fetchMock, 'POST', `/mercado-pago/cobros/${COBRO_ID}/sin-devolver`)).toHaveLength(1);
-    expect(llamadas(fetchMock, 'POST', `/mercado-pago/cobros/${COBRO_ID}/devolucion`)).toHaveLength(0);
+    expect(
+      llamadas(fetchMock, 'POST', `/mercado-pago/cobros/${COBRO_ID}/sin-devolver`),
+    ).toHaveLength(1);
+    expect(llamadas(fetchMock, 'POST', `/mercado-pago/cobros/${COBRO_ID}/devolucion`)).toHaveLength(
+      0,
+    );
   });
 
   it('aparece a más tardar 5 s después de detectarse el pago, mientras se está vendiendo', async () => {
@@ -838,7 +886,10 @@ describe('aviso de devolución pendiente en el mostrador', () => {
 
 describe('cierre del turno con un cobro en espera o una devolución pendiente', () => {
   /** El empleado se encuentra el turno de otra persona abierto e intenta cerrarlo. */
-  async function intentarCerrarTurnoDeOtra(respuesta: Respuesta, estado = estadoConPoint([], false)) {
+  async function intentarCerrarTurnoDeOtra(
+    respuesta: Respuesta,
+    estado = estadoConPoint([], false),
+  ) {
     const cierres: unknown[] = [];
     simularApi({
       ...BASE,
@@ -849,7 +900,9 @@ describe('cierre del turno con un cobro en espera o una devolución pendiente', 
       },
     });
     renderApp('/venta');
-    await usuario.click(await screen.findByRole('button', { name: 'Cerrar turno de Ana Empleada' }));
+    await usuario.click(
+      await screen.findByRole('button', { name: 'Cerrar turno de Ana Empleada' }),
+    );
     const dialogo = await screen.findByRole('dialog', { name: 'Cerrar turno de Ana Empleada' });
     return { dialogo, cierres };
   }
@@ -860,18 +913,21 @@ describe('cierre del turno con un cobro en espera o una devolución pendiente', 
       'Hay un cobro con Mercado Pago en espera (venta #120): esperalo o cancelalo',
     ],
     ['DEVOLUCION_PENDIENTE', 'Antes de cerrar, devolvé $3.000 en efectivo de un cobro cancelado'],
-  ])('el servidor responde 409 %s: muestra el motivo y deshabilita Cerrar', async (codigo, mensaje) => {
-    const { dialogo, cierres } = await intentarCerrarTurnoDeOtra([
-      409,
-      { error: { codigo, mensaje } },
-    ]);
-    await usuario.type(within(dialogo).getByLabelText('Efectivo contado en la caja'), '52000');
-    await usuario.keyboard('{Enter}');
+  ])(
+    'el servidor responde 409 %s: muestra el motivo y deshabilita Cerrar',
+    async (codigo, mensaje) => {
+      const { dialogo, cierres } = await intentarCerrarTurnoDeOtra([
+        409,
+        { error: { codigo, mensaje } },
+      ]);
+      await usuario.type(within(dialogo).getByLabelText('Efectivo contado en la caja'), '52000');
+      await usuario.keyboard('{Enter}');
 
-    await waitFor(() => expect(dialogo).toHaveTextContent(mensaje));
-    expect(cierres).toHaveLength(1);
-    expect(within(dialogo).getByRole('button', { name: 'Cerrar turno (Enter)' })).toBeDisabled();
-  });
+      await waitFor(() => expect(dialogo).toHaveTextContent(mensaje));
+      expect(cierres).toHaveLength(1);
+      expect(within(dialogo).getByRole('button', { name: 'Cerrar turno (Enter)' })).toBeDisabled();
+    },
+  );
 
   it('con una devolución pendiente lo avisa antes de pedir el conteo y no deja cerrar', async () => {
     const { dialogo, cierres } = await intentarCerrarTurnoDeOtra(
@@ -880,7 +936,9 @@ describe('cierre del turno con un cobro en espera o una devolución pendiente', 
     );
 
     expect(dialogo).toHaveTextContent(
-      new RegExp(`Antes de cerrar, devolvé ${pesos('3.000(,00)?')} en efectivo de un cobro cancelado`),
+      new RegExp(
+        `Antes de cerrar, devolvé ${pesos('3.000(,00)?')} en efectivo de un cobro cancelado`,
+      ),
     );
     expect(within(dialogo).getByRole('button', { name: 'Cerrar turno (Enter)' })).toBeDisabled();
     expect(cierres).toHaveLength(0);

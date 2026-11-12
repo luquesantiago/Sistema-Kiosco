@@ -73,8 +73,7 @@ const MOTIVOS_DESACTUALIZADO = [
 const pesos = (texto: string) => new RegExp(`\\$\\s?${texto.replace(/\./g, '\\.')}`);
 
 function llamadasAlSaldo(fetchMock: ReturnType<typeof simularApi>) {
-  return fetchMock.mock.calls.filter(([url]) => String(url) === '/api/mercado-pago/saldo')
-    .length;
+  return fetchMock.mock.calls.filter(([url]) => String(url) === '/api/mercado-pago/saldo').length;
 }
 
 afterEach(() => {
@@ -334,7 +333,9 @@ describe('dashboard: saldo de Mercado Pago en "Ahora"', () => {
     expect(llamadasAlSaldo(espia)).toBe(1);
 
     await userEvent.click(screen.getByRole('button', { name: 'Mes anterior' }));
-    await waitFor(() => expect(espia).toHaveBeenCalledWith(`/api${urlAnterior}`, expect.anything()));
+    await waitFor(() =>
+      expect(espia).toHaveBeenCalledWith(`/api${urlAnterior}`, expect.anything()),
+    );
 
     const ahoraDespues = await screen.findByRole('region', { name: 'Ahora' });
     await waitFor(() => expect(ahoraDespues).toHaveTextContent(pesos('250.000,00')));
@@ -394,9 +395,7 @@ const BOLSAS = {
   creadoEn: '2026-11-11T13:15:00.000Z',
 };
 
-async function abrirCaja(
-  usuario: Pick<ReturnType<typeof userEvent.setup>, 'click'> = userEvent,
-) {
+async function abrirCaja(usuario: Pick<ReturnType<typeof userEvent.setup>, 'click'> = userEvent) {
   await usuario.click(await screen.findByRole('button', { name: 'Caja (F8)' }));
   return screen.findByRole('dialog', { name: 'Caja' });
 }
@@ -488,9 +487,7 @@ describe('Caja (F8): saldo de Mercado Pago', () => {
 
       const dialogo = await abrirCaja();
       await waitFor(() => expect(llamadasAlSaldo(fetchMock)).toBe(1));
-      expect(
-        await within(dialogo).findByText(/Gasto · Insumos: bolsas/),
-      ).toBeInTheDocument();
+      expect(await within(dialogo).findByText(/Gasto · Insumos: bolsas/)).toBeInTheDocument();
 
       await userEvent.click(within(dialogo).getByRole('radio', { name: 'Insumos' }));
       await userEvent.type(within(dialogo).getByLabelText('Monto'), '500');

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NOMBRE_MOVIMIENTO_CAJA, nombreMovimientoCaja, TIPOS_MOVIMIENTO_CAJA } from '../src/caja.js';
+import {
+  NOMBRE_MOVIMIENTO_CAJA,
+  nombreMovimientoCaja,
+  TIPOS_MOVIMIENTO_CAJA,
+} from '../src/caja.js';
 import { CODIGOS_ERROR } from '../src/errores.js';
 import { motivoRechazoCobro } from '../src/mercadopago.js';
 import { ESTADOS_VENTA, pagoEntradaSchema, TIPOS_NOTIFICACION } from '../src/ventas.js';

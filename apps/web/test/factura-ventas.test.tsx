@@ -77,9 +77,7 @@ describe('facturas en el detalle', () => {
     await waitFor(() => expect(facturas).toHaveTextContent('En trámite'));
     expect(facturas).toHaveTextContent(/3\.300,00/);
     expect(screen.queryByRole('button', { name: 'Pedir factura' })).not.toBeInTheDocument();
-    expect(
-      fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST'),
-    ).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
   it('si el admin la pide fuera de plazo (422), muestra el motivo', async () => {
@@ -153,7 +151,10 @@ describe('aviso antes de anular una venta facturada', () => {
         ventaDetalle({
           total: '5000.00',
           pagos: PAGOS_MIXTOS,
-          facturas: [facturaAutorizada(42, '3000.00'), facturaAutorizada(43, '2000.00', 'efectivo')],
+          facturas: [
+            facturaAutorizada(42, '3000.00'),
+            facturaAutorizada(43, '2000.00', 'efectivo'),
+          ],
           sinFacturar: '0.00',
         }),
       ],
@@ -242,7 +243,9 @@ describe('marca de factura en el listado', () => {
 
     const tabla = await screen.findByRole('table');
     const fila = (numero: number) =>
-      within(tabla).getByRole('link', { name: `#${numero}` }).closest('tr')!;
+      within(tabla)
+        .getByRole('link', { name: `#${numero}` })
+        .closest('tr')!;
     expect(within(fila(12)).getByText('Factura', { exact: true })).toBeInTheDocument();
     expect(fila(12)).not.toHaveTextContent('Factura parcial');
     expect(within(fila(11)).getByText('Factura parcial')).toBeInTheDocument();

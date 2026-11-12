@@ -226,7 +226,12 @@ describe('rutas del cobro con el Point (cobro-mercado-pago)', () => {
       ['GET', '/api/mercado-pago/cobros-a-revisar'],
       ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/revisado`],
     ] as const) {
-      const res = await app.inject({ method, url, cookies, payload: method === 'POST' ? {} : undefined });
+      const res = await app.inject({
+        method,
+        url,
+        cookies,
+        payload: method === 'POST' ? {} : undefined,
+      });
       expect(res.statusCode, `${method} ${url}`).toBe(403);
     }
     for (const [method, url] of [

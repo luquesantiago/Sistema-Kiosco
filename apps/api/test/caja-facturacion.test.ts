@@ -76,10 +76,18 @@ describe('facturacionHabilitada en GET /api/caja/estado', () => {
 
   it('con la facturación configurada y el turno abierto, el estado sigue informándolo', async () => {
     const { app, cookies } = await estadoDeCaja(true);
-    await app.inject({ method: 'POST', url: '/api/caja/turnos', cookies, payload: { montoInicial: '0' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/caja/turnos',
+      cookies,
+      payload: { montoInicial: '0' },
+    });
 
     const res = await app.inject({ method: 'GET', url: '/api/caja/estado', cookies });
 
-    expect(res.json()).toMatchObject({ facturacionHabilitada: true, turnoAbierto: { esMio: true } });
+    expect(res.json()).toMatchObject({
+      facturacionHabilitada: true,
+      turnoAbierto: { esMio: true },
+    });
   });
 });

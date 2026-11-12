@@ -131,7 +131,11 @@ describe('venta mixta: factura del efectivo además de la automática', () => {
     const res = await pedirFactura(ctx, v.id);
 
     expect(res.statusCode, res.body).toBe(201);
-    expect(res.json()).toMatchObject({ parte: 'efectivo', estado: 'pendiente', importe: '2000.00' });
+    expect(res.json()).toMatchObject({
+      parte: 'efectivo',
+      estado: 'pendiente',
+      importe: '2000.00',
+    });
     const facturas = await facturasDe(v.id);
     expect(facturas.map((f) => [f.parte, f.importe.toFixed(2)])).toEqual([
       ['electronica', '3000.00'],
@@ -253,7 +257,11 @@ describe('tope por factura en el pedido', () => {
 describe('quién puede pedirla y hasta cuándo', () => {
   it('venta del 09/11 a las 23:59 pedida el 10/11 a las 00:01: el empleado → 403, el admin → 201', async () => {
     const ctx = await preparar({ ahora: HOY_0001 });
-    const v = await venta(ctx, [{ medio: 'efectivo', monto: '3300' }], new Date('2026-11-10T02:59:00Z'));
+    const v = await venta(
+      ctx,
+      [{ medio: 'efectivo', monto: '3300' }],
+      new Date('2026-11-10T02:59:00Z'),
+    );
 
     const delEmpleado = await pedirFactura(ctx, v.id);
     expect(delEmpleado.statusCode).toBe(403);

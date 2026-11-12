@@ -197,7 +197,9 @@ describe('solo el aviso de reposición más reciente queda pendiente', () => {
 
     expect(await generar('2026-11-10T15:00:00Z')).toBe('generado');
 
-    const otros = await prismaTest.notificacion.findMany({ where: { NOT: { tipo: 'reposicion' } } });
+    const otros = await prismaTest.notificacion.findMany({
+      where: { NOT: { tipo: 'reposicion' } },
+    });
     expect(otros).toEqual(antes);
     expect(otros.map((a) => a.id)).toEqual([gasto.id]);
     expect((await avisosDeReposicion()).map((a) => a.estado)).toEqual(['pendiente']);

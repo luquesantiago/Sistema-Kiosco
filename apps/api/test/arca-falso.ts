@@ -1,8 +1,4 @@
-import type {
-  ClienteArca,
-  ComprobanteArca,
-  PedidoCae,
-} from '../src/integrations/arca/cliente.js';
+import type { ClienteArca, ComprobanteArca, PedidoCae } from '../src/integrations/arca/cliente.js';
 
 /*
  * Cliente de ARCA en memoria, como `whatsapp-falso.ts`. Por defecto los

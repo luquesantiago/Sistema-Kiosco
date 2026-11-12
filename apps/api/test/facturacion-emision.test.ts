@@ -2,12 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ESPERAS_MS, MAX_INTENTOS } from '../src/modules/whatsapp/envio.js';
 import { limpiarBase, prismaTest } from './base.js';
 import { crearUsuarioDePrueba } from './ayudas.js';
-import {
-  crearArcaFalso,
-  pedidoEsperado,
-  PRIMER_CAE,
-  PUNTO_VENTA,
-} from './arca-falso.js';
+import { crearArcaFalso, pedidoEsperado, PRIMER_CAE, PUNTO_VENTA } from './arca-falso.js';
 import {
   avisosDeFactura,
   configArca,
@@ -50,7 +45,12 @@ type Arca = ReturnType<typeof crearArcaFalso>;
 
 async function pasada({ cliente }: Arca) {
   const { procesarFacturas } = await emision();
-  return procesarFacturas({ prisma: prismaTest, arca: cliente, config: configArca(), ahora: () => ahora });
+  return procesarFacturas({
+    prisma: prismaTest,
+    arca: cliente,
+    config: configArca(),
+    ahora: () => ahora,
+  });
 }
 
 /** Venta en débito con su factura automática; por defecto, $3.300 del 10/11 a las 09:00. */
@@ -101,7 +101,10 @@ describe('numeración correlativa', () => {
     await pasada(arca);
 
     expect(arca.falso.pedidos.map((p) => p.CbteDesde)).toEqual([99999999]);
-    expect(await leer(primera.factura.id)).toMatchObject({ estado: 'autorizada', numero: 99999999 });
+    expect(await leer(primera.factura.id)).toMatchObject({
+      estado: 'autorizada',
+      numero: 99999999,
+    });
     expect(await leer(segunda.factura.id)).toMatchObject({
       estado: 'error',
       codigoError: 'numeracion_agotada',
@@ -391,7 +394,9 @@ describe('ARCA caído no gasta intentos', () => {
     const facturas = [];
     for (let i = 0; i < 30; i++) {
       // De 14:00 a 17:52 de Argentina, una cada 8 minutos.
-      const ventaEn = a(new Date(Date.parse('2026-11-10T17:00:00Z') + i * 8 * 60_000).toISOString());
+      const ventaEn = a(
+        new Date(Date.parse('2026-11-10T17:00:00Z') + i * 8 * 60_000).toISOString(),
+      );
       facturas.push((await ventaConFactura({ ventaEn })).factura);
     }
     ahora = a('2026-11-10T21:00:00Z');
@@ -443,7 +448,11 @@ describe('ARCA caído no gasta intentos', () => {
     const estado = await pasada(arca);
 
     expect(estado).toBe('autenticacion_bloqueada');
-    expect(await leer(factura.id)).toMatchObject({ estado: 'pendiente', intentos: 0, numero: null });
+    expect(await leer(factura.id)).toMatchObject({
+      estado: 'pendiente',
+      intentos: 0,
+      numero: null,
+    });
   });
 
   it('la pasada informa el estado de ARCA que vio', async () => {
@@ -553,9 +562,7 @@ describe('orden de emisión', () => {
     const arca = crearArcaFalso({ ultimo: 41, fechaUltimo: '2026-11-09' });
     const ventas = [];
     for (const [i, importe] of ['100.00', '200.00', '300.00'].entries()) {
-      ventas.push(
-        await ventaConFactura({ ventaEn: a(`2026-11-10T12:0${i}:00Z`), importe }),
-      );
+      ventas.push(await ventaConFactura({ ventaEn: a(`2026-11-10T12:0${i}:00Z`), importe }));
     }
 
     await pasada(arca);

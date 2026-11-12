@@ -324,6 +324,8 @@ describe('avisos de reposición', () => {
 
     expect(await screen.findByText('Pendiente de envío')).toBeInTheDocument();
     expect(screen.getByText('Reposición - martes 10/11')).toBeInTheDocument();
-    expect(screen.getByText(/todos los días a las 12:00, lo que hay que reponer/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/todos los días a las 12:00, lo que hay que reponer/),
+    ).toBeInTheDocument();
   });
 });

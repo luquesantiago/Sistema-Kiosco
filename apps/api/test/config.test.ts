@@ -141,12 +141,15 @@ describe('cargarConfig: Point de Mercado Pago (cobro-mercado-pago)', () => {
       'MP_WEBHOOK_SECRET',
       { MP_ACCESS_TOKEN: TOKEN, MP_TERMINAL_ID: TERMINAL, MP_WEBHOOK_SECRET: '' },
     ],
-  ])('%s definida pero vacía: no arranca y la nombra como valor inválido', (variable, variables) => {
-    expect(cargarConfig({ ...base, ...variables })).toEqual({
-      ok: false,
-      errores: [`${variable}: valor inválido`],
-    });
-  });
+  ])(
+    '%s definida pero vacía: no arranca y la nombra como valor inválido',
+    (variable, variables) => {
+      expect(cargarConfig({ ...base, ...variables })).toEqual({
+        ok: false,
+        errores: [`${variable}: valor inválido`],
+      });
+    },
+  );
 
   it('con un carácter cada una: arranca', () => {
     expect(
@@ -230,7 +233,10 @@ describe('cargarConfig: facturación con ARCA (todas juntas o ninguna)', () => {
     const resultado = cargarConfig({ ...base, ...ARCA, ARCA_PUNTO_VENTA: puntoVenta });
 
     if (arranca) {
-      expect(resultado).toMatchObject({ ok: true, config: { ARCA_PUNTO_VENTA: Number(puntoVenta) } });
+      expect(resultado).toMatchObject({
+        ok: true,
+        config: { ARCA_PUNTO_VENTA: Number(puntoVenta) },
+      });
     } else {
       expect(resultado).toEqual({ ok: false, errores: ['ARCA_PUNTO_VENTA: valor inválido'] });
     }

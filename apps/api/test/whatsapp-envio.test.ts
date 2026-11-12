@@ -200,7 +200,12 @@ describe('tres días sin WhatsApp con avisos de reposición', () => {
     const { falso, cliente } = crearWhatsappFalso();
     await cargarDestino();
     const aviso = await prismaTest.notificacion.create({
-      data: { tipo: 'reposicion', destino: 'admin', texto: 'Reposición vieja', estado: 'reemplazada' },
+      data: {
+        tipo: 'reposicion',
+        destino: 'admin',
+        texto: 'Reposición vieja',
+        estado: 'reemplazada',
+      },
     });
 
     await procesar(cliente);

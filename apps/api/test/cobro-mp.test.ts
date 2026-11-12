@@ -83,7 +83,10 @@ const gaseosas = (ctx: Ctx, cantidad: number): Item => ({
   productoId: ctx.gaseosa.id,
   cantidad,
 });
-const varios = (precio: string): Item => ({ varios: { descripcion: 'Recarga', precio }, cantidad: 1 });
+const varios = (precio: string): Item => ({
+  varios: { descripcion: 'Recarga', precio },
+  cantidad: 1,
+});
 
 function vender(
   ctx: Ctx,
@@ -502,7 +505,11 @@ describe('registro de una venta en espera', () => {
     const ctx = await preparar();
     const venta = await ventaDebito(ctx);
 
-    const lista = await ctx.app.inject({ method: 'GET', url: '/api/ventas', cookies: ctx.empleado });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
     const detalle = await ctx.app.inject({
       method: 'GET',
       url: `/api/ventas/${venta.id}`,
@@ -552,7 +559,11 @@ describe('registro de una venta en espera', () => {
       cookies: ctx.empleado,
     });
 
-    expect(res.json()).toMatchObject({ id: venta.id, estado: 'pendiente', cobro: { estado: 'en_espera' } });
+    expect(res.json()).toMatchObject({
+      id: venta.id,
+      estado: 'pendiente',
+      cobro: { estado: 'en_espera' },
+    });
   });
 });
 
@@ -588,7 +599,10 @@ describe('un cobro a la vez', () => {
   it('un cobro rechazado ya no ocupa la terminal: otra venta sí se puede cobrar', async () => {
     const ctx = await preparar();
     await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle: 'rejected_by_issuer' });
+    ctx.falso.fijar(ctx.falso.ultimaOrden().id, {
+      estado: 'rechazado',
+      detalle: 'rejected_by_issuer',
+    });
     ctx.adelantar(3 * S);
     await revisar(ctx);
 
@@ -661,7 +675,9 @@ describe('estado del cobro según Mercado Pago', () => {
       (await movimientosDeStock(venta.id)).map((m) => [m.tipo, m.cantidad, m.usuarioId]),
     ).toEqual([['venta', -2, ctx.juan.id]]);
     const facturas = await prismaTest.factura.findMany({ where: { ventaId: venta.id } });
-    expect(facturas.map((f) => [f.parte, f.importe.toFixed(2)])).toEqual([['electronica', '3000.00']]);
+    expect(facturas.map((f) => [f.parte, f.importe.toFixed(2)])).toEqual([
+      ['electronica', '3000.00'],
+    ]);
     expect(facturacion.despertar).toHaveBeenCalled();
     expect((await cobro(ctx, venta.id)).json().estado).toBe('aprobado');
   });
@@ -674,7 +690,9 @@ describe('estado del cobro según Mercado Pago', () => {
 
     expect((await filaVenta(venta.id)).estado).toBe('pagada');
     const facturas = await prismaTest.factura.findMany({ where: { ventaId: venta.id } });
-    expect(facturas.map((f) => [f.parte, f.importe.toFixed(2)])).toEqual([['electronica', '3000.00']]);
+    expect(facturas.map((f) => [f.parte, f.importe.toFixed(2)])).toEqual([
+      ['electronica', '3000.00'],
+    ]);
   });
 
   it('los precios quedan fijos durante la espera: aprobada con la gaseosa a $1.500 aunque ahora valga $1.600', async () => {
@@ -712,20 +730,23 @@ describe('estado del cobro según Mercado Pago', () => {
     ['bad_filled_card_data', 'Datos de la tarjeta incorrectos'],
     ['high_risk', 'Mercado Pago lo rechazó por seguridad'],
     ['cualquier_otro_detalle', 'Pago rechazado'],
-  ])('pago fallido por %s: rechazado con "%s" y la venta sigue en espera', async (detalle, motivo) => {
-    const ctx = await preparar();
-    await ingresarMercaderia(ctx.app, ctx.admin, [{ productoId: ctx.gaseosa.id, cantidad: 10 }]);
-    const venta = await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle });
-    ctx.adelantar(3 * S);
+  ])(
+    'pago fallido por %s: rechazado con "%s" y la venta sigue en espera',
+    async (detalle, motivo) => {
+      const ctx = await preparar();
+      await ingresarMercaderia(ctx.app, ctx.admin, [{ productoId: ctx.gaseosa.id, cantidad: 10 }]);
+      const venta = await ventaDebito(ctx);
+      ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle });
+      ctx.adelantar(3 * S);
 
-    await revisar(ctx);
+      await revisar(ctx);
 
-    expect((await cobro(ctx, venta.id)).json()).toMatchObject({ estado: 'rechazado', motivo });
-    expect((await filaVenta(venta.id)).estado).toBe('pendiente');
-    expect(await stockDe(ctx.gaseosa.id)).toBe(10);
-    expect(await movimientosDeStock(venta.id)).toHaveLength(0);
-  });
+      expect((await cobro(ctx, venta.id)).json()).toMatchObject({ estado: 'rechazado', motivo });
+      expect((await filaVenta(venta.id)).estado).toBe('pendiente');
+      expect(await stockDe(ctx.gaseosa.id)).toBe(10);
+      expect(await movimientosDeStock(venta.id)).toHaveLength(0);
+    },
+  );
 
   it('cobro vencido en MP (3 minutos sin pagar): vencido y la venta sigue en espera', async () => {
     const ctx = await preparar();
@@ -812,7 +833,10 @@ describe('cancelación de una venta en espera', () => {
     });
     expect(ctx.falso.cancelaciones).toEqual([ctx.falso.ultimaOrden().id]);
     const fila = await filaVenta(venta.id);
-    expect(fila).toMatchObject({ estado: 'cancelada', motivoCancelacion: 'Cancelada en el mostrador' });
+    expect(fila).toMatchObject({
+      estado: 'cancelada',
+      motivoCancelacion: 'Cancelada en el mostrador',
+    });
     expect(fila.canceladaEn).toEqual(a('10:01:30'));
     expect((await cobro(ctx, venta.id)).json().estado).toBe('cancelado');
     expect(await stockDe(ctx.gaseosa.id)).toBe(10);
@@ -872,7 +896,10 @@ describe('cancelación de una venta en espera', () => {
   it('después de un rechazo: cancelada en el momento, sin pedirle nada a MP', async () => {
     const ctx = await preparar();
     const venta = await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle: 'rejected_by_issuer' });
+    ctx.falso.fijar(ctx.falso.ultimaOrden().id, {
+      estado: 'rechazado',
+      detalle: 'rejected_by_issuer',
+    });
     ctx.adelantar(3 * S);
     await revisar(ctx);
 
@@ -907,23 +934,27 @@ describe('cancelación de una venta en espera', () => {
     expect(admin.json().estado).toBe('cancelada');
   });
 
-  it.each(['pagada', 'cancelada'])('cancelar una venta %s → 409 VENTA_NO_EN_ESPERA', async (estado) => {
-    const ctx = await preparar();
-    let ventaId: string;
-    if (estado === 'pagada') {
-      ventaId = (await vender(ctx, [{ medio: 'efectivo', monto: '1500' }], [gaseosas(ctx, 1)])).json()
-        .id;
-    } else {
-      ventaId = (await ventaDebito(ctx)).id;
-      await cancelar(ctx, ventaId);
-    }
+  it.each(['pagada', 'cancelada'])(
+    'cancelar una venta %s → 409 VENTA_NO_EN_ESPERA',
+    async (estado) => {
+      const ctx = await preparar();
+      let ventaId: string;
+      if (estado === 'pagada') {
+        ventaId = (
+          await vender(ctx, [{ medio: 'efectivo', monto: '1500' }], [gaseosas(ctx, 1)])
+        ).json().id;
+      } else {
+        ventaId = (await ventaDebito(ctx)).id;
+        await cancelar(ctx, ventaId);
+      }
 
-    const res = await cancelar(ctx, ventaId);
+      const res = await cancelar(ctx, ventaId);
 
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.codigo).toBe('VENTA_NO_EN_ESPERA');
-    expect((await filaVenta(ventaId)).estado).toBe(estado);
-  });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.codigo).toBe('VENTA_NO_EN_ESPERA');
+      expect((await filaVenta(ventaId)).estado).toBe(estado);
+    },
+  );
 
   it('una venta cancelada conserva su número y figura en el listado', async () => {
     const ctx = await preparar();
@@ -962,7 +993,9 @@ describe('Mercado Pago no responde', () => {
   it('reintentar después de un timeout reutiliza la clave: MP devuelve el mismo cobro y hay uno solo', async () => {
     const ctx = await preparar();
     ctx.falso.fallaCrear = 'no_responde_pero_creada';
-    const venta = (await vender(ctx, [{ medio: 'debito', monto: '3000' }], [gaseosas(ctx, 2)])).json();
+    const venta = (
+      await vender(ctx, [{ medio: 'debito', monto: '3000' }], [gaseosas(ctx, 2)])
+    ).json();
     ctx.falso.fallaCrear = null;
 
     const res = await reintentar(ctx, venta.id);
@@ -982,7 +1015,9 @@ describe('Mercado Pago no responde', () => {
   it('reintentar y que MP siga sin responder: el cobro sigue creándose, con la misma clave', async () => {
     const ctx = await preparar();
     ctx.falso.fallaCrear = 'no_responde';
-    const venta = (await vender(ctx, [{ medio: 'debito', monto: '3000' }], [gaseosas(ctx, 2)])).json();
+    const venta = (
+      await vender(ctx, [{ medio: 'debito', monto: '3000' }], [gaseosas(ctx, 2)])
+    ).json();
 
     const res = await reintentar(ctx, venta.id);
 
@@ -1015,7 +1050,10 @@ describe('reintento después de un rechazo', () => {
   it('crea el intento siguiente por el mismo monto, con clave y referencia nuevas', async () => {
     const ctx = await preparar();
     const venta = await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle: 'rejected_by_issuer' });
+    ctx.falso.fijar(ctx.falso.ultimaOrden().id, {
+      estado: 'rechazado',
+      detalle: 'rejected_by_issuer',
+    });
     ctx.adelantar(3 * S);
     await revisar(ctx);
 
@@ -1024,7 +1062,10 @@ describe('reintento después de un rechazo', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ intento: 2, estado: 'en_espera', monto: '3000.00' });
     const [primero, segundo] = ctx.falso.pedidosCreacion;
-    expect(segundo).toMatchObject({ monto: '3000.00', referenciaExterna: `venta-${venta.numero}-2` });
+    expect(segundo).toMatchObject({
+      monto: '3000.00',
+      referenciaExterna: `venta-${venta.numero}-2`,
+    });
     expect(segundo!.claveIdempotencia).not.toBe(primero!.claveIdempotencia);
     expect(await cobrosDe(venta.id)).toHaveLength(2);
   });
@@ -1046,17 +1087,20 @@ describe('consulta de respaldo cada 3 segundos', () => {
     ['10:00:02,999', 0, 2_999],
     ['10:00:03,000', 1, 3_000],
     ['10:00:03,001', 1, 3_001],
-  ])('última consulta a las 10:00:00,000 y revisión a las %s → %i consultas', async (_hora, consultas, ms) => {
-    const ctx = await preparar();
-    const venta = await ventaDebito(ctx);
-    const [cobroMp] = await cobrosDe(venta.id);
-    await fijarConsultadoEn(cobroMp!.id, LUNES_1000);
-    ctx.fijarHora(new Date(LUNES_1000.getTime() + ms));
+  ])(
+    'última consulta a las 10:00:00,000 y revisión a las %s → %i consultas',
+    async (_hora, consultas, ms) => {
+      const ctx = await preparar();
+      const venta = await ventaDebito(ctx);
+      const [cobroMp] = await cobrosDe(venta.id);
+      await fijarConsultadoEn(cobroMp!.id, LUNES_1000);
+      ctx.fijarHora(new Date(LUNES_1000.getTime() + ms));
 
-    await revisar(ctx);
+      await revisar(ctx);
 
-    expect(ctx.falso.consultas).toHaveLength(consultas);
-  });
+      expect(ctx.falso.consultas).toHaveLength(consultas);
+    },
+  );
 
   it('sin notificaciones, el pago con débito se detecta en la siguiente consulta', async () => {
     const ctx = await preparar();
@@ -1102,7 +1146,10 @@ describe('vencimiento de una venta en espera (10 minutos desde el último intent
   it('reintentar a las 10:06 renueva el plazo: sigue en espera a las 10:12 y a las 10:15:59, vence a las 10:16:00', async () => {
     const ctx = await preparar();
     const venta = await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'rechazado', detalle: 'insufficient_amount' });
+    ctx.falso.fijar(ctx.falso.ultimaOrden().id, {
+      estado: 'rechazado',
+      detalle: 'insufficient_amount',
+    });
     ctx.fijarHora(a('10:00:03'));
     await revisar(ctx);
     ctx.fijarHora(a('10:06:00'));
@@ -1172,7 +1219,10 @@ describe('pago aprobado después de cancelar', () => {
     expect(await stockDe(ctx.gaseosa.id)).toBe(10);
     expect(await movimientosDeStock(venta.id)).toHaveLength(0);
     expect(await prismaTest.factura.count({ where: { ventaId: venta.id } })).toBe(0);
-    expect((await cobro(ctx, venta.id)).json()).toMatchObject({ id: cobroId, estado: 'a_devolver' });
+    expect((await cobro(ctx, venta.id)).json()).toMatchObject({
+      id: cobroId,
+      estado: 'a_devolver',
+    });
 
     const ingresos = await movimientosDeTipo('ingreso');
     expect(ingresos).toHaveLength(1);
@@ -1307,7 +1357,9 @@ describe('devolución en efectivo de un cobro de una venta cancelada', () => {
     ).json();
 
     expect(detalle.movimientos).toEqual(
-      expect.arrayContaining([expect.objectContaining({ tipo: 'devolucion_cobro', monto: '3000.00' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ tipo: 'devolucion_cobro', monto: '3000.00' }),
+      ]),
     );
     expect(detalle.resumen.devoluciones).toBe('3000.00');
   });
@@ -1341,7 +1393,10 @@ describe('devolución en efectivo de un cobro de una venta cancelada', () => {
     const ctx = await preparar();
     const { cobroId } = await pagoDespuesDeCancelar(ctx);
 
-    const respuestas = await Promise.all([devolver(ctx, cobroId), devolver(ctx, cobroId, ctx.admin)]);
+    const respuestas = await Promise.all([
+      devolver(ctx, cobroId),
+      devolver(ctx, cobroId, ctx.admin),
+    ]);
 
     expect(respuestas.map((r) => r.statusCode).sort()).toEqual([200, 409]);
     expect(await movimientosDeTipo('devolucion_cobro')).toHaveLength(1);
@@ -1353,7 +1408,10 @@ describe('devolución en efectivo de un cobro de una venta cancelada', () => {
     const venta = await ventaDebito(ctx);
     const ordenId = ctx.falso.ultimaOrden().id;
     await cancelar(ctx, venta.id);
-    expect((await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId, { montoContado: '52000' })).statusCode).toBe(200);
+    expect(
+      (await cerrarTurnoDePrueba(ctx.app, ctx.empleado, ctx.turnoId, { montoContado: '52000' }))
+        .statusCode,
+    ).toBe(200);
     ctx.falso.aprobar(ordenId);
     ctx.adelantar(3 * S);
 
@@ -1710,7 +1768,10 @@ describe('webhook POST /api/mercado-pago/webhook', () => {
     const orden = ctx.falso.ultimaOrden();
     ctx.falso.aprobar(orden.id);
 
-    const res = await avisoWebhook(ctx, { ordenId: orden.id, referenciaExterna: orden.referenciaExterna });
+    const res = await avisoWebhook(ctx, {
+      ordenId: orden.id,
+      referenciaExterna: orden.referenciaExterna,
+    });
 
     expect(res.statusCode).toBe(200);
     expect((await filaVenta(venta.id)).estado).toBe('pagada');
@@ -1734,7 +1795,12 @@ describe('cobros a revisar para el admin', () => {
     return ctx.app.inject({ method: 'GET', url: '/api/mercado-pago/cobros-a-revisar', cookies });
   }
 
-  function revisado(ctx: Ctx, cobroId: string, payload: Record<string, unknown>, cookies = ctx.admin) {
+  function revisado(
+    ctx: Ctx,
+    cobroId: string,
+    payload: Record<string, unknown>,
+    cookies = ctx.admin,
+  ) {
     return ctx.app.inject({
       method: 'POST',
       url: `/api/mercado-pago/cobros/${cobroId}/revisado`,
@@ -1798,7 +1864,10 @@ describe('cobros a revisar para el admin', () => {
   it('un cobro a revisar (la terminal pidió confirmar) figura y se marca revisado con nota', async () => {
     const ctx = await preparar();
     const venta = await ventaDebito(ctx);
-    ctx.falso.fijar(ctx.falso.ultimaOrden().id, { estado: 'a_revisar', detalle: 'check_on_terminal' });
+    ctx.falso.fijar(ctx.falso.ultimaOrden().id, {
+      estado: 'a_revisar',
+      detalle: 'check_on_terminal',
+    });
     ctx.adelantar(3 * S);
     await revisar(ctx);
     const [cobroMp] = await cobrosDe(venta.id);

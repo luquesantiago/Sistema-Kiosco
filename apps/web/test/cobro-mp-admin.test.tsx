@@ -31,9 +31,24 @@ const BASE_RESUMEN = {
   medios: ['debito'],
   importeFacturado: '0.00',
 };
-const PAGADA = { ...BASE_RESUMEN, id: '0198a5b0-0000-7000-8000-000000000301', numero: 120, estado: 'pagada' };
-const EN_ESPERA = { ...BASE_RESUMEN, id: '0198a5b0-0000-7000-8000-000000000302', numero: 121, estado: 'pendiente' };
-const CANCELADA = { ...BASE_RESUMEN, id: '0198a5b0-0000-7000-8000-000000000303', numero: 122, estado: 'cancelada' };
+const PAGADA = {
+  ...BASE_RESUMEN,
+  id: '0198a5b0-0000-7000-8000-000000000301',
+  numero: 120,
+  estado: 'pagada',
+};
+const EN_ESPERA = {
+  ...BASE_RESUMEN,
+  id: '0198a5b0-0000-7000-8000-000000000302',
+  numero: 121,
+  estado: 'pendiente',
+};
+const CANCELADA = {
+  ...BASE_RESUMEN,
+  id: '0198a5b0-0000-7000-8000-000000000303',
+  numero: 122,
+  estado: 'cancelada',
+};
 
 const CANCELADA_EN = '2026-11-09T13:10:00.000Z';
 
@@ -41,7 +56,13 @@ function detalle(resumen: typeof PAGADA, cambios: Record<string, unknown> = {}) 
   return {
     ...resumen,
     items: [
-      { productoId: null, descripcion: 'Recarga', cantidad: 1, precioUnitario: '3300.00', subtotal: '3300.00' },
+      {
+        productoId: null,
+        descripcion: 'Recarga',
+        cantidad: 1,
+        precioUnitario: '3300.00',
+        subtotal: '3300.00',
+      },
     ],
     pagos: [{ medio: 'debito', monto: '3300.00', montoRecibido: null, vuelto: null }],
     anulacion: null,
@@ -68,7 +89,8 @@ describe('ventas en espera y canceladas en el listado', () => {
     renderApp('/ventas');
 
     const tabla = await screen.findByRole('table');
-    const fila = (numero: string) => within(tabla).getByRole('link', { name: numero }).closest('tr')!;
+    const fila = (numero: string) =>
+      within(tabla).getByRole('link', { name: numero }).closest('tr')!;
     expect(fila('#121')).toHaveTextContent('En espera');
     expect(fila('#122')).toHaveTextContent('Cobro no realizado');
     expect(fila('#120')).not.toHaveTextContent(/En espera|Cobro no realizado/);
@@ -177,8 +199,12 @@ describe('cobros a revisar para el admin', () => {
 
     expect(devolucion).toHaveTextContent('Devolución en efectivo pendiente');
     expect(devolucion).toHaveTextContent(/\$\s?3\.000,00/);
-    expect(within(devolucion).queryByRole('button', { name: 'Marcar revisado' })).not.toBeInTheDocument();
-    expect(within(await itemDe(121)).getByRole('button', { name: 'Marcar revisado' })).toBeInTheDocument();
+    expect(
+      within(devolucion).queryByRole('button', { name: 'Marcar revisado' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(await itemDe(121)).getByRole('button', { name: 'Marcar revisado' }),
+    ).toBeInTheDocument();
   });
 
   it('el admin resuelve un cobro que no se pudo devolver: la nota es obligatoria y después deja de figurar', async () => {

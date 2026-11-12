@@ -100,7 +100,11 @@ describe('pedir factura con F10', () => {
       [`POST /ventas/${VENTA_ID}/factura`]: [201, facturaSinAutorizar('3300.00', 'efectivo')],
       [`GET /ventas/${VENTA_ID}`]: [
         200,
-        { ...EN_EFECTIVO, facturas: [facturaSinAutorizar('3300.00', 'efectivo')], puedePedirFactura: false },
+        {
+          ...EN_EFECTIVO,
+          facturas: [facturaSinAutorizar('3300.00', 'efectivo')],
+          puedePedirFactura: false,
+        },
       ],
     });
     renderApp('/venta');
@@ -129,7 +133,11 @@ describe('pedir factura con F10', () => {
       [`POST /ventas/${VENTA_ID}/factura`]: [201, facturaSinAutorizar('3300.00', 'efectivo')],
       [`GET /ventas/${VENTA_ID}`]: [
         200,
-        { ...EN_EFECTIVO, facturas: [facturaSinAutorizar('3300.00', 'efectivo')], puedePedirFactura: false },
+        {
+          ...EN_EFECTIVO,
+          facturas: [facturaSinAutorizar('3300.00', 'efectivo')],
+          puedePedirFactura: false,
+        },
       ],
     });
     const usuario = userEvent.setup();
@@ -173,13 +181,13 @@ describe('qué ofrece la franja de la última venta', () => {
     expect(
       within(ultima).getByRole('button', { name: /Facturar efectivo \(\$\s?2\.000(,00)?\)/ }),
     ).toBeInTheDocument();
-    expect(within(ultima).queryByRole('button', { name: /^Pedir factura/ })).not.toBeInTheDocument();
+    expect(
+      within(ultima).queryByRole('button', { name: /^Pedir factura/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('con la factura autorizada muestra su número', async () => {
-    mostrador(
-      ventaDetalle({ facturas: [facturaAutorizada(42, '3300.00')], sinFacturar: '0.00' }),
-    );
+    mostrador(ventaDetalle({ facturas: [facturaAutorizada(42, '3300.00')], sinFacturar: '0.00' }));
     renderApp('/venta');
 
     const ultima = await cobrar();
@@ -188,11 +196,7 @@ describe('qué ofrece la franja de la última venta', () => {
   });
 
   it.each([
-    [
-      'venta 100% en débito',
-      ventaDetalle({ facturas: [facturaSinAutorizar('3300.00')] }),
-      true,
-    ],
+    ['venta 100% en débito', ventaDetalle({ facturas: [facturaSinAutorizar('3300.00')] }), true],
     [
       'el efectivo ya tiene factura',
       ventaDetalle({
@@ -215,17 +219,22 @@ describe('qué ofrece la franja de la última venta', () => {
       ventaDetalle({ pagos: [{ medio: 'efectivo', monto: '3300.00' }], puedePedirFactura: true }),
       false,
     ],
-  ] as const)('%s: no ofrece pedir factura y F10 no hace nada', async (_caso, venta, habilitada) => {
-    const fetchMock = mostrador(venta, {}, habilitada);
-    renderApp('/venta');
+  ] as const)(
+    '%s: no ofrece pedir factura y F10 no hace nada',
+    async (_caso, venta, habilitada) => {
+      const fetchMock = mostrador(venta, {}, habilitada);
+      renderApp('/venta');
 
-    const ultima = await cobrar();
-    fireEvent.keyDown(await escaner(), { key: 'F10' });
-    await act(async () => {});
+      const ultima = await cobrar();
+      fireEvent.keyDown(await escaner(), { key: 'F10' });
+      await act(async () => {});
 
-    expect(within(ultima).queryByRole('button', { name: /Pedir factura|Facturar efectivo/ })).toBeNull();
-    expect(llamadas(fetchMock, 'POST', `/api/ventas/${VENTA_ID}/factura`)).toBe(0);
-  });
+      expect(
+        within(ultima).queryByRole('button', { name: /Pedir factura|Facturar efectivo/ }),
+      ).toBeNull();
+      expect(llamadas(fetchMock, 'POST', `/api/ventas/${VENTA_ID}/factura`)).toBe(0);
+    },
+  );
 
   it('sin facturación configurada, la referencia de atajos no ofrece F10', async () => {
     mostrador(ventaDetalle(), {}, false);

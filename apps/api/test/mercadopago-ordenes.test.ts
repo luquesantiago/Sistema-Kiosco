@@ -115,7 +115,10 @@ afterEach(async () => {
 describe('crearOrden', () => {
   it('manda la orden Point con el monto, la terminal, la clave de idempotencia y el token', async () => {
     const pedidos: Pedido[] = [];
-    const url = await mpFalso((_p, res) => responder(res, 201, orden('created', 'created')), pedidos);
+    const url = await mpFalso(
+      (_p, res) => responder(res, 201, orden('created', 'created')),
+      pedidos,
+    );
 
     const creada = await cliente(url).crearOrden(PEDIDO);
 
@@ -149,21 +152,32 @@ describe('crearOrden', () => {
     ['mercado_pago', 'qr'],
   ] as const)('el medio %s se pide a la terminal como %s', async (medio, tipo) => {
     const pedidos: Pedido[] = [];
-    const url = await mpFalso((_p, res) => responder(res, 201, orden('created', 'created')), pedidos);
+    const url = await mpFalso(
+      (_p, res) => responder(res, 201, orden('created', 'created')),
+      pedidos,
+    );
 
     await cliente(url).crearOrden({ ...PEDIDO, medio });
 
-    expect(pedidos[0]!.cuerpo).toMatchObject({ config: { payment_method: { default_type: tipo } } });
+    expect(pedidos[0]!.cuerpo).toMatchObject({
+      config: { payment_method: { default_type: tipo } },
+    });
   });
 
-  it.each(['0.01', '1500.50', '99999999.99'])('el monto "%s" viaja tal cual, como texto', async (monto) => {
-    const pedidos: Pedido[] = [];
-    const url = await mpFalso((_p, res) => responder(res, 201, orden('created', 'created')), pedidos);
+  it.each(['0.01', '1500.50', '99999999.99'])(
+    'el monto "%s" viaja tal cual, como texto',
+    async (monto) => {
+      const pedidos: Pedido[] = [];
+      const url = await mpFalso(
+        (_p, res) => responder(res, 201, orden('created', 'created')),
+        pedidos,
+      );
 
-    await cliente(url).crearOrden({ ...PEDIDO, monto });
+      await cliente(url).crearOrden({ ...PEDIDO, monto });
 
-    expect(pedidos[0]!.cuerpo).toMatchObject({ transactions: { payments: [{ amount: monto }] } });
-  });
+      expect(pedidos[0]!.cuerpo).toMatchObject({ transactions: { payments: [{ amount: monto }] } });
+    },
+  );
 
   it('409 already_queued_order_for_terminal es un rechazo "terminal_ocupada"', async () => {
     const url = await mpFalso((_p, res) =>
@@ -272,7 +286,9 @@ describe('consultarOrden: estados de MP traducidos', () => {
   });
 
   it('un pago fallido trae su status_detail como detalle', async () => {
-    const url = await mpFalso((_p, res) => responder(res, 200, orden('failed', 'insufficient_amount')));
+    const url = await mpFalso((_p, res) =>
+      responder(res, 200, orden('failed', 'insufficient_amount')),
+    );
 
     expect((await cliente(url).consultarOrden(ORDEN)).detalle).toBe('insufficient_amount');
   });

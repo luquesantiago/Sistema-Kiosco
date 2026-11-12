@@ -22,9 +22,7 @@ const AHORA = new Date('2026-11-10T13:00:00Z');
 
 let servidor: Server | undefined;
 let pedidos: { accion: string; cuerpo: string }[] = [];
-let responder: (
-  accion: string,
-) => { status: number; xml: string; demoraMs?: number } | 'colgar';
+let responder: (accion: string) => { status: number; xml: string; demoraMs?: number } | 'colgar';
 
 function sobre(contenido: string) {
   return (
