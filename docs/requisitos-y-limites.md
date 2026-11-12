@@ -140,11 +140,26 @@
 - La hora del aviso y el límite de recuperación son fijos (no se configuran desde el panel).
 
 ### Facturación
-- Factura electrónica mediante los web services de ARCA (WSFE), con obtención de CAE.
-- Tipo de comprobante: **Factura C** (monotributista).
-- **Toda venta cobrada con Mercado Pago se factura automáticamente.**
-- Las demás ventas se facturan **solo si el cliente lo pide**.
-- El comprobante impreso incluye el CAE y el código QR exigido por ARCA.
+- Factura electrónica mediante los web services de ARCA (WSAA + WSFEv1), con obtención de CAE.
+- Tipo de comprobante: **Factura C** (monotributista), siempre a **consumidor final sin identificar**: el sistema nunca pide datos del cliente.
+- **Qué se factura:**
+  - **Sola, la parte electrónica** de cada venta pagada: la suma de lo cobrado con débito, crédito y Mercado Pago.
+  - **Lo cobrado en efectivo, solo si el cliente pide factura** (F10 en el mostrador o **Pedir factura** en el detalle de la venta). En una venta mixta ya facturada en parte, es una segunda factura.
+  - Una venta tiene **como máximo dos facturas** (la automática y la del efectivo), y nunca suman más que su total.
+- **El mostrador nunca espera a ARCA:** la venta se guarda y la factura queda en una cola que se emite por detrás, de a una, con reintentos (5 intentos, con esperas de 30 s, 2 min, 10 min y 30 min). Si ARCA no responde, la espera no gasta intentos.
+- **Tope por factura:** una factura de $10.000.000 o más no se emite (hay que identificar al cliente) y queda con error para el admin.
+- **Plazo:** el empleado pide factura solo de ventas del día; el admin, hasta 5 días atrás. Una factura de la cola que pasó ese plazo queda con error.
+- **Sin notas de crédito:** al anular una venta facturada, el sistema avisa qué facturas siguen vigentes y la nota de crédito se hace por fuera. Si la factura todavía no se había emitido, la emisión se cancela.
+- El ticket con factura lleva el nombre de fantasía en grande, la razón social con el CUIT, los datos del emisor, un bloque por factura con número, "Facturado: $X", CAE, vencimiento y el QR de ARCA, y lo que quedó sin facturar. En homologación dice "HOMOLOGACIÓN – SIN VALIDEZ FISCAL".
+- El admin ve el estado de ARCA y las facturas trabadas en **Administración → Facturación**, con **Reintentar**; una factura con error genera un aviso por WhatsApp.
+- Sin las variables `ARCA_*`, el sistema vende igual que siempre, sin facturar.
+- **Datos normativos a verificar** con el contador o el manual de WSFEv1 vigente antes de producción (son constantes en `modules/facturacion/reglas.ts`):
+  - Que sea válido facturar solo la parte electrónica de una venta mixta, con el ticket mostrando la venta completa y "Facturado: $X".
+  - El tope de $10.000.000 (RG 5700/2025) y que el borde sea "igual o mayor".
+  - Los 5 días hacia atrás para concepto productos y que la fecha no pueda ser anterior a la del último comprobante.
+  - `CondicionIVAReceptorId = 5` como obligatorio.
+  - El formato y la dirección del QR (RG 4892/2020).
+  - Los rangos de 5 dígitos del punto de venta y 8 del número, los datos obligatorios de la Factura C impresa (RG 1415) y las direcciones de WSAA y WSFEv1.
 
 ## Requisitos no funcionales
 
@@ -186,10 +201,10 @@ No hay modo sin conexión. Durante un corte:
 - [x] ¿Qué pasa si se corta internet en el kiosco? → No hay modo sin conexión; se anota en papel y se carga después (ver "Corte de internet o de luz").
 - [ ] ¿Qué modalidad de Mercado Pago: QR dinámico, QR estático o terminal Point?
 - [x] ¿Qué otros medios de pago hay además de efectivo y MP? → Débito y crédito. Las transferencias entran por Mercado Pago.
-- [ ] ¿Se facturan las ventas con débito y crédito, o solo si el cliente lo pide?
+- [x] ¿Se facturan las ventas con débito y crédito, o solo si el cliente lo pide? → Se factura sola la parte cobrada con débito, crédito o Mercado Pago; el efectivo, solo si el cliente lo pide (ver "Facturación").
 - [x] ¿Hay productos sin código de barras? → Sí: el código es opcional, se buscan por nombre y hay un ítem "Varios" con precio libre.
 - [x] ¿Se manejan productos por peso (balanza)? → No.
 - [x] ¿El empleado puede hacer descuentos o anular ventas? → No hay descuentos. El empleado puede anular ventas de su turno, con motivo y aviso al admin por WhatsApp.
 - [ ] ¿Se registran fiado o cuentas corrientes de clientes?
 - [x] ¿Desde qué número sale el aviso de WhatsApp (el chip vinculado a WAHA)? → Desde un chip dedicado del dueño, vinculado por QR desde Administración → WhatsApp.
-- [ ] ¿Hace falta cancelar facturas (notas de crédito C) ante devoluciones?
+- [x] ¿Hace falta cancelar facturas (notas de crédito C) ante devoluciones? → El sistema no hace notas de crédito: al anular, avisa qué facturas siguen vigentes y la nota se hace por fuera.

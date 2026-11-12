@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { Dashboard } from './Dashboard.js';
 import { EstadoSistema } from './EstadoSistema.js';
+import { CartelFacturacion } from './Facturacion.js';
 import { CartelWhatsapp } from './Whatsapp.js';
 
 const SECCIONES = [
@@ -15,6 +16,11 @@ const SECCIONES = [
     detalle: 'Gastos, retiros e ingresos de la cuenta del kiosco',
   },
   { a: '/ventas', titulo: 'Ventas', detalle: 'Listado, detalle y anulaciones' },
+  {
+    a: '/admin/facturacion',
+    titulo: 'Facturación',
+    detalle: 'Conexión con ARCA y facturas trabadas',
+  },
   { a: '/admin/avisos', titulo: 'Avisos', detalle: 'Anulaciones, gastos, retiros y cierres' },
   { a: '/admin/whatsapp', titulo: 'WhatsApp', detalle: 'Vinculación y número de los avisos' },
   { a: '/admin/usuarios', titulo: 'Usuarios', detalle: 'Altas, roles y contraseñas' },
@@ -25,6 +31,7 @@ export function PanelAdmin() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Administración</h1>
       <CartelWhatsapp />
+      <CartelFacturacion />
       <Dashboard />
       <nav className="grid gap-3 sm:grid-cols-2">
         {SECCIONES.map((s) => (

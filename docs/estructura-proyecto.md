@@ -14,7 +14,7 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
    + impresora de         |     |
      tickets térmica      |     v
                           +-- app   : Fastify (API + build de React)
-                          |           + tarea programada (aviso 12:00)
+                          |           + tareas (aviso 12:00, emisión de facturas)
                           +-- db    : PostgreSQL        (red interna)
                           +-- waha  : WhatsApp HTTP API (red interna)
                           |
@@ -73,9 +73,10 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 | **ItemVenta** | venta, producto (vacío para el ítem "Varios"), descripción (nombre al momento de vender), cantidad, precio unitario, costo unitario (copia fija del costo del producto al vender; vacío en "Varios" y en productos sin costo), subtotal | Venta, Producto |
 | **PagoVenta** | venta, medio (efectivo/debito/credito/mercado_pago), monto, monto recibido y vuelto (solo efectivo); uno por medio | Venta |
 | **PagoMercadoPago** | venta, id de pago MP, estado, monto, fecha | Venta |
-| **Factura** | venta, tipo (C), punto de venta, número, CAE, vencimiento del CAE, estado | Venta |
+| **Factura** | venta, parte (electronica/efectivo; única por venta y parte: hasta dos por venta), quién la pidió (solo la del efectivo), estado (pendiente/en_curso/autorizada/error/cancelada), punto de venta, tipo de comprobante (11 = Factura C), importe, número y fecha del comprobante (se fijan al mandarla a ARCA; únicos por punto de venta y tipo), CAE, vencimiento del CAE, fecha de autorización, intentos, próximo intento, código y motivo del error | Venta, Usuario |
+| **TicketAccesoArca** | servicio (`wsfe`), entorno (homologacion/produccion), token, sign, generado, vence; uno por servicio y entorno | — |
 | **Pedido** *(opcional)* | proveedor, fecha, ítems sugeridos/pedidos, estado | Proveedor, Productos |
-| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno/pedido_cerrado/reposicion), destino, texto, estado (pendiente/enviada/error/reemplazada), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
+| **Notificacion** | tipo (anulacion_venta/gasto_caja/retiro_caja/cierre_turno/pedido_cerrado/reposicion/factura), destino, texto, estado (pendiente/enviada/error/reemplazada), fecha de creación, fecha de envío, error, intentos, próximo intento | — |
 | **ConfiguracionWhatsapp** | número que recibe los avisos (10 dígitos), chat de WhatsApp, quién lo cargó (una sola fila) | Usuario |
 | **EjecucionTarea** | tarea (texto, por ejemplo `aviso_reposicion`), fecha (día de Argentina), cuándo se ejecutó, aviso generado (único, opcional); única por tarea y fecha | Notificacion |
 
@@ -84,6 +85,8 @@ El sistema está **hosteado en un servidor**. La PC del kiosco y el celular del 
 - **Notificacion:** se crea como pendiente en la misma transacción que la anulación, el gasto o retiro de un empleado o el cierre de turno, y la envía después el proceso de envío (ver "Avisos por WhatsApp"). Nunca se borra. El estado `reemplazada` es solo para los avisos de reposición: al generarse el del día, los anteriores que seguían pendientes pasan a `reemplazada` y no se envían ni se reintentan.
 - **EjecucionTarea** (`ejecuciones_tarea`): registro de las tareas por horario. Su índice único `(tarea, fecha)` garantiza que una tarea diaria corra una sola vez por día, aunque dos pasadas coincidan o la app se reinicie. `tarea` es texto para que la Etapa 5 sume las suyas sin migrar enums.
 - **Turno:** el esperado y la diferencia se guardan al cerrar, como foto del cierre. Un índice único parcial (`turnos_un_solo_abierto`) garantiza que haya un solo turno abierto.
+- **Factura** (`facturas`): hace de cola de emisión. La automática (`electronica`) vale la suma de los pagos con débito, crédito y MP; la del efectivo, el pago en efectivo. Como hay un pago por medio, las dos suman siempre el total. El único `(venta, parte)` hace idempotente encolar o pedir dos veces, y el único `(punto de venta, tipo, número)` impide que dos procesos reserven el mismo número.
+- **TicketAccesoArca** (`tickets_acceso_arca`): el ticket del WSAA, guardado para reutilizarlo después de un reinicio (ARCA no da otro mientras haya uno vigente).
 
 ## Flujos principales
 
@@ -158,6 +161,39 @@ Proceso de envío, cada 15 s:
                                          5 fallas --> "error" (el admin puede reintentar)
 ```
 
+### Facturación con ARCA
+
+```
+Venta pagada (registrarVenta; con cobro-mercado-pago, también al aprobarse el cobro)
+   --> encolarFacturaSiCorresponde, en la misma transacción:
+       parte electrónica > 0 --> Factura "pendiente" (o "error" + aviso si alcanza el tope)
+   --> después del commit, despertar() a la emisión
+
+F10 / Pedir factura (parte efectivo) --> Factura "pendiente" con quién la pidió
+
+Emisión (jobs/emision-facturas.ts), cada 10 s o al despertar:
+   FEDummy caído? -- sí --> nada cambia (no gasta intentos)
+   ¿hay una "error" por numeración inconsistente? -- sí --> frena todo hasta "Reintentar"
+   ¿hay una "en_curso"? --> FECompConsultar de su número:
+       existe igual --> "autorizada" (aviso si la venta se anuló)
+       existe distinta --> "error" numeración inconsistente + aviso
+       no existe --> venta anulada: "cancelada"; si el número sigue libre, se reenvía;
+                     si no, vuelve a "pendiente"
+   pendientes vencidas, de la más vieja a la más nueva (hasta 20):
+       venta anulada --> "cancelada"
+       más de 5 días --> "error" fuera de plazo + aviso
+       número = último autorizado + 1 (> 99999999 --> "error" + aviso)
+       fecha = la de la venta, o la del último comprobante si es posterior
+       reserva: "en_curso" con número y fecha (otro proceso lo tomó --> termina la pasada)
+       FECAESolicitar --> autorizada: CAE y vencimiento
+                      --> rechazo: libera el número, intentos + 1, espera 30 s / 2 / 10 / 30 min;
+                                   5 rechazos --> "error" + aviso
+                      --> sin respuesta: queda "en_curso" y termina la pasada
+```
+
+- El ticket de acceso del WSAA lo pide solo la tarea de emisión, con el certificado y la clave leídos al arrancar (`server.ts`), y se guarda en la base.
+- La anulación de una venta cancela sus facturas `pendiente` o en `error` en la misma transacción; las autorizadas siguen vigentes y el aviso de anulación lo dice (no hay notas de crédito).
+
 ### Aviso diario de reposición (12:00)
 
 ```
@@ -189,16 +225,19 @@ Monorepo con **pnpm workspaces** (ver [stack tecnológico](stack-tecnologico.md)
 │   │       ├── modules/      # un módulo por dominio: auth, usuarios, productos, proveedores, stock,
 │   │       │                 # pedidos, ventas, caja, notificaciones, whatsapp (cliente de WAHA y envío),
 │   │       │                 # reposicion (cálculo y texto del aviso, sin rutas), dashboard, estado,
-│   │       │                 # mercadopago (saldo con caché de 60 s y GET /api/mercado-pago/saldo)
+│   │       │                 # mercadopago (saldo con caché de 60 s y GET /api/mercado-pago/saldo),
+│   │       │                 # facturacion (reglas normativas, encolado, pedido, emisión, avisos y rutas del admin)
 │   │       ├── plugins/      # sesión y permisos por rol
 │   │       ├── lib/          # fechas en Argentina, formatos y utilidades
 │   │       ├── cli/          # comandos de consola (crear el primer admin)
 │   │       ├── integrations/ # clientes de servicios externos que usan varios módulos:
 │   │       │                 # mercadopago/ (cliente HTTP con timeout de 10 s, errores "no responde"
-│   │       │                 # y "rechazó"; la lectura del saldo, aislada en saldo-cuenta.ts).
-│   │       │                 # ARCA llega con la facturación
-│   │       └── jobs/         # tareas por horario, arrancadas desde server.ts (nunca en los tests):
-│   │                         # ciclo.ts (ciclo común) y aviso-reposicion.ts (aviso de las 12:00)
+│   │       │                 # y "rechazó"; la lectura del saldo, aislada en saldo-cuenta.ts) y
+│   │       │                 # arca/ (WSAA con firma CMS, WSFEv1 por SOAP, ticket de acceso en la base,
+│   │       │                 # direcciones por entorno y errores "no disponible" y "rechazo")
+│   │       └── jobs/         # tareas periódicas, arrancadas desde server.ts (nunca en los tests):
+│   │                         # ciclo.ts (ciclo común, con despertar()), aviso-reposicion.ts (aviso
+│   │                         # de las 12:00) y emision-facturas.ts (cola de facturas, solo con ARCA)
 │   └── web/                  # Frontend React + Vite
 │       └── src/
 │           ├── pos/          # pantalla de venta (escritorio, teclado y lector)

@@ -13,6 +13,8 @@ import { rutasAuth } from './modules/auth/rutas.js';
 import { rutasCaja } from './modules/caja/rutas.js';
 import type { ClienteMercadoPago } from './integrations/mercadopago/cliente.js';
 import { rutasDashboard } from './modules/dashboard/rutas.js';
+import { rutasFacturacion, rutasFacturas } from './modules/facturacion/rutas.js';
+import type { Facturacion } from './modules/facturacion/tipos.js';
 import { rutasMercadoPago } from './modules/mercadopago/rutas.js';
 import { rutasPedidos } from './modules/pedidos/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
@@ -32,6 +34,8 @@ export interface OpcionesApp {
   whatsapp?: ClienteWhatsapp;
   /** Sin cliente (no hay MP_ACCESS_TOKEN), el saldo de Mercado Pago queda `no_configurado`. */
   mercadoPago?: ClienteMercadoPago;
+  /** Sin esto (no hay variables `ARCA_*`), las ventas no se facturan. */
+  facturacion?: Facturacion;
   /** Por defecto, `SELECT 1` con el mismo cliente de Prisma. */
   verificarBase?: VerificarBase;
   /** Carpeta con el build de la web. Si no existe, la API no sirve archivos estáticos. */
@@ -54,6 +58,7 @@ export async function crearApp({
   prisma,
   whatsapp,
   mercadoPago,
+  facturacion,
   verificarBase = async () => {
     await prisma.$queryRaw`SELECT 1`;
   },
@@ -86,13 +91,15 @@ export async function crearApp({
       await api.register(rutasProveedores, { prefix: '/proveedores', prisma, ahora });
       await api.register(rutasProductos, { prefix: '/productos', prisma });
       await api.register(rutasStock, { prefix: '/stock', prisma });
-      await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora });
+      await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora, facturacion });
       await api.register(rutasPedidos, { prefix: '/pedidos', prisma, ahora });
       await api.register(rutasDashboard, { prefix: '/dashboard', prisma, ahora });
-      await api.register(rutasCaja, { prefix: '/caja', prisma, ahora });
+      await api.register(rutasCaja, { prefix: '/caja', prisma, ahora, facturacion });
       await api.register(rutasNotificaciones, { prefix: '/notificaciones', prisma });
       await api.register(rutasWhatsapp, { prefix: '/whatsapp', prisma, whatsapp });
       await api.register(rutasMercadoPago, { prefix: '/mercado-pago', mercadoPago, ahora });
+      await api.register(rutasFacturacion, { prefix: '/facturacion', prisma, facturacion });
+      await api.register(rutasFacturas, { prefix: '/facturas', prisma, facturacion });
     },
     { prefix: '/api' },
   );

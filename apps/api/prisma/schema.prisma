@@ -49,6 +49,7 @@ model Usuario {
   pedidosCreados    Pedido[]                @relation("PedidosCreados")
   pedidosRecibidos  Pedido[]                @relation("PedidosRecibidos")
   pedidosCancelados Pedido[]                @relation("PedidosCancelados")
+  facturasPedidas   Factura[]
 
   @@map("usuarios")
 }
@@ -237,6 +238,7 @@ enum TipoNotificacion {
   cierre_turno
   pedido_cerrado
   reposicion
+  factura
 }
 
 enum EstadoNotificacion {
@@ -269,6 +271,7 @@ model Venta {
   items            ItemVenta[]
   pagos            PagoVenta[]
   movimientos      MovimientoStock[]
+  facturas         Factura[]
 
   @@index([creadaEn])
   @@index([turnoId])
@@ -481,4 +484,76 @@ model EjecucionTarea {
 
   @@unique([tarea, fecha])
   @@map("ejecuciones_tarea")
+}
+
+enum EstadoFactura {
+  pendiente
+  /// Número reservado y pedido mandado a ARCA, sin saber todavía si lo autorizó.
+  en_curso
+  autorizada
+  error
+  cancelada
+}
+
+/// Qué parte de la venta ampara la factura.
+enum ParteFactura {
+  /// Débito, crédito y Mercado Pago: se factura sola.
+  electronica
+  /// Lo cobrado en efectivo: solo si el cliente pide factura.
+  efectivo
+}
+
+/// Factura C electrónica (ARCA). Hasta dos por venta, una por parte. La tabla
+/// hace de cola: la tarea de emisión (modules/facturacion/emision.ts) emite las pendientes.
+model Factura {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  ventaId          String        @map("venta_id") @db.Uuid
+  venta            Venta         @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  parte            ParteFactura
+  /// Quien la pidió (parte efectivo); vacío en la automática.
+  pedidaPorId      String?       @map("pedida_por_id") @db.Uuid
+  pedidaPor        Usuario?      @relation(fields: [pedidaPorId], references: [id], onDelete: Restrict)
+  estado           EstadoFactura @default(pendiente)
+  /// Del config al encolar.
+  puntoVenta       Int           @map("punto_venta")
+  tipoComprobante  Int           @map("tipo_comprobante")
+  /// Suma de los pagos de esa parte.
+  importe          Decimal       @db.Decimal(12, 2)
+  /// Se fija al reservar (paso a en_curso); un rechazo lo libera.
+  numero           Int?
+  fechaComprobante DateTime?     @map("fecha_comprobante") @db.Date
+  cae              String?
+  /// Tal como lo devuelve ARCA.
+  caeVencimiento   DateTime?     @map("cae_vencimiento") @db.Date
+  autorizadaEn     DateTime?     @map("autorizada_en") @db.Timestamptz
+  /// Rechazos de ARCA; al quinto, la factura pasa a `error`.
+  intentos         Int           @default(0)
+  /// Si está, la factura no se reintenta antes de esta hora.
+  proximoIntentoEn DateTime?     @map("proximo_intento_en") @db.Timestamptz
+  /// tope | fuera_de_plazo | rechazo_arca | numeracion_agotada | numeracion_inconsistente
+  codigoError      String?       @map("codigo_error")
+  /// Motivo legible del último error.
+  error            String?
+  creadaEn         DateTime      @default(now()) @map("creada_en") @db.Timestamptz
+
+  @@unique([ventaId, parte])
+  // Los NULL son distintos en Postgres: solo choca un número ya reservado.
+  @@unique([puntoVenta, tipoComprobante, numero])
+  @@index([estado, creadaEn])
+  @@map("facturas")
+}
+
+/// Ticket de acceso del WSAA de ARCA. Dura unas 12 h y ARCA no da otro mientras
+/// tanto, así que se guarda para reutilizarlo después de un reinicio.
+model TicketAccesoArca {
+  servicio   String
+  /// homologacion | produccion
+  entorno    String
+  token      String
+  sign       String
+  generadoEn DateTime @map("generado_en") @db.Timestamptz
+  expiraEn   DateTime @map("expira_en") @db.Timestamptz
+
+  @@id([servicio, entorno])
+  @@map("tickets_acceso_arca")
 }

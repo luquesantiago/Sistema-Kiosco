@@ -14,6 +14,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { requiereRol, requiereSesion, usuarioActual } from '../../plugins/sesion.js';
+import type { Facturacion } from '../facturacion/tipos.js';
 import {
   abrirTurno,
   cerrarTurno,
@@ -35,11 +36,16 @@ const soloAdmin = { preValidation: requiereRol('admin') };
 export const rutasCaja: FastifyPluginAsyncZod<{
   prisma: PrismaClient;
   ahora: () => Date;
-}> = async (app, { prisma, ahora }) => {
+  facturacion?: Facturacion;
+}> = async (app, { prisma, ahora, facturacion }) => {
+  // El mostrador ofrece pedir factura (F10) solo si la facturación está configurada.
+  const conFacturacion = <T extends object>(estado: T) =>
+    facturacion ? { ...estado, facturacionHabilitada: true } : estado;
+
   app.get(
     '/estado',
     { ...conSesion, schema: { response: { 200: estadoCajaSchema } } },
-    async (request) => estadoDeCaja(prisma, usuarioActual(request)),
+    async (request) => conFacturacion(await estadoDeCaja(prisma, usuarioActual(request))),
   );
 
   app.post(
@@ -48,7 +54,9 @@ export const rutasCaja: FastifyPluginAsyncZod<{
     async (request, reply) =>
       reply
         .status(201)
-        .send(await abrirTurno(prisma, request.body, usuarioActual(request), ahora())),
+        .send(
+          conFacturacion(await abrirTurno(prisma, request.body, usuarioActual(request), ahora())),
+        ),
   );
 
   app.post(

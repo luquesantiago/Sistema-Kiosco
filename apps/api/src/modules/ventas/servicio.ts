@@ -1,7 +1,10 @@
 import {
   calcularVuelto,
   CODIGOS_ERROR,
+  comparar,
+  formatearNumeroComprobante,
   multiplicar,
+  restar,
   sonIguales,
   sumar,
   VENTAS_POR_PAGINA,
@@ -18,12 +21,16 @@ import { ErrorHttp } from '../../errores.js';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { fechaEnArgentina, rangoDelDiaEnArgentina } from '../../lib/fechas.js';
 import { turnoAbiertoBloqueado, turnoParaOperar } from '../caja/servicio.js';
+import { encolarFacturaSiCorresponde, importePorParte } from '../facturacion/encolado.js';
+import { aFacturaVenta, emisorDe } from '../facturacion/servicio.js';
+import type { Facturacion } from '../facturacion/tipos.js';
 import { registrarMovimiento } from '../stock/movimientos.js';
 import { textoAvisoAnulacion } from './aviso.js';
 
 const incluirResumen = {
   usuario: { select: { id: true, nombre: true } },
   pagos: { select: { medio: true }, orderBy: { medio: 'asc' } },
+  facturas: { select: { estado: true, importe: true } },
 } as const;
 
 const incluirDetalle = {
@@ -31,10 +38,20 @@ const incluirDetalle = {
   anuladaPor: { select: { id: true, nombre: true } },
   items: { orderBy: { id: 'asc' } },
   pagos: { orderBy: { medio: 'asc' } },
+  // La automática (`electronica`) primero: es el orden del enum.
+  facturas: { orderBy: { parte: 'asc' } },
 } as const;
 
 type VentaConResumen = Prisma.VentaGetPayload<{ include: typeof incluirResumen }>;
 type VentaConDetalle = Prisma.VentaGetPayload<{ include: typeof incluirDetalle }>;
+
+/** Suma de las facturas autorizadas. */
+function importeFacturado(facturas: { estado: string; importe: { toFixed(n: number): string } }[]) {
+  return sumar(
+    '0',
+    ...facturas.filter((f) => f.estado === 'autorizada').map((f) => f.importe.toFixed(2)),
+  );
+}
 
 function aResumen(v: VentaConResumen | VentaConDetalle): VentaResumen {
   return {
@@ -45,14 +62,21 @@ function aResumen(v: VentaConResumen | VentaConDetalle): VentaResumen {
     total: v.total.toFixed(2),
     estado: v.estado,
     medios: v.pagos.map((p) => p.medio),
+    importeFacturado: importeFacturado(v.facturas),
   };
 }
 
 /** El costo de cada ítem va solo al admin: al empleado no le llega ni la clave. */
-function aDetalle(v: VentaConDetalle, usuario: UsuarioSesion): VentaDetalle {
+function aDetalle(
+  v: VentaConDetalle,
+  usuario: UsuarioSesion,
+  facturacion: Facturacion | undefined,
+): VentaDetalle {
   const conCostos = usuario.rol === 'admin';
+  const { efectivo } = importePorParte(v.pagos);
+  const resumen = aResumen(v);
   return {
-    ...aResumen(v),
+    ...resumen,
     items: v.items.map((i) => ({
       productoId: i.productoId,
       descripcion: i.descripcion,
@@ -71,6 +95,15 @@ function aDetalle(v: VentaConDetalle, usuario: UsuarioSesion): VentaDetalle {
       v.anuladaEn && v.anuladaPor && v.motivoAnulacion
         ? { en: v.anuladaEn.toISOString(), por: v.anuladaPor, motivo: v.motivoAnulacion }
         : null,
+    facturas: v.facturas.map((f) => aFacturaVenta(f, facturacion)),
+    sinFacturar: restar(resumen.total, resumen.importeFacturado),
+    // Hay efectivo sin su factura: el cliente la puede pedir (F10 o desde Ventas).
+    puedePedirFactura:
+      facturacion !== undefined &&
+      v.estado === 'pagada' &&
+      comparar(efectivo, 0) > 0 &&
+      !v.facturas.some((f) => f.parte === 'efectivo'),
+    emisor: emisorDe(facturacion),
   };
 }
 
@@ -87,6 +120,7 @@ export async function registrarVenta(
   { items, pagos, totalEsperado }: z.output<typeof ventaEntradaSchema>,
   usuario: UsuarioSesion,
   ahora: Date,
+  facturacion?: Facturacion,
 ): Promise<VentaDetalle> {
   const usuarioId = usuario.id;
   // Agrupa los productos repetidos en la posición de su primera aparición.
@@ -184,6 +218,7 @@ export async function registrarVenta(
             })),
           },
         },
+        include: { pagos: true },
       });
 
       for (const { productoId, cantidad } of porProducto.values()) {
@@ -195,6 +230,10 @@ export async function registrarVenta(
           ventaId: venta.id,
         });
       }
+
+      // Enganche de la facturación: la venta nace `pagada`, así que su factura
+      // automática se encola acá, en la misma transacción. No habla con ARCA.
+      await encolarFacturaSiCorresponde(tx, venta, { facturacion, ahora });
       return venta.id;
     },
     { timeout: 30_000 },
@@ -203,6 +242,7 @@ export async function registrarVenta(
   return aDetalle(
     await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
     usuario,
+    facturacion,
   );
 }
 
@@ -252,19 +292,22 @@ export async function obtenerVenta(
   id: string,
   usuario: UsuarioSesion,
   ahora: Date,
+  facturacion?: Facturacion,
 ): Promise<VentaDetalle> {
   const venta = await prisma.venta.findUnique({ where: { id }, include: incluirDetalle });
   if (!venta) throw ventaNoEncontrada();
   if (usuario.rol !== 'admin' && !esDeHoy(venta, ahora)) {
     throw fueraDePlazo('Solo podés ver las ventas de hoy.');
   }
-  return aDetalle(venta, usuario);
+  return aDetalle(venta, usuario, facturacion);
 }
 
 /**
- * Anula una venta pagada: repone el stock con movimientos `anulacion` y deja
- * un aviso pendiente para el admin, todo en una transacción. El UPDATE
- * condicionado a `pagada` hace que dos anulaciones simultáneas repongan una vez.
+ * Anula una venta pagada: repone el stock con movimientos `anulacion`, cancela
+ * sus facturas sin emitir y deja un aviso pendiente para el admin, todo en una
+ * transacción. El UPDATE condicionado a `pagada` hace que dos anulaciones
+ * simultáneas repongan una vez. No hay notas de crédito: el aviso dice qué
+ * facturas autorizadas siguen vigentes.
  */
 export async function anularVenta(
   prisma: PrismaClient,
@@ -272,6 +315,7 @@ export async function anularVenta(
   { motivo }: z.output<typeof anulacionSchema>,
   usuario: UsuarioSesion,
   ahora: Date,
+  facturacion?: Facturacion,
 ): Promise<VentaDetalle> {
   await prisma.$transaction(
     async (tx) => {
@@ -321,6 +365,16 @@ export async function anularVenta(
         });
       }
 
+      // Lo que no se emitió no se emite más. Una `en_curso` la resuelve la emisión.
+      await tx.factura.updateMany({
+        where: { ventaId: id, estado: { in: ['pendiente', 'error'] } },
+        data: { estado: 'cancelada', proximoIntentoEn: null },
+      });
+      const vigentes = await tx.factura.findMany({
+        where: { ventaId: id, estado: 'autorizada', numero: { not: null } },
+        orderBy: { parte: 'asc' },
+      });
+
       await tx.notificacion.create({
         data: {
           tipo: 'anulacion_venta',
@@ -336,6 +390,10 @@ export async function anularVenta(
             anuladaPor: usuario.nombre,
             motivo,
             anuladaEn: ahora,
+            facturasVigentes: vigentes.map((f) => ({
+              numero: formatearNumeroComprobante(f.puntoVenta, f.numero!),
+              importe: f.importe.toFixed(2),
+            })),
           }),
           creadaEn: ahora,
         },
@@ -347,5 +405,6 @@ export async function anularVenta(
   return aDetalle(
     await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
     usuario,
+    facturacion,
   );
 }

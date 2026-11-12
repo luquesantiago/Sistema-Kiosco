@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router';
 import { Avisos } from '../admin/Avisos.js';
+import { Facturacion } from '../admin/Facturacion.js';
 import { MercadoPago } from '../admin/MercadoPago.js';
 import { PanelAdmin } from '../admin/PanelAdmin.js';
 import { AumentoPrecios } from '../admin/productos/AumentoPrecios.js';
@@ -55,6 +56,7 @@ export const rutas: RouteObject[] = [
           { path: 'turnos', element: <Turnos /> },
           { path: 'turnos/:id', element: <DetalleTurno /> },
           { path: 'mercado-pago', element: <MercadoPago /> },
+          { path: 'facturacion', element: <Facturacion /> },
         ],
       },
       { path: '*', element: <Navigate to="/" replace /> },

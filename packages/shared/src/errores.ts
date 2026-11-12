@@ -45,4 +45,8 @@ export const CODIGOS_ERROR = {
   numeroInvalido: 'NUMERO_INVALIDO',
   numeroSinWhatsapp: 'NUMERO_SIN_WHATSAPP',
   avisoNoReintentable: 'AVISO_NO_REINTENTABLE',
+  facturacionNoConfigurada: 'FACTURACION_NO_CONFIGURADA',
+  facturaFueraDePlazo: 'FACTURA_FUERA_DE_PLAZO',
+  facturaNoReintentable: 'FACTURA_NO_REINTENTABLE',
+  facturaSinImporte: 'FACTURA_SIN_IMPORTE',
 } as const;

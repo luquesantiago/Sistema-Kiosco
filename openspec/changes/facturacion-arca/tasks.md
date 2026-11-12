@@ -123,28 +123,28 @@ Se escriben primero, a partir de los escenarios de `specs/facturacion`, `specs/v
 
 ## 2. Modelo de datos, configuración y compartido
 
-- [ ] 2.1 Sumar a `schema.prisma`:
+- [x] 2.1 Sumar a `schema.prisma`:
   - `EstadoFactura`, `ParteFactura` y el valor `factura` al final de `TipoNotificacion`.
   - Los modelos `Factura`, con el único `(ventaId, parte)`, el único `(puntoVenta, tipoComprobante, numero)` y el índice `(estado, creadaEn)`, y `TicketAccesoArca`, con la clave `(servicio, entorno)`.
   - Las relaciones en `Venta` y `Usuario`.
 
   Generar la migración `facturacion_arca` (después de `aviso_reposicion` si ya está mergeado). Verificar con `pnpm db:migrate` y que los tests existentes siguen pasando.
-- [ ] 2.2 Agregar a `packages/shared`:
+- [x] 2.2 Agregar a `packages/shared`:
   - `facturacion.ts`: esquemas `facturaVentaSchema` y `estadoFacturacionSchema`, `urlQrFactura`, `formatearNumeroComprobante` y `URL_QR`.
   - `facturas`, `sinFacturar`, `puedePedirFactura` y `emisor` en `ventaDetalleSchema`, `importeFacturado` en `ventaResumenSchema` y `factura` en `TIPOS_NOTIFICACION`.
   - Los códigos `FACTURACION_NO_CONFIGURADA`, `FACTURA_FUERA_DE_PLAZO` y `FACTURA_NO_REINTENTABLE`.
   - El export en `index.ts`.
 
   Verificar que pasan los tests de 1.1.
-- [ ] 2.3 Sumar a `cargarConfig` el grupo `ARCA_*`, incluido `ARCA_NOMBRE_FANTASIA`, con la regla "todas o ninguna" (ayudante `todasONinguna`), el rango del punto de venta y el dígito verificador del CUIT. Agregar las variables comentadas a `apps/api/.env.example`. Verificar que pasan los tests de 1.2.
-- [ ] 2.4 Agregar `sumarDias(fecha, n)` a `lib/fechas.ts` y `reglas.ts` en `modules/facturacion` con las constantes normativas comentadas con su RG. Verificar con tests de `fechas.test.ts`: cambio de mes (`2026-11-01` − 5 → `2026-10-27`) y de año.
+- [x] 2.3 Sumar a `cargarConfig` el grupo `ARCA_*`, incluido `ARCA_NOMBRE_FANTASIA`, con la regla "todas o ninguna" (ayudante `todasONinguna`), el rango del punto de venta y el dígito verificador del CUIT. Agregar las variables comentadas a `apps/api/.env.example`. Verificar que pasan los tests de 1.2.
+- [x] 2.4 Agregar `sumarDias(fecha, n)` a `lib/fechas.ts` y `reglas.ts` en `modules/facturacion` con las constantes normativas comentadas con su RG. Verificar con tests de `fechas.test.ts`: cambio de mes (`2026-11-01` − 5 → `2026-10-27`) y de año.
 
 ## 3. Integración con ARCA
 
-- [ ] 3.1 Agregar `node-forge` (con `@types/node-forge`) y `fast-xml-parser` a `apps/api`. Verificar que `pnpm install` y `pnpm --filter api typecheck` pasan.
-- [ ] 3.2 Implementar `integrations/arca/wsaa.ts`: el TRA, la firma CMS con `node-forge` y la lectura de `LoginCms`, incluido `coe.alreadyAuthenticated`. Verificar con un test que firma con un certificado autofirmado generado en el test y comprueba la firma, y contra el servidor local con XML grabado.
-- [ ] 3.3 Implementar `integrations/arca/tickets.ts` (`obtenerTicket` con margen de 60 s y `upsert` por entorno). Verificar que pasan los tests de 1.6.
-- [ ] 3.4 Implementar `integrations/arca/wsfe.ts`, `direcciones.ts` y `cliente.ts`:
+- [x] 3.1 Agregar `node-forge` (con `@types/node-forge`) y `fast-xml-parser` a `apps/api`. Verificar que `pnpm install` y `pnpm --filter api typecheck` pasan.
+- [x] 3.2 Implementar `integrations/arca/wsaa.ts`: el TRA, la firma CMS con `node-forge` y la lectura de `LoginCms`, incluido `coe.alreadyAuthenticated`. Verificar con un test que firma con un certificado autofirmado generado en el test y comprueba la firma, y contra el servidor local con XML grabado.
+- [x] 3.3 Implementar `integrations/arca/tickets.ts` (`obtenerTicket` con margen de 60 s y `upsert` por entorno). Verificar que pasan los tests de 1.6.
+- [x] 3.4 Implementar `integrations/arca/wsfe.ts`, `direcciones.ts` y `cliente.ts`:
   - `estadoServidores`, `ultimoAutorizado` (con la fecha), `consultar` y `solicitarCae`.
   - Timeout de 15 s y la diferencia entre `ArcaNoDisponible` y `ArcaRechazo`.
   - Completar `test/arca-falso.ts`.
@@ -156,48 +156,49 @@ Se escriben primero, a partir de los escenarios de `specs/facturacion`, `specs/v
 
 ## 4. Encolado y pedido de factura
 
-- [ ] 4.1 Implementar `modules/facturacion/encolado.ts` (`importePorParte` y `encolarFacturaSiCorresponde` por la parte electrónica, con el tope por factura y su aviso) y llamarla al final de la transacción de `registrarVenta`. Pasar `facturacion?` por `crearApp` y `rutasVentas`, y llamar a `despertar()` después del commit. Verificar que pasan los tests de 1.3 y que `ventas.test.ts` sigue verde sin configuración.
-- [ ] 4.2 Implementar `pedirFactura` (factura de la parte `efectivo`, idempotente, y la automática si no hay efectivo) y `POST /api/ventas/:id/factura`, y sumar la ruta al test de rutas protegidas. Verificar que pasan los tests de 1.4.
-- [ ] 4.3 Sumar `facturacionHabilitada` al estado de la caja que consulta el mostrador. Verificar con un test de la ruta de estado de la caja con y sin configuración.
+- [x] 4.1 Implementar `modules/facturacion/encolado.ts` (`importePorParte` y `encolarFacturaSiCorresponde` por la parte electrónica, con el tope por factura y su aviso) y llamarla al final de la transacción de `registrarVenta`. Pasar `facturacion?` por `crearApp` y `rutasVentas`, y llamar a `despertar()` después del commit. Verificar que pasan los tests de 1.3 y que `ventas.test.ts` sigue verde sin configuración.
+- [x] 4.2 Implementar `pedirFactura` (factura de la parte `efectivo`, idempotente, y la automática si no hay efectivo) y `POST /api/ventas/:id/factura`, y sumar la ruta al test de rutas protegidas. Verificar que pasan los tests de 1.4.
+- [x] 4.3 Sumar `facturacionHabilitada` al estado de la caja que consulta el mostrador. Verificar con un test de la ruta de estado de la caja con y sin configuración.
 
 ## 5. Emisión por detrás de la venta
 
-- [ ] 5.1 Implementar `modules/facturacion/emision.ts` (`procesarFacturas`): servidores, bloqueo por inconsistencia, resolución de la `en_curso`, reserva, emisión, reintentos con `MAX_INTENTOS` y `ESPERAS_MS` de WhatsApp, plazo, numeración agotada y avisos en la misma transacción. Textos en `modules/facturacion/avisos.ts`. Verificar que pasan los tests de 1.5.
-- [ ] 5.2 Sumar `despertar()` a `jobs/ciclo.ts`. Si `aviso-reposicion-diario` no está mergeado, crear `ciclo.ts` según su design. Verificar con `ciclo.test.ts`:
+- [x] 5.1 Implementar `modules/facturacion/emision.ts` (`procesarFacturas`): servidores, bloqueo por inconsistencia, resolución de la `en_curso`, reserva, emisión, reintentos con `MAX_INTENTOS` y `ESPERAS_MS` de WhatsApp, plazo, numeración agotada y avisos en la misma transacción. Textos en `modules/facturacion/avisos.ts`. Verificar que pasan los tests de 1.5.
+- [x] 5.2 Sumar `despertar()` a `jobs/ciclo.ts`. Si `aviso-reposicion-diario` no está mergeado, crear `ciclo.ts` según su design. Verificar con `ciclo.test.ts`:
   - `despertar()` adelanta la pasada.
   - Durante una pasada, `despertar()` agenda una sola más al terminar.
   - Los tests previos de `ciclo` siguen pasando.
-- [ ] 5.3 Implementar `jobs/emision-facturas.ts` (`iniciarEmisionFacturas` con `iniciarCiclo` cada 10 s, guardando el último estado para `GET /api/facturacion`). Arrancarlo desde `server.ts` solo con la configuración de ARCA, con el certificado y la clave leídos al arrancar, y detenerlo en `onClose`. Verificar:
+- [x] 5.3 Implementar `jobs/emision-facturas.ts` (`iniciarEmisionFacturas` con `iniciarCiclo` cada 10 s, guardando el último estado para `GET /api/facturacion`). Arrancarlo desde `server.ts` solo con la configuración de ARCA, con el certificado y la clave leídos al arrancar, y detenerlo en `onClose`. Verificar:
   - Con un test, que `detener()` espera la pasada en curso.
   - A mano, que `pnpm --filter api dev` sin `ARCA_*` arranca y loguea que la facturación está desactivada.
   - Que con un certificado inexistente sale nombrando el archivo.
 
 ## 6. Anulación, detalle y rutas del admin
 
-- [ ] 6.1 En `anularVenta`, cancelar las facturas `pendiente` o en `error`, y sumar al aviso de anulación una línea por cada factura vigente (`modules/ventas/aviso.ts`). Sumar al detalle `facturas`, `sinFacturar`, `puedePedirFactura` y `emisor`, con el `qrUrl` de cada factura, e `importeFacturado` al listado. Verificar que pasan los tests de 1.8.
-- [ ] 6.2 Implementar `GET /api/facturacion` y `POST /api/facturas/:id/reintentar` (`modules/facturacion/rutas.ts`) y sumarlas al test de rutas protegidas. Verificar que pasan los tests de 1.7.
+- [x] 6.1 En `anularVenta`, cancelar las facturas `pendiente` o en `error`, y sumar al aviso de anulación una línea por cada factura vigente (`modules/ventas/aviso.ts`). Sumar al detalle `facturas`, `sinFacturar`, `puedePedirFactura` y `emisor`, con el `qrUrl` de cada factura, e `importeFacturado` al listado. Verificar que pasan los tests de 1.8.
+- [x] 6.2 Implementar `GET /api/facturacion` y `POST /api/facturas/:id/reintentar` (`modules/facturacion/rutas.ts`) y sumarlas al test de rutas protegidas. Verificar que pasan los tests de 1.7.
 
 ## 7. Web
 
-- [ ] 7.1 Agregar `qrcode` (con `@types/qrcode`) a `apps/web`. En `Ticket.tsx`:
+- [x] 7.1 Agregar `qrcode` (con `@types/qrcode`) a `apps/web`. En `Ticket.tsx`:
   - Sumar el encabezado con el nombre de fantasía y la razón social con el CUIT.
   - Sumar `PieFiscal`: datos del emisor una vez, un `BloqueFactura` por cada factura autorizada con "Facturado: $X" y su QR en SVG, las líneas "Factura en trámite" y "Sin facturar" y la marca de homologación.
   - Sumar `imprimirConFactura` en `useImpresionTicket`, que espera hasta 5 s consultando la venta.
 
-  Verificar que pasa `Ticket.test.tsx` de 1.9 y, a mano, que la Factura C entra en 58 y 80 mm (vista previa de impresión). _Tests ya escritos por el agente de tests: `apps/web/test/factura-ticket.test.tsx`._
-- [ ] 7.2 En `Venta.tsx`, pasar la franja de última venta a `UltimaVenta`, con F10 y **Pedir factura** (**Facturar efectivo ($X)** en una venta mixta), el estado de cada factura y F9 con espera. Sumar F10 a la referencia de atajos. Verificar que pasa `Venta.test.tsx` de 1.9. _Tests ya escritos por el agente de tests: `apps/web/test/factura-venta.test.tsx`._
-- [ ] 7.3 En `ventas/Ventas.tsx`, sumar al detalle cada factura con su importe y estado, "Sin facturar", **Pedir factura** y la reimpresión, y el aviso antes de anular, que lista las facturas autorizadas. En el listado, la marca "Factura" o "Factura parcial". Verificar con tests de Testing Library el aviso previo a la anulación y el `422` de plazo que muestra el mensaje. _Tests ya escritos por el agente de tests: `apps/web/test/factura-ventas.test.tsx`._
-- [ ] 7.4 Crear `admin/Facturacion.tsx` en `/admin/facturacion`, con la entrada en `PanelAdmin` y la ruta en `rutas.tsx`, y `CartelFacturacion` en el panel. Actualizar el párrafo de `Avisos.tsx`. Verificar que pasa `Facturacion.test.tsx` de 1.9 y que un empleado no accede. _Tests ya escritos por el agente de tests: `apps/web/test/facturacion.test.tsx` (incluye el empleado sin acceso)._
+  Verificar que pasa `Ticket.test.tsx` de 1.9 y, a mano, que la Factura C entra en 58 y 80 mm (vista previa de impresión). _Tests ya escritos por el agente de tests: `apps/web/test/factura-ticket.test.tsx`._ _Pasan los tests; la vista previa de impresión en 58 y 80 mm queda para verla a mano en la PC del kiosco (el QR mide 30 mm)._
+- [x] 7.2 En `Venta.tsx`, pasar la franja de última venta a `UltimaVenta`, con F10 y **Pedir factura** (**Facturar efectivo ($X)** en una venta mixta), el estado de cada factura y F9 con espera. Sumar F10 a la referencia de atajos. Verificar que pasa `Venta.test.tsx` de 1.9. _Tests ya escritos por el agente de tests: `apps/web/test/factura-venta.test.tsx`._
+- [x] 7.3 En `ventas/Ventas.tsx`, sumar al detalle cada factura con su importe y estado, "Sin facturar", **Pedir factura** y la reimpresión, y el aviso antes de anular, que lista las facturas autorizadas. En el listado, la marca "Factura" o "Factura parcial". Verificar con tests de Testing Library el aviso previo a la anulación y el `422` de plazo que muestra el mensaje. _Tests ya escritos por el agente de tests: `apps/web/test/factura-ventas.test.tsx`._
+- [x] 7.4 Crear `admin/Facturacion.tsx` en `/admin/facturacion`, con la entrada en `PanelAdmin` y la ruta en `rutas.tsx`, y `CartelFacturacion` en el panel. Actualizar el párrafo de `Avisos.tsx`. Verificar que pasa `Facturacion.test.tsx` de 1.9 y que un empleado no accede. _Tests ya escritos por el agente de tests: `apps/web/test/facturacion.test.tsx` (incluye el empleado sin acceso)._
 - [ ] 7.5 Verificar F10 en el navegador real de la PC del kiosco. Presionarlo en la pantalla de venta tiene que pedir la factura sin abrir la barra de menú, y hay que probarlo también con el foco en el campo de escaneo. Si el navegador no permite interceptarlo, cambiar el atajo (F5 con `preventDefault` o uno con Ctrl; F11 y F12 no sirven) y actualizar la referencia de atajos, los tests y este archivo. Anotar acá el navegador, su versión y el resultado.
 
 ## 8. Infraestructura
 
-- [ ] 8.1 Sumar a `infra/docker-compose.prod.yml` el montaje `./arca:/run/secrets/arca:ro` y las variables `ARCA_*` en `app`. Agregarlas a `infra/.env.example` y `infra/arca/` al `.gitignore`. Verificar que el job de producción de la CI levanta el Compose sin `ARCA_*` y que `/api/health` responde `200`.
+- [x] 8.1 Sumar a `infra/docker-compose.prod.yml` el montaje `./arca:/run/secrets/arca:ro` y las variables `ARCA_*` en `app`. Agregarlas a `infra/.env.example` y `infra/arca/` al `.gitignore`. Verificar que el job de producción de la CI levanta el Compose sin `ARCA_*` y que `/api/health` responde `200`. _Verificado localmente con `docker compose config` (sin `ARCA_*` las variables no llegan a la app) y arrancando la API sin `ARCA_*` (`/api/health` 200); el job de la CI corre al subir la rama._
 
 ## 9. Verificación y documentación
 
 - [ ] 9.1 Correr `pnpm --filter api test`, `pnpm --filter web test`, `pnpm typecheck` y `pnpm lint`, y verificar que todo pasa, incluidos los tests de valor límite del grupo 1.
-- [ ] 9.2 Documentar:
+  _Pasan las tres suites y `pnpm lint`. `pnpm typecheck` falla solo por la ayuda de test `apps/web/test/factura-datos.ts` (línea 66: `sinFacturar = total` en el mismo patrón de parámetros da TS7022); se arregla en el test (por ejemplo, `sinFacturar = undefined as string | undefined` en los parámetros y `sinFacturar: sinFacturar ?? total` en el objeto que devuelve), que no se tocó._
+- [x] 9.2 Documentar:
   - `docs/requisitos-y-limites.md`: qué se factura (la parte electrónica sola y el efectivo a pedido, con hasta dos facturas por venta), el tope por factura, el plazo, que no hay notas de crédito y los datos normativos a verificar.
   - `docs/stack-tecnologico.md`: `node-forge`, `fast-xml-parser` y `qrcode`, y por qué.
   - `docs/estructura-proyecto.md`: `src/integrations/`, `Factura` y el flujo de emisión.

@@ -147,6 +147,11 @@ export const estadoCajaSchema = z.object({
     .nullable(),
   /** Lo que quedó en caja al cerrar el último turno ($0 si nunca hubo uno). */
   montoSugerido: montoSalidaSchema,
+  /**
+   * El mostrador ofrece pedir factura (F10). Solo viene, en `true`, si la
+   * facturación con ARCA está configurada; sin configuración no se manda.
+   */
+  facturacionHabilitada: z.boolean().optional(),
 });
 export type EstadoCaja = z.infer<typeof estadoCajaSchema>;
 

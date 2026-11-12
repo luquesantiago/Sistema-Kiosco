@@ -69,9 +69,9 @@ export function Avisos() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Avisos</h1>
       <p className="text-slate-600">
-        Se avisa por WhatsApp cada anulación, gasto o retiro de los empleados y cada cierre de
-        turno, y todos los días a las 12:00, lo que hay que reponer. La conexión y el número se
-        configuran en{' '}
+        Se avisa por WhatsApp cada anulación, gasto o retiro de los empleados, cada cierre de turno
+        y cada factura que no se pudo emitir, y todos los días a las 12:00, lo que hay que reponer.
+        La conexión y el número se configuran en{' '}
         <Link to="/admin/whatsapp" className="text-blue-700 underline">
           WhatsApp
         </Link>

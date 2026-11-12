@@ -39,6 +39,16 @@ export function fechaEnArgentina(instante: Date): string {
 }
 
 /**
+ * Suma `n` días (o resta, si es negativo) a una fecha "AAAA-MM-DD". Es una
+ * fecha sin hora: se cuenta en UTC para que no se corra un día.
+ */
+export function sumarDias(fecha: string, n: number): string {
+  const dia = new Date(`${fecha}T00:00:00Z`);
+  dia.setUTCDate(dia.getUTCDate() + n);
+  return dia.toISOString().slice(0, 10);
+}
+
+/**
  * Instantes UTC del día "AAAA-MM-DD" en Argentina: desde las 00:00 incluido
  * hasta las 00:00 del día siguiente excluido.
  */

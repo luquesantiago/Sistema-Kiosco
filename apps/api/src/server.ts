@@ -1,9 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { crearApp } from './app.js';
-import { cargarConfig } from './config.js';
+import { cargarConfig, configArca } from './config.js';
 import { crearPrisma } from './db.js';
+import { clienteArca, leerCredenciales } from './integrations/arca/cliente.js';
 import { clienteMercadoPago } from './integrations/mercadopago/cliente.js';
 import { iniciarAvisoReposicion } from './jobs/aviso-reposicion.js';
+import { iniciarEmisionFacturas } from './jobs/emision-facturas.js';
+import type { Facturacion } from './modules/facturacion/tipos.js';
 import { esperarBase } from './lib/esperar-base.js';
 import { clienteWaha } from './modules/whatsapp/cliente.js';
 import { iniciarEnvio } from './modules/whatsapp/envio.js';
@@ -23,6 +26,36 @@ const whatsapp =
 // Sin token, el saldo de Mercado Pago queda "no configurado" y todo lo demás funciona.
 const mercadoPago = config.MP_ACCESS_TOKEN ? clienteMercadoPago(config.MP_ACCESS_TOKEN) : undefined;
 
+// Facturación con ARCA: sin las variables ARCA_*, se vende igual sin facturar.
+// El certificado y la clave se leen al arrancar; la clave queda solo en memoria.
+const arcaConfig = configArca(config);
+let emision: ReturnType<typeof iniciarEmisionFacturas> | undefined;
+let facturacion: Facturacion | undefined;
+if (arcaConfig) {
+  let credenciales: { certificado: string; clave: string };
+  try {
+    credenciales = leerCredenciales({
+      certificado: arcaConfig.ARCA_CERT_PATH,
+      clave: arcaConfig.ARCA_KEY_PATH,
+    });
+  } catch (error) {
+    console.error(`Configuración inválida:\n- ${(error as Error).message}`);
+    process.exit(1);
+  }
+  facturacion = {
+    config: arcaConfig,
+    arca: clienteArca({
+      prisma,
+      entorno: arcaConfig.ARCA_ENTORNO,
+      cuit: arcaConfig.ARCA_CUIT,
+      ...credenciales,
+      ahora: () => new Date(),
+    }),
+    despertar: () => emision?.despertar(),
+    estado: () => emision?.estado() ?? 'disponible',
+  };
+}
+
 // Hasta 60 s; si la base no responde, sale y Docker vuelve a intentar.
 if (!(await esperarBase(() => prisma.$queryRaw`SELECT 1`))) {
   console.error('La base de datos no responde: no se puede atender pedidos.');
@@ -33,6 +66,7 @@ const app = await crearApp({
   prisma,
   whatsapp,
   mercadoPago,
+  facturacion,
   cookieSegura: config.NODE_ENV === 'production',
   // En producción solo se llega a la app a través de Caddy.
   trustProxy: config.NODE_ENV === 'production',
@@ -56,6 +90,24 @@ if (whatsapp) {
 const avisoReposicion = iniciarAvisoReposicion({ prisma, ahora: () => new Date(), log: app.log });
 app.log.info('Tarea del aviso de reposición iniciada (todos los días a las 12:00).');
 app.addHook('onClose', () => avisoReposicion.detener());
+
+// La emisión de facturas corre solo acá, con la configuración de ARCA; nunca en los tests.
+if (facturacion) {
+  const tarea = iniciarEmisionFacturas({
+    prisma,
+    arca: facturacion.arca,
+    config: facturacion.config,
+    ahora: () => new Date(),
+    log: app.log,
+  });
+  emision = tarea;
+  app.addHook('onClose', () => tarea.detener());
+  app.log.info(
+    `Facturación con ARCA activa: ${facturacion.config.ARCA_ENTORNO === 'homologacion' ? 'HOMOLOGACIÓN (sin validez fiscal)' : 'producción'}, punto de venta ${facturacion.config.ARCA_PUNTO_VENTA}.`,
+  );
+} else {
+  app.log.warn('La facturación con ARCA no está configurada (ARCA_*): las ventas no se facturan.');
+}
 
 app.addHook('onClose', async () => {
   await prisma.$disconnect();

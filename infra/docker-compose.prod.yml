@@ -61,6 +61,22 @@ services:
       # Opcional, sin valor acá: si falta en infra/.env la app no la recibe (y no
       # llega vacía, que la haría no arrancar). Sin ella, el saldo dice "no configurado".
       MP_ACCESS_TOKEN:
+      # Factura electrónica con ARCA (opcional): igual que MP, sin valor acá. Van todas
+      # juntas o ninguna; sin ellas, el sistema vende sin facturar. Las rutas del
+      # certificado y la clave apuntan al montaje de solo lectura de abajo.
+      ARCA_CUIT:
+      ARCA_PUNTO_VENTA:
+      ARCA_ENTORNO:
+      ARCA_CERT_PATH:
+      ARCA_KEY_PATH:
+      ARCA_NOMBRE_FANTASIA:
+      ARCA_RAZON_SOCIAL:
+      ARCA_DOMICILIO:
+      ARCA_INICIO_ACTIVIDADES:
+      ARCA_IIBB:
+    volumes:
+      # Certificado y clave de ARCA (infra/arca/, fuera del repo), de solo lectura.
+      - ./arca:/run/secrets/arca:ro
     healthcheck:
       test:
         - CMD

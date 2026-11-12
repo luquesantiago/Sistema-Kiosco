@@ -51,4 +51,15 @@
     font-weight: bold;
     font-size: 13px;
   }
+  /* Nombre de fantasía arriba del ticket con factura. */
+  .ticket-grande {
+    font-size: 17px;
+  }
+  /* QR de ARCA: ~30 mm entra en papel de 58 y de 80 mm. */
+  .ticket-qr {
+    display: inline-block;
+    width: 30mm;
+    height: 30mm;
+    margin-top: 1mm;
+  }
 }

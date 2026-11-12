@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { comparar, restar, sonIguales, sumar } from './decimales.js';
+import { emisorSchema, facturaVentaSchema } from './facturacion.js';
 import { montoPositivoSchema, montoSalidaSchema, montoSchema } from './montos.js';
 
 export const MEDIOS_PAGO = ['efectivo', 'debito', 'credito', 'mercado_pago'] as const;
@@ -122,6 +123,8 @@ export const ventaResumenSchema = z.object({
   total: montoSalidaSchema,
   estado: z.enum(ESTADOS_VENTA),
   medios: z.array(medioPagoSchema),
+  /** Suma de las facturas autorizadas de la venta ("0.00" si no tiene). */
+  importeFacturado: montoSalidaSchema,
 });
 export type VentaResumen = z.infer<typeof ventaResumenSchema>;
 
@@ -148,6 +151,14 @@ export const ventaDetalleSchema = ventaResumenSchema.extend({
   anulacion: z
     .object({ en: z.iso.datetime(), por: referenciaSchema, motivo: z.string() })
     .nullable(),
+  /** De 0 a 2: la automática (`electronica`) primero. */
+  facturas: z.array(facturaVentaSchema),
+  /** Total menos lo autorizado. */
+  sinFacturar: montoSalidaSchema,
+  /** Hay efectivo sin factura de la parte `efectivo` y la facturación está configurada. */
+  puedePedirFactura: z.boolean(),
+  /** Datos del emisor para el ticket; null sin facturación configurada. */
+  emisor: emisorSchema.nullable(),
 });
 export type VentaDetalle = z.infer<typeof ventaDetalleSchema>;
 
@@ -164,6 +175,7 @@ export const TIPOS_NOTIFICACION = [
   'cierre_turno',
   'pedido_cerrado',
   'reposicion',
+  'factura',
 ] as const;
 export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
 

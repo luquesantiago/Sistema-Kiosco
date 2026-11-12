@@ -1,6 +1,7 @@
 import {
   CODIGOS_ERROR,
   preciosActualesSchema,
+  type FacturaVenta,
   type MedioPago,
   type PagoEntrada,
   type ProductoVenta,
@@ -28,6 +29,7 @@ import { AbrirTurno, DialogoCaja, DialogoCerrarTurno, TurnoDeOtro } from './Caja
 import { DialogoCobro, DialogoPagoMixto, DialogoVarios } from './Dialogos.js';
 import { sonarError } from './sonido.js';
 import { useImpresionTicket } from './Ticket.js';
+import { UltimaVenta } from './UltimaVenta.js';
 
 type Dialogo =
   | { tipo: 'cobro'; medio: MedioPago }
@@ -59,6 +61,16 @@ const REFERENCIA_ATAJOS: [string, string][] = [
   ['Ctrl+Supr', 'Vaciar'],
   ['F9', 'Imprimir ticket'],
 ];
+/** Solo con la facturación configurada. */
+const ATAJO_FACTURA: [string, string] = ['F10', 'Pedir factura'];
+
+/** Suma la factura recién pedida a la venta, sin esperar a consultarla de nuevo. */
+function conFactura(venta: VentaDetalle, factura: FacturaVenta): VentaDetalle {
+  const facturas = [...(venta.facturas ?? []).filter((f) => f.id !== factura.id), factura].sort(
+    (a, b) => (a.parte === b.parte ? 0 : a.parte === 'electronica' ? -1 : 1),
+  );
+  return { ...venta, facturas, puedePedirFactura: false };
+}
 
 let contadorVarios = 0;
 
@@ -83,6 +95,7 @@ export function Venta() {
       responsable={turno.responsable}
       esMio={turno.esMio}
       esAdmin={sesion.rol === 'admin'}
+      facturacionHabilitada={estado.facturacionHabilitada === true}
     />
   );
 }
@@ -93,11 +106,14 @@ function PuntoDeVenta({
   responsable,
   esMio,
   esAdmin,
+  facturacionHabilitada,
 }: {
   turnoId: string;
   responsable: { id: string; nombre: string };
   esMio: boolean;
   esAdmin: boolean;
+  /** La API tiene ARCA configurado: se ofrece pedir factura (F10). */
+  facturacionHabilitada: boolean;
 }) {
   const [carrito, despachar] = useReducer(reducirCarrito, undefined, cargarCarrito);
   const [dialogo, setDialogo] = useState<Dialogo>(null);
@@ -105,7 +121,7 @@ function PuntoDeVenta({
   const [aviso, setAviso] = useState<string | null>(null);
   const campo = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-  const { imprimir, ticket } = useImpresionTicket();
+  const { imprimirConFactura, ticket } = useImpresionTicket();
   const total = totalCarrito(carrito);
   const vacio = carrito.items.length === 0;
 
@@ -144,6 +160,33 @@ function PuntoDeVenta({
   const cobrar = (pagos: PagoEntrada[]) =>
     cobro.mutate({ items: itemsParaVenta(carrito), pagos, totalEsperado: total });
 
+  // Factura a pedido del cliente por lo cobrado en efectivo: sin diálogos ni datos.
+  const pedidoFactura = useMutation({
+    mutationFn: (venta: VentaDetalle) => pedir<FacturaVenta>('POST', `/ventas/${venta.id}/factura`),
+    onSuccess: (factura, venta) => {
+      setUltimaVenta((actual) => (actual?.id === venta.id ? conFactura(actual, factura) : actual));
+      void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+    },
+    onSettled: () => campo.current?.focus(),
+  });
+  const puedePedirFactura =
+    facturacionHabilitada &&
+    ultimaVenta !== null &&
+    ultimaVenta.estado === 'pagada' &&
+    ultimaVenta.puedePedirFactura === true;
+  const pedirFactura = () => {
+    if (!ultimaVenta || !puedePedirFactura || pedidoFactura.isPending) return;
+    pedidoFactura.mutate(ultimaVenta);
+  };
+
+  // F9: si la factura está en trámite, espera hasta 5 s a que se autorice.
+  const imprimirUltima = () => {
+    if (!ultimaVenta) return;
+    void imprimirConFactura(ultimaVenta).then((impresa) =>
+      setUltimaVenta((actual) => (actual?.id === impresa.id ? impresa : actual)),
+    );
+  };
+
   const abrir = (nuevo: Exclude<Dialogo, null>) => {
     const esCobro = nuevo.tipo === 'cobro' || nuevo.tipo === 'mixto';
     if (esCobro && vacio) {
@@ -158,7 +201,7 @@ function PuntoDeVenta({
   useEffect(() => {
     const alPresionar = (e: KeyboardEvent) => {
       const medio = ATAJOS_COBRO[e.key];
-      const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9'].includes(e.key);
+      const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9', 'F10'].includes(e.key);
       if (dialogo !== null) {
         // El diálogo maneja Enter y Esc; las F no tienen que llegar al navegador (F1 = ayuda).
         if (esAtajoF) e.preventDefault();
@@ -169,12 +212,14 @@ function PuntoDeVenta({
         abrir({ tipo: 'cobro', medio });
         return;
       }
-      if (['F6', 'F7', 'F8', 'F9'].includes(e.key)) {
+      if (esAtajoF) {
+        // F10 también: en el navegador abre la barra de menú.
         e.preventDefault();
         if (e.key === 'F6') abrir({ tipo: 'mixto' });
         if (e.key === 'F7') abrir({ tipo: 'varios' });
         if (e.key === 'F8') abrir({ tipo: 'caja' });
-        if (e.key === 'F9' && ultimaVenta) imprimir(ultimaVenta);
+        if (e.key === 'F9') imprimirUltima();
+        if (e.key === 'F10') pedirFactura();
         return;
       }
       if (e.key === 'Delete' && e.ctrlKey) {
@@ -329,33 +374,17 @@ function PuntoDeVenta({
       </div>
 
       {ultimaVenta && (
-        <div
-          role="region"
-          aria-label="Última venta"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-green-50 p-4 text-green-900"
-        >
-          <p>
-            <strong>Venta #{ultimaVenta.numero} cobrada</strong> ·{' '}
-            {formatearPesos(ultimaVenta.total)}
-            {ultimaVenta.pagos.map((p) =>
-              p.vuelto ? (
-                <span key={p.medio} className="ml-2 text-xl font-bold">
-                  Vuelto: {formatearPesos(p.vuelto)}
-                </span>
-              ) : null,
-            )}
-          </p>
-          <button
-            type="button"
-            className="boton-secundario"
-            onClick={() => {
-              imprimir(ultimaVenta);
-              campo.current?.focus();
-            }}
-          >
-            Imprimir ticket (F9)
-          </button>
-        </div>
+        <UltimaVenta
+          venta={ultimaVenta}
+          puedePedirFactura={puedePedirFactura}
+          pidiendoFactura={pedidoFactura.isPending}
+          errorFactura={pedidoFactura.error}
+          alPedirFactura={pedirFactura}
+          alImprimir={() => {
+            imprimirUltima();
+            campo.current?.focus();
+          }}
+        />
       )}
 
       {dialogo?.tipo === 'cobro' && <DialogoCobro medio={dialogo.medio} {...propsCobro} />}
@@ -391,11 +420,13 @@ function PuntoDeVenta({
         className="fixed right-0 bottom-0 left-0 border-t bg-slate-800 px-4 py-2 text-sm text-slate-100"
       >
         <ul className="mx-auto flex max-w-5xl flex-wrap gap-x-4 gap-y-1">
-          {REFERENCIA_ATAJOS.map(([tecla, accion]) => (
-            <li key={tecla}>
-              <kbd className="rounded bg-slate-600 px-1.5 font-mono">{tecla}</kbd> {accion}
-            </li>
-          ))}
+          {(facturacionHabilitada ? [...REFERENCIA_ATAJOS, ATAJO_FACTURA] : REFERENCIA_ATAJOS).map(
+            ([tecla, accion]) => (
+              <li key={tecla}>
+                <kbd className="rounded bg-slate-600 px-1.5 font-mono">{tecla}</kbd> {accion}
+              </li>
+            ),
+          )}
         </ul>
       </footer>
       {ticket}
