@@ -7,10 +7,17 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import type { ConfigPoint } from './config.js';
 import { registrarManejoDeErrores, respuestaNoEncontrado } from './errores.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { rutasAuth } from './modules/auth/rutas.js';
 import { rutasCaja } from './modules/caja/rutas.js';
+import type { ClienteMercadoPago } from './integrations/mercadopago/cliente.js';
+import { rutasDashboard } from './modules/dashboard/rutas.js';
+import { rutasFacturacion, rutasFacturas } from './modules/facturacion/rutas.js';
+import type { Facturacion } from './modules/facturacion/tipos.js';
+import { rutasMercadoPago } from './modules/mercadopago/rutas.js';
+import { rutasPedidos } from './modules/pedidos/rutas.js';
 import { rutasEstado, type VerificarBase } from './modules/estado/rutas.js';
 import { rutasProductos } from './modules/productos/rutas.js';
 import { rutasNotificaciones } from './modules/notificaciones/rutas.js';
@@ -26,6 +33,16 @@ export interface OpcionesApp {
   prisma: PrismaClient;
   /** Sin cliente (no hay WAHA_URL), WhatsApp queda `no_configurado`. */
   whatsapp?: ClienteWhatsapp;
+  /** Sin cliente (no hay MP_ACCESS_TOKEN), el saldo de Mercado Pago queda `no_configurado`. */
+  mercadoPago?: ClienteMercadoPago;
+  /**
+   * La terminal Point (`MP_TERMINAL_ID`, y `MP_WEBHOOK_SECRET` si hay). Con ella y
+   * `mercadoPago`, débito, crédito y Mercado Pago se cobran con el Point; sin ella, toda
+   * venta nace pagada como siempre.
+   */
+  point?: ConfigPoint;
+  /** Sin esto (no hay variables `ARCA_*`), las ventas no se facturan. */
+  facturacion?: Facturacion;
   /** Por defecto, `SELECT 1` con el mismo cliente de Prisma. */
   verificarBase?: VerificarBase;
   /** Carpeta con el build de la web. Si no existe, la API no sirve archivos estáticos. */
@@ -47,6 +64,9 @@ export interface RutaRegistrada {
 export async function crearApp({
   prisma,
   whatsapp,
+  mercadoPago,
+  point,
+  facturacion,
   verificarBase = async () => {
     await prisma.$queryRaw`SELECT 1`;
   },
@@ -71,6 +91,8 @@ export async function crearApp({
   await app.register(fastifyCookie);
   registrarSesion(app, { prisma, ahora });
 
+  const conPoint = point && mercadoPago ? { point, mercadoPago } : undefined;
+
   await app.register(
     async (api) => {
       await api.register(rutasEstado, { verificarBase });
@@ -79,10 +101,34 @@ export async function crearApp({
       await api.register(rutasProveedores, { prefix: '/proveedores', prisma, ahora });
       await api.register(rutasProductos, { prefix: '/productos', prisma });
       await api.register(rutasStock, { prefix: '/stock', prisma });
-      await api.register(rutasVentas, { prefix: '/ventas', prisma, ahora });
-      await api.register(rutasCaja, { prefix: '/caja', prisma, ahora });
+      await api.register(rutasVentas, {
+        prefix: '/ventas',
+        prisma,
+        ahora,
+        facturacion,
+        conPoint,
+      });
+      await api.register(rutasPedidos, { prefix: '/pedidos', prisma, ahora });
+      await api.register(rutasDashboard, { prefix: '/dashboard', prisma, ahora });
+      await api.register(rutasCaja, {
+        prefix: '/caja',
+        prisma,
+        ahora,
+        facturacion,
+        conPoint: conPoint !== undefined,
+      });
       await api.register(rutasNotificaciones, { prefix: '/notificaciones', prisma });
       await api.register(rutasWhatsapp, { prefix: '/whatsapp', prisma, whatsapp });
+      await api.register(rutasMercadoPago, {
+        prefix: '/mercado-pago',
+        prisma,
+        mercadoPago,
+        point: conPoint?.point,
+        facturacion,
+        ahora,
+      });
+      await api.register(rutasFacturacion, { prefix: '/facturacion', prisma, facturacion });
+      await api.register(rutasFacturas, { prefix: '/facturas', prisma, facturacion });
     },
     { prefix: '/api' },
   );

@@ -1,0 +1,72 @@
+# Tasks
+
+## 1. Tests de valor límite (antes del código)
+
+> Tests escritos por el agente de tests antes del código. Además de los de este grupo ya están escritos: `apps/api/test/mercadopago-ordenes.test.ts` (2.4), los casos de `MP_TERMINAL_ID` y `MP_WEBHOOK_SECRET` en `config.test.ts` (2.3), `packages/shared/test/cobro-mp.test.ts` (2.2) y los de pantalla de los grupos 4 y 5 (`apps/web/test/cobro-mp.test.tsx` y `cobro-mp-admin.test.tsx`). El contrato asumido donde el design no fija nombres está comentado al principio de `cobro-mp-ayudas.ts`, `mercadopago-falso.ts` y de cada archivo de test.
+
+- [x] 1.1 Escribir `apps/api/test/mercadopago-firma.test.ts` (función pura de verificación, reloj fijo) con los escenarios de "Notificaciones de Mercado Pago con firma verificada": firma válida, firma inválida, sin header, `ts` a 300 s (acepta), a 301 s (rechaza), 301 s en el futuro (rechaza), `ts` en milisegundos, `data.id` en mayúsculas y sin `x-request-id`. Las firmas válidas se generan en el test con HMAC-SHA256 y una clave de prueba. Verificar que fallan por falta de implementación.
+- [x] 1.2 Escribir `apps/api/test/cobro-mp.test.ts` (integración con `kiosco_test`, cliente falso de MP y reloj controlado) con los escenarios de montos: "1500.00", "1500.50", "0.01", $0,00 (`400`), $0,005 (`400`), parte Point = total, parte Point = total − 0,01 con $0,01 en efectivo, efectivo de $0 (`400`), dos medios electrónicos (`400`) y MP que rechaza el monto. Verificar que fallan por falta de implementación.
+- [x] 1.3 Sumar a `cobro-mp.test.ts` los estados del pago: aprobado (`pagada`, stock descontado una vez, facturación llamada una vez), rechazado con motivo, vencido, cancelado por el empleado (`200` síncrono y `202` con confirmación posterior), aprobado mientras se cancelaba (`pagada`) y aprobado después de cancelar (venta `cancelada`, sin stock ni factura, un ingreso de MP por el monto cobrado, cobro `a_devolver`, aviso al admin; la misma aprobación por dos vías deja un solo ingreso). Incluir la venta mixta: aprobada, una sola factura automática por la parte electrónica; cancelada, ingreso y devolución solo por la parte del Point. Verificar que fallan por falta de implementación.
+- [x] 1.3b Sumar a `cobro-mp.test.ts` los bordes de la devolución en efectivo: confirmación con turno abierto (salida de efectivo por `cobro.monto`, esperado −$3.000, aviso), pedido con otro monto (se ignora), confirmación repetida (`409 DEVOLUCION_YA_CONFIRMADA`, una sola salida), pago sin turno abierto (ingreso sin turno, devolución pendiente), confirmar sin turno (`409`), "El cliente ya se fue" (`sin_devolver`, sin salida, aviso), cierre con `a_devolver` (`409 DEVOLUCION_PENDIENTE`) y con `sin_devolver` (cierra), y `pedirFactura` de una venta `pendiente` o `cancelada` (`409`). Verificar que fallan por falta de implementación.
+- [x] 1.4 Sumar los bordes de tiempo: timeout de creación a 9,9 s (queda en espera) y a 10 s ("no responde", reintento con la misma clave y un solo cobro en el falso); consulta de respaldo con la última a 2,999 s (no consulta) y a 3,000 s (consulta); vencimiento de la venta a las 10:09:59 (sigue `pendiente`), 10:10:00 y 10:10:01 (`cancelada`), con reintento que renueva el plazo y aprobación justo al vencer. Verificar que fallan por falta de implementación.
+- [x] 1.5 Sumar los escenarios del webhook contra `POST /api/mercado-pago/webhook`: notificación repetida (`200`, una sola consulta), notificación y consulta a la vez (una sola confirmación), aviso que dice aprobado con MP que informa `at_terminal`, cobro desconocido (`200`), sistema sin clave secreta (`401`) y un cobro a la vez (`409 TERMINAL_OCUPADA` con dos pedidos simultáneos). Agregar la ruta a `RUTAS_ABIERTAS` y las nuevas a `rutas-protegidas.test.ts`. Verificar que fallan por falta de implementación.
+- [x] 1.6 Sumar a `caja.test.ts` y `dashboard.test.ts` los escenarios de "Ventas en espera fuera de la caja", "Cierre con un cobro en espera" y "Ventas en espera y canceladas fuera del dashboard" (incluida la aprobación después de medianoche). Verificar que el de la caja falla hoy por el error latente de `resumenDeCaja` y que los del dashboard pasan.
+
+## 2. Modelo de datos, configuración e integración
+
+- [x] 2.1 Agregar a `schema.prisma` `pendiente` y `cancelada` al final de `EstadoVenta`, `cobro_mp_a_revisar` y `devolucion_cobro_mp` al final de `TipoNotificacion`, `devolucion_cobro` al final de `TipoMovimientoCaja`, `cobroMpId` en `MovimientoCaja` con `@@unique([cobroMpId, tipo])`, las columnas nuevas de `Venta`, `EstadoCobroMp` (con `a_devolver`, `devuelto` y `sin_devolver`), `CobroMp` y `AvisoMp`. Generar la migración `cobro_mercado_pago` y agregar a mano el índice parcial `cobros_mp_uno_activo`. Verificar con `pnpm db:migrate` sobre una base con datos de las etapas anteriores y con los tests existentes.
+- [x] 2.2 Agregar a `packages/shared`: los estados de venta, `cobro` en `ventaDetalleSchema`, el esquema del cobro y de los cobros a revisar en `mercadopago.ts`, los textos de los motivos de rechazo, `cobro_mp_a_revisar` y `devolucion_cobro_mp` en `TIPOS_NOTIFICACION`, `devolucion_cobro` en los tipos de movimiento (con su nombre en `nombreMovimientoCaja`), `devolucionesPendientes` en el estado de la caja y los códigos de error nuevos. Verificar con tests unitarios de la traducción de `status_detail`.
+- [x] 2.3 Sumar `MP_TERMINAL_ID` y `MP_WEBHOOK_SECRET` a `cargarConfig` con sus reglas (terminal exige token, secreto exige terminal) y comentadas en los `.env.example`. Verificar con `config.test.ts` cada combinación y que los errores nombran la variable sin el valor.
+- [x] 2.4 Extender `ClienteMercadoPago` con `crearOrden`, `consultarOrden` y `cancelarOrden` (header de idempotencia y de `at_terminal`, traducción de estados y de `409 already_queued_order_for_terminal`), y el cliente falso con órdenes programables. Verificar con tests contra el servidor HTTP local: creación, consulta de cada estado, cancelación `200`, `202` y `409`, red caída y timeout.
+- [x] 2.5 Implementar la verificación de la firma en `src/integrations/mercadopago/firma.ts`. Verificar que pasan los tests de 1.1.
+
+## 3. Ventas en espera en la API
+
+- [x] 3.1 Implementar la rama del Point en `registrarVenta` (validación de un solo medio electrónico, venta `pendiente` sin stock, cobro `creando` y llamada a MP fuera de la transacción). Verificar que pasan los tests de montos de 1.2 y que los tests de ventas existentes siguen pasando sin Point configurado.
+- [x] 3.2 Implementar `confirmarCobroAprobado` y `actualizarCobro` en `modules/ventas/cobro.ts`: con la venta `pendiente`, `encolarFacturaSiCorresponde(tx, venta, { facturacion, ahora })` (o `al-quedar-pagada.ts` si `facturacion-arca` no está mergeado); con la venta `cancelada`, ingreso de MP, cobro `a_devolver` y aviso, sin factura. Verificar que pasan los tests de estados de 1.3 y que los textos de los avisos coinciden completos con los del spec.
+- [x] 3.2b Implementar `POST /api/mercado-pago/cobros/:id/devolucion` y `/sin-devolver`, `devolucionesPendientes` en `GET /api/caja/estado`, las devoluciones de cobros en `resumenDeCaja` y el `409` de `pedirFactura` para ventas `pendiente` o `cancelada`. Sumar las rutas a `RUTAS_DEL_EMPLEADO`. Verificar que pasan los tests de 1.3b.
+- [x] 3.3 Implementar `POST /api/ventas/:id/cancelar`, `POST /api/ventas/:id/cobro/reintentar`, `GET /api/ventas/:id/cobro` y `GET /api/ventas/en-espera`, con permisos por rol y `409` al anular una venta `pendiente`. Verificar con tests los escenarios de "Cancelación de una venta en espera" y de reintento.
+- [x] 3.4 Implementar `revisarCobros` e `iniciarCobrosMp` en `src/jobs/cobros-mp.ts` con `iniciarCiclo`, y arrancarlo desde `server.ts` solo con Point configurado. Verificar que pasan los tests de tiempo de 1.4.
+- [x] 3.5 Implementar `POST /api/mercado-pago/webhook` (sin sesión, `bodyLimit` de 64 KB, deduplicación por `avisos_mp`), `GET /api/mercado-pago/cobros-a-revisar` y `POST /api/mercado-pago/cobros/:id/revisado`. Verificar que pasan los tests de 1.5 y `rutas-protegidas.test.ts`.
+- [x] 3.6 Corregir `resumenDeCaja` (filtro por estado) y agregar en `cerrarTurno` el `409 COBRO_EN_ESPERA` y el `409 DEVOLUCION_PENDIENTE`. Verificar que pasan los tests de 1.6 y los de cierre de 1.3b.
+- [x] 3.7 Crear el script `pnpm --filter api mp:terminales` (lista terminales y pasa una a modo PDV). Verificar contra el servidor HTTP local que lista, activa PDV y no muestra el token.
+
+## 4. Mostrador
+
+- [x] 4.1 Crear `DialogoEsperaCobro` y conectarlo a F2, F3 y F4 en `Venta.tsx`: estado cada 1 s, motivos, Reintentar (Enter), Cobrar de otra forma, Cancelar (Esc con confirmación), "Cancelando en el Point…", "El cliente llegó a pagar" y el texto exacto de "Mercado Pago no responde". Verificar con tests de Testing Library los escenarios de "Pantalla de espera del cobro", que con MP caído no hay forma de registrar un cobro electrónico a mano y que sin Point configurado F2 registra la venta como antes. Tests de pantalla ya escritos en `apps/web/test/cobro-mp.test.tsx` ("pantalla de espera del cobro" y "sin el Point configurado").
+- [x] 4.1b Crear `DialogoDevolucionCobro` (modal que no se cierra con Esc ni con clic afuera y bloquea el escaneo) con **Ya devolví $X** y **El cliente ya se fue**, alimentado por `devolucionesPendientes` cada 5 s y al abrir el turno. Verificar con tests de Testing Library los escenarios de "Aviso de devolución pendiente en el mostrador". Tests de pantalla ya escritos en `apps/web/test/cobro-mp.test.tsx` ("aviso de devolución pendiente en el mostrador").
+- [x] 4.2 Adaptar el pago mixto (F6): un solo medio electrónico con Point y "Cobrá $X en efectivo · vuelto $Y" al aprobarse. Verificar con tests los escenarios de "Pago mixto". Tests de pantalla ya escritos en `apps/web/test/cobro-mp.test.tsx` ("pago mixto con el Point").
+- [x] 4.3 Retomar la espera al cargar (`GET /api/ventas/en-espera` y carrito en `sessionStorage`), bloquear un segundo cobro y habilitar F9 solo para ventas `pagada`. Verificar con tests los escenarios de "Retomar un cobro en espera" y "Ticket de una venta en espera". Tests de pantalla ya escritos en `apps/web/test/cobro-mp.test.tsx` ("retomar un cobro en espera" y "ticket de una venta en espera") y en `cobro-mp-admin.test.tsx`.
+- [x] 4.4 Mostrar en el cierre de `Caja.tsx` el aviso de cobro en espera o de devolución pendiente y deshabilitar **Cerrar**. Verificar con un test de Testing Library y los `409` del servidor. Tests de pantalla ya escritos en `apps/web/test/cobro-mp.test.tsx` ("cierre del turno con un cobro en espera o una devolución pendiente").
+
+## 5. Pantallas del admin y listados
+
+- [x] 5.1 Mostrar los estados "En espera" y "Cobro no realizado" con motivo y fecha en `ventas/Ventas.tsx`. Verificar con tests de Testing Library el escenario "El admin revisa una venta cancelada". Tests de pantalla ya escritos en `apps/web/test/cobro-mp-admin.test.tsx`.
+- [x] 5.2 Agregar la sección **Cobros a revisar** en `admin/MercadoPago.tsx` (a revisar, devolución pendiente sin opción de revisar, y sin devolver), con nota obligatoria, y renombrar a "Devoluciones" la línea del esperado en `admin/Turnos.tsx`. Verificar con tests de Testing Library los escenarios de "Cobros a revisar para el admin". Tests de pantalla ya escritos en `apps/web/test/cobro-mp-admin.test.tsx`. Ojo: el renombre a "Devoluciones" rompe `apps/web/test/caja.test.tsx:441`, que espera "Devoluciones de anulaciones" (decide el dueño).
+
+## 6. Verificación
+
+- [ ] 6.1 Correr `pnpm --filter api test`, `pnpm --filter web test`, `pnpm typecheck` y `pnpm lint`, y verificar que todo pasa.
+- [ ] 6.2 Con el cliente falso de MP y el webhook simulado y firmado, recorrer en el navegador: débito aprobado, crédito rechazado y reintento, QR vencido y "Cobrar de otra forma", pago mixto, cancelación con `202`, recarga durante la espera, pago aprobado después de cancelar con el modal de devolución, y cierre de turno bloqueado. Verificar que la caja y el dashboard no cuentan las ventas en espera.
+
+## 7. Documentación
+
+- [x] 7.1 Actualizar `docs/requisitos-y-limites.md`: cobro por Point integrado, sin transferencias por alias, ventas en espera, vencimiento, pago aprobado después de cancelar devuelto en efectivo, solo efectivo mientras MP no responde, y cerrar la pregunta "¿QR dinámico, QR estático o Point?". Actualizar también `docs/estructura-proyecto.md` (modelos, tarea `cobros-mp` y webhook) e `infra/README.md` (variables, `mp:terminales`, configurar el webhook en el panel). Verificar que coinciden con los specs del cambio.
+
+## 8. Prueba con usuarios de prueba y con el Point real (cuando el dueño los tenga)
+
+- [ ] 8.1 Con las credenciales de prueba y el Point en modo PDV, cobrar con débito, crédito y QR, rechazar una tarjeta de prueba, dejar vencer un cobro y cancelar con el cobro en pantalla. Verificar que cada caso termina como dicen los specs y anotar el monto mínimo que acepte MP.
+- [ ] 8.2 Con la URL HTTPS del servidor, configurar el webhook (evento Order), usar "Simular notificación" y un cobro real de prueba, y verificar que la firma se valida (template, minúsculas de `data.id` y unidad de `ts`). Ajustar el design si algo difiere.
+
+## Qué tiene que aportar el dueño
+
+- **Aplicación en Mercado Pago Developers** (Tus integraciones) creada con la cuenta de MP del kiosco, con el producto Point habilitado.
+- **Credenciales de prueba y de producción** (Access Token) de esa aplicación, y **usuarios de prueba** (vendedor y comprador) para la tarea 8.1. Se cargan en `infra/.env`, nunca en el repo ni por chat.
+- **Clave secreta de webhooks**, que se genera al guardar la configuración de notificaciones (evento **Order**) en el panel de la aplicación.
+- **Point Smart** (confirmado) vinculado a la cuenta del kiosco, con el software actualizado y en modo integrado (PDV)**. El sistema trae el script para activarlo, pero hace falta la terminal encendida y con sesión iniciada.
+- **URL HTTPS pública** del servidor (`puesta-en-marcha`), para configurar el webhook. Hasta tenerla, el sistema funciona solo con la consulta de respaldo.
+
+## Workflow follow-up
+
+- Mergear después de `aviso-reposicion-diario` (usa `src/jobs/ciclo.ts`) y `saldo-mercado-pago` (usa `src/integrations/mercadopago/`), y de ser posible después de `facturacion-arca`.
+- Archivar con `/opsx:archive` cuando la CI esté en verde. Las tareas 8.1 y 8.2 pueden quedar pendientes hasta tener credenciales y servidor; si es así, anotarlo al archivar.

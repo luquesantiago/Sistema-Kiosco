@@ -10,7 +10,18 @@ import {
   crearUsuarioDePrueba,
   sesionDe,
 } from './ayudas.js';
-import { crearProductoDePrueba, verificarStockConsistente } from './stock-ayudas.js';
+import {
+  crearProductoDePrueba,
+  ingresarMercaderia,
+  verificarStockConsistente,
+} from './stock-ayudas.js';
+import { crearArcaFalso } from './arca-falso.js';
+import {
+  configArca,
+  crearAppConFacturacion,
+  crearFacturaDirecta,
+  opcionesFacturacion,
+} from './facturacion-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -257,6 +268,75 @@ describe('ítem "Varios"', () => {
   });
 });
 
+describe('costo de cada ítem vendido', () => {
+  async function costosGuardados(ventaId: string) {
+    const items = await prismaTest.itemVenta.findMany({
+      where: { ventaId },
+      orderBy: { id: 'asc' },
+    });
+    return items.map((i) => i.costoUnitario?.toFixed(2) ?? null);
+  }
+
+  function venderGaseosa(ctx: Ctx) {
+    return vender(ctx, {
+      items: [{ productoId: ctx.gaseosa.id, cantidad: 1 }],
+      pagos: [{ medio: 'efectivo', monto: '1500' }],
+      totalEsperado: '1500',
+    });
+  }
+
+  it('copia el costo que tiene el producto al vender', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+
+    const res = await venderGaseosa(ctx);
+
+    expect(res.statusCode).toBe(201);
+    expect(await costosGuardados(res.json().id)).toEqual(['1000.00']);
+  });
+
+  it('el costo guardado no cambia cuando un ingreso cambia el costo del producto', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+    const primera = (await venderGaseosa(ctx)).json();
+
+    const ingreso = await ingresarMercaderia(ctx.app, ctx.admin, [
+      { productoId: ctx.gaseosa.id, cantidad: 12, costoUnitario: '1100' },
+    ]);
+    const segunda = (await venderGaseosa(ctx)).json();
+
+    expect(ingreso.statusCode).toBe(200);
+    expect(await costosGuardados(primera.id)).toEqual(['1000.00']);
+    expect(await costosGuardados(segunda.id)).toEqual(['1100.00']);
+  });
+
+  it('un producto sin costo deja el ítem sin costo, aunque después se le cargue', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: null } });
+    const { id } = (await venderGaseosa(ctx)).json();
+
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+
+    expect(await costosGuardados(id)).toEqual([null]);
+  });
+
+  it('el ítem "Varios" queda sin costo', async () => {
+    const ctx = await preparar();
+
+    const res = await vender(ctx, {
+      items: [
+        { productoId: ctx.alfajor.id, cantidad: 1 },
+        { varios: { precio: '500' }, cantidad: 1 },
+      ],
+      pagos: [{ medio: 'efectivo', monto: '1400' }],
+      totalEsperado: '1400',
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(await costosGuardados(res.json().id)).toEqual(['600.00', null]);
+  });
+});
+
 describe('pagos de una venta', () => {
   it('acepta un pago mixto', async () => {
     const ctx = await preparar();
@@ -412,6 +492,48 @@ describe('listado de ventas según el rol', () => {
 
     expect(del20.json()).toHaveLength(1);
     expect(del21.json()).toHaveLength(0);
+  });
+
+  it('el admin ve el costo de cada ítem al vender, en el detalle y al anular', async () => {
+    const ctx = await preparar();
+    await prismaTest.producto.update({ where: { id: ctx.gaseosa.id }, data: { costo: '1000' } });
+    const venta = {
+      items: [
+        { productoId: ctx.gaseosa.id, cantidad: 1 },
+        { varios: { precio: '500' }, cantidad: 1 },
+      ],
+      pagos: [{ medio: 'efectivo', monto: '2000' }],
+      totalEsperado: '2000',
+    };
+
+    const registrada = await vender(ctx, venta, ctx.admin);
+    const { id } = registrada.json();
+    const detalle = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
+    const anulada = await anular(ctx, id, 'prueba', ctx.admin);
+
+    for (const res of [registrada, detalle, anulada]) {
+      expect(res.statusCode).toBeLessThan(300);
+      expect(res.json().items.map((i: { costoUnitario: unknown }) => i.costoUnitario)).toEqual([
+        '1000.00',
+        null,
+      ]);
+    }
+  });
+
+  it('al empleado no le llega el costo ni al vender ni al anular', async () => {
+    const ctx = await preparar();
+
+    const registrada = await ventaTipica(ctx);
+    const anulada = await anular(ctx, registrada.json().id, 'cobré dos veces');
+
+    for (const res of [registrada, anulada]) {
+      expect(res.statusCode).toBeLessThan(300);
+      expect(res.body).not.toMatch(/costo/i);
+    }
   });
 
   it('el detalle no incluye costos y el empleado no ve el de días anteriores', async () => {
@@ -620,5 +742,437 @@ describe('avisos para el admin', () => {
       cookies: ctx.empleado,
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+/*
+ * Facturación (cambio facturacion-arca): anulación de ventas facturadas, texto
+ * del aviso y facturas en el detalle (specs/ventas y specs/notificaciones).
+ *
+ * Contrato asumido para el texto: `textoAvisoAnulacion` recibe además
+ * `facturasVigentes?: { numero: '00005-00000042', importe: '3300.00' }[]` (las
+ * autorizadas) y suma, después del total, una línea en blanco, una línea por
+ * factura y una línea final con la nota de crédito por fuera.
+ */
+
+/** Como `preparar`, con la facturación configurada (punto de venta 5, homologación). */
+async function prepararConFacturacion() {
+  const arca = crearArcaFalso({ ultimo: 41, fechaUltimo: '2026-10-19' });
+  const facturacion = opcionesFacturacion(arca.cliente);
+  const { app } = await crearAppConFacturacion(MARTES_1542, facturacion);
+  await crearUsuarioDePrueba('ana', 'admin');
+  const juan = await crearUsuarioDePrueba('juan');
+  const admin = await sesionDe(app, 'ana');
+  const empleado = await sesionDe(app, 'juan');
+  const alfajor = await crearProductoDePrueba('Alfajor', { precio: '900', codigoBarras: '1' });
+  const gaseosa = await crearProductoDePrueba('Gaseosa', { precio: '1500', codigoBarras: '2' });
+  const turnoId = await abrirTurnoDePrueba(app, empleado);
+  return {
+    app,
+    adelantar: () => undefined,
+    admin,
+    empleado,
+    juan,
+    alfajor,
+    gaseosa,
+    turnoId,
+    arca,
+  };
+}
+
+type CtxFacturacion = Awaited<ReturnType<typeof prepararConFacturacion>>;
+
+/** Venta mixta de $5.000: 2 alfajores, 2 gaseosas y un "Varios" de $200; $2.000 efectivo + $3.000 débito. */
+function ventaMixta(ctx: CtxFacturacion) {
+  return vender(ctx, {
+    items: [
+      { productoId: ctx.alfajor.id, cantidad: 2 },
+      { productoId: ctx.gaseosa.id, cantidad: 2 },
+      { varios: { precio: '200' }, cantidad: 1 },
+    ],
+    pagos: [
+      { medio: 'efectivo', monto: '2000' },
+      { medio: 'debito', monto: '3000' },
+    ],
+    totalEsperado: '5000',
+  });
+}
+
+/** Reemplaza las facturas de la venta (la automática que dejó el encolado) por las indicadas. */
+async function dejarFacturas(ventaId: string, facturas: Record<string, unknown>[]) {
+  await prismaTest.factura.deleteMany({ where: { ventaId } });
+  const creadas = [];
+  for (const f of facturas) creadas.push(await crearFacturaDirecta(ventaId, f));
+  return creadas;
+}
+
+const autorizada = (numero: number, importe: string, parte = 'electronica') => ({
+  parte,
+  estado: 'autorizada',
+  importe,
+  numero,
+  fechaComprobante: new Date('2026-10-20T00:00:00Z'),
+  cae: `7645123456789${numero % 10}`,
+  caeVencimiento: new Date('2026-10-30T00:00:00Z'),
+  autorizadaEn: MARTES_1542,
+});
+
+const ENCABEZADO_3300 = (numero: number) => [
+  `*Venta #${numero} anulada*`,
+  'Fecha y hora: 20/10/2026 15:42',
+  'Anuló: Nombre juan',
+  'Motivo: cobré dos veces',
+  '',
+  '2 × Alfajor: $ 1.800,00',
+  '1 × Gaseosa: $ 1.500,00',
+  '*Total: $ 3.300,00*',
+];
+
+const ENCABEZADO_MIXTA = (numero: number) => [
+  `*Venta #${numero} anulada*`,
+  'Fecha y hora: 20/10/2026 15:42',
+  'Anuló: Nombre juan',
+  'Motivo: cobré dos veces',
+  '',
+  '2 × Alfajor: $ 1.800,00',
+  '2 × Gaseosa: $ 3.000,00',
+  '1 × Varios: $ 200,00',
+  '*Total: $ 5.000,00*',
+];
+
+async function avisoDeAnulacion() {
+  return prismaTest.notificacion.findFirstOrThrow({ where: { tipo: 'anulacion_venta' } });
+}
+
+describe('anulación de una venta con factura pendiente o en error', () => {
+  it('factura pendiente (ARCA caído) → la venta queda anulada, la factura cancelada y después no se emite', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaTipica(ctx)).json();
+    const [factura] = await dejarFacturas(id, [{ importe: '3300.00' }]);
+
+    const res = await anular(ctx, id, 'cobré dos veces');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().estado).toBe('anulada');
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: factura!.id } }),
+    ).toMatchObject({ estado: 'cancelada' });
+
+    const { procesarFacturas } = await import('../src/modules/facturacion/emision.js');
+    await procesarFacturas({
+      prisma: prismaTest,
+      arca: ctx.arca.cliente,
+      config: configArca(),
+      ahora: () => MARTES_1542,
+    });
+    expect(ctx.arca.falso.pedidos).toEqual([]);
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: factura!.id } }),
+    ).toMatchObject({ estado: 'cancelada' });
+  });
+
+  it('factura en error por el tope → la venta queda anulada y la factura cancelada', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaTipica(ctx)).json();
+    const [factura] = await dejarFacturas(id, [
+      { importe: '3300.00', estado: 'error', codigoError: 'tope', error: 'Tope.' },
+    ]);
+
+    const res = await anular(ctx, id, 'cobré dos veces');
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: factura!.id } }),
+    ).toMatchObject({ estado: 'cancelada' });
+  });
+
+  it('con la única factura pendiente, el aviso no menciona ninguna factura', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id, numero } = (await ventaTipica(ctx)).json();
+    await dejarFacturas(id, [{ importe: '3300.00' }]);
+
+    await anular(ctx, id, 'cobré dos veces');
+
+    expect((await avisoDeAnulacion()).texto).toBe(ENCABEZADO_3300(numero).join('\n'));
+  });
+});
+
+describe('anulación de una venta con factura autorizada', () => {
+  it('la venta queda anulada, la factura sigue autorizada y el aviso dice que sigue vigente', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id, numero } = (await ventaTipica(ctx)).json();
+    const [factura] = await dejarFacturas(id, [autorizada(42, '3300.00')]);
+
+    const res = await anular(ctx, id, 'cobré dos veces');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      estado: 'anulada',
+      facturas: [{ estado: 'autorizada', numero: '00005-00000042', importe: '3300.00' }],
+    });
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: factura!.id } }),
+    ).toMatchObject({ estado: 'autorizada', numero: 42 });
+    expect((await avisoDeAnulacion()).texto).toBe(
+      [
+        ...ENCABEZADO_3300(numero),
+        '',
+        'Factura C 00005-00000042 por $ 3.300,00: sigue vigente.',
+        'Hay que hacer la nota de crédito por fuera del sistema.',
+      ].join('\n'),
+    );
+  });
+
+  it('venta mixta con dos facturas autorizadas: las dos siguen autorizadas y el aviso menciona las dos', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id, numero } = (await ventaMixta(ctx)).json();
+    await dejarFacturas(id, [autorizada(42, '3000.00'), autorizada(43, '2000.00', 'efectivo')]);
+
+    const res = await anular(ctx, id, 'cobré dos veces');
+
+    expect(res.statusCode).toBe(200);
+    const facturas = await prismaTest.factura.findMany({ where: { ventaId: id } });
+    expect(facturas.map((f) => f.estado)).toEqual(['autorizada', 'autorizada']);
+    expect((await avisoDeAnulacion()).texto).toBe(
+      [
+        ...ENCABEZADO_MIXTA(numero),
+        '',
+        'Factura C 00005-00000042 por $ 3.000,00: sigue vigente.',
+        'Factura C 00005-00000043 por $ 2.000,00: sigue vigente.',
+        'Hay que hacer la nota de crédito por fuera del sistema.',
+      ].join('\n'),
+    );
+  });
+
+  it('una autorizada y la del efectivo pendiente: la pendiente se cancela y el aviso menciona solo la autorizada', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id, numero } = (await ventaMixta(ctx)).json();
+    const [automatica, delEfectivo] = await dejarFacturas(id, [
+      autorizada(42, '3000.00'),
+      { parte: 'efectivo', importe: '2000.00' },
+    ]);
+
+    await anular(ctx, id, 'cobré dos veces');
+
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: automatica!.id } }),
+    ).toMatchObject({ estado: 'autorizada' });
+    expect(
+      await prismaTest.factura.findUniqueOrThrow({ where: { id: delEfectivo!.id } }),
+    ).toMatchObject({ estado: 'cancelada' });
+    expect((await avisoDeAnulacion()).texto).toBe(
+      [
+        ...ENCABEZADO_MIXTA(numero),
+        '',
+        'Factura C 00005-00000042 por $ 3.000,00: sigue vigente.',
+        'Hay que hacer la nota de crédito por fuera del sistema.',
+      ].join('\n'),
+    );
+  });
+});
+
+describe('texto del aviso de anulación con facturas', () => {
+  const DATOS = {
+    numero: 120,
+    total: '3300.00',
+    items: [
+      { descripcion: 'Alfajor', cantidad: 2, subtotal: '1800.00' },
+      { descripcion: 'Gaseosa', cantidad: 1, subtotal: '1500.00' },
+    ],
+    anuladaPor: 'Juan',
+    motivo: 'cobré dos veces',
+    anuladaEn: MARTES_1542,
+  };
+  const SIN_FACTURAS = [
+    '*Venta #120 anulada*',
+    'Fecha y hora: 20/10/2026 15:42',
+    'Anuló: Juan',
+    'Motivo: cobré dos veces',
+    '',
+    '2 × Alfajor: $ 1.800,00',
+    '1 × Gaseosa: $ 1.500,00',
+    '*Total: $ 3.300,00*',
+  ];
+
+  it('con la factura 00005-00000042 de $3.300 dice que sigue vigente y que la nota de crédito va por fuera', () => {
+    expect(
+      textoAvisoAnulacion({
+        ...DATOS,
+        facturasVigentes: [{ numero: '00005-00000042', importe: '3300.00' }],
+      }),
+    ).toBe(
+      [
+        ...SIN_FACTURAS,
+        '',
+        'Factura C 00005-00000042 por $ 3.300,00: sigue vigente.',
+        'Hay que hacer la nota de crédito por fuera del sistema.',
+      ].join('\n'),
+    );
+  });
+
+  it('sin facturas vigentes queda igual que siempre', () => {
+    expect(textoAvisoAnulacion({ ...DATOS, facturasVigentes: [] })).toBe(SIN_FACTURAS.join('\n'));
+  });
+});
+
+describe('facturas en el detalle y el listado', () => {
+  it('venta mixta con la automática autorizada: el empleado y el admin ven la factura, $2.000 sin facturar y que se puede pedir la del efectivo', async () => {
+    const { urlQrFactura } = await import('@kiosco/shared');
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaMixta(ctx)).json();
+    await dejarFacturas(id, [autorizada(42, '3000.00')]);
+
+    for (const cookies of [ctx.empleado, ctx.admin]) {
+      const res = await ctx.app.inject({ method: 'GET', url: `/api/ventas/${id}`, cookies });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        facturas: [
+          {
+            parte: 'electronica',
+            estado: 'autorizada',
+            numero: '00005-00000042',
+            fecha: '2026-10-20',
+            importe: '3000.00',
+            cae: '76451234567892',
+            caeVencimiento: '2026-10-30',
+            qrUrl: urlQrFactura({
+              fecha: '2026-10-20',
+              cuit: '20123456786',
+              ptoVta: 5,
+              tipoCmp: 11,
+              nroCmp: 42,
+              importe: '3000.00',
+              cae: '76451234567892',
+            }),
+          },
+        ],
+        sinFacturar: '2000.00',
+        puedePedirFactura: true,
+        emisor: {
+          nombreFantasia: 'Kiosco Las Flores',
+          razonSocial: 'Pérez Juan',
+          cuit: '20123456786',
+          domicilio: 'Av. Rivadavia 1234, Morón',
+          iibb: 'Exento',
+          inicioActividades: '2020-03-01',
+          entorno: 'homologacion',
+        },
+      });
+    }
+
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
+    expect(lista.json()[0]).toMatchObject({ id, importeFacturado: '3000.00' });
+  });
+
+  it('con las dos facturas autorizadas no queda nada sin facturar ni para pedir', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaMixta(ctx)).json();
+    await dejarFacturas(id, [autorizada(42, '3000.00'), autorizada(43, '2000.00', 'efectivo')]);
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
+
+    expect(res.json()).toMatchObject({ sinFacturar: '0.00', puedePedirFactura: false });
+    expect(res.json().facturas.map((f: { parte: string }) => f.parte)).toEqual([
+      'electronica',
+      'efectivo',
+    ]);
+    const lista = await ctx.app.inject({ method: 'GET', url: '/api/ventas', cookies: ctx.admin });
+    expect(lista.json()[0]).toMatchObject({ importeFacturado: '5000.00' });
+  });
+
+  it('venta 100% en débito con la factura pendiente: sin QR, todo sin facturar todavía y nada para pedir', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaTipica(ctx)).json();
+    await dejarFacturas(id, [{ importe: '3300.00' }]);
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
+
+    expect(res.json()).toMatchObject({
+      facturas: [{ estado: 'pendiente', numero: null, cae: null, qrUrl: null, importe: '3300.00' }],
+      sinFacturar: '3300.00',
+      puedePedirFactura: false,
+    });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
+    expect(lista.json()[0]).toMatchObject({ importeFacturado: '0.00' });
+  });
+
+  it.each(['en_curso', 'error'])('una factura %s no tiene QR', async (estado) => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaTipica(ctx)).json();
+    await dejarFacturas(id, [
+      {
+        importe: '3300.00',
+        estado,
+        ...(estado === 'en_curso'
+          ? { numero: 42, fechaComprobante: new Date('2026-10-20T00:00:00Z') }
+          : { codigoError: 'rechazo_arca', error: 'Rechazo.' }),
+      },
+    ]);
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.admin,
+    });
+
+    expect(res.json().facturas).toMatchObject([{ estado, qrUrl: null }]);
+  });
+
+  it('venta en efectivo sin factura: el detalle indica que no tiene y que se puede pedir', async () => {
+    const ctx = await prepararConFacturacion();
+    const { id } = (await ventaTipica(ctx, { medio: 'efectivo', monto: '3300' })).json();
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
+
+    expect(res.json()).toMatchObject({
+      facturas: [],
+      sinFacturar: '3300.00',
+      puedePedirFactura: true,
+    });
+  });
+
+  it('sin facturación configurada: sin facturas, sin emisor y sin poder pedirla', async () => {
+    const ctx = await preparar();
+    const { id } = (await ventaTipica(ctx, { medio: 'efectivo', monto: '3300' })).json();
+
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/ventas/${id}`,
+      cookies: ctx.empleado,
+    });
+
+    expect(res.json()).toMatchObject({
+      facturas: [],
+      sinFacturar: '3300.00',
+      puedePedirFactura: false,
+      emisor: null,
+    });
+    const lista = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+    });
+    expect(lista.json()[0]).toMatchObject({ importeFacturado: '0.00' });
   });
 });

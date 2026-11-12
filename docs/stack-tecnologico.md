@@ -14,7 +14,7 @@
 | Autenticación | Sesión con cookie `httpOnly` | Sesiones en PostgreSQL, contraseñas con **argon2**, roles por ruta |
 | Tarea programada | **croner** dentro del proceso | Zona horaria `America/Argentina/Buenos_Aires` |
 | Pagos | SDK oficial **`mercadopago`** (npm) | Webhook en una ruta pública con verificación de firma |
-| Facturación | **ARCA/AFIP, WSAA + WSFE** con cliente propio | Sobre `soap` y `node-forge`; solo Factura C |
+| Facturación | **ARCA/AFIP, WSAA + WSFEv1** con cliente propio | `node-forge` (firma CMS), `fast-xml-parser` y `fetch`; QR con `qrcode` en la web; solo Factura C |
 | WhatsApp | **WAHA** (WhatsApp HTTP API), motor **GOWS** | Llamadas HTTP directas dentro de la red de Docker Compose, con API key |
 | Lector de código de barras | USB en modo HID (teclado) | No requiere drivers ni integración |
 | Impresora | Térmica de tickets (58 u 80 mm), no fiscal | `window.print()` con estilos para papel de ticket |
@@ -52,14 +52,20 @@
 
 ### Integraciones
 - **Mercado Pago:** SDK oficial `mercadopago`. El webhook entra por una ruta pública de Fastify con verificación de firma.
-- **ARCA (WSAA/WSFE):** cliente propio y acotado sobre `soap` y `node-forge` (firma CMS del ticket de acceso). Se prueba en homologación antes de producción. Plan B: `@afipsdk/afip.js`.
+- **ARCA (WSAA/WSFEv1):** cliente propio y acotado en `apps/api/src/integrations/arca/` (cambio `facturacion-arca`). Se prueba en homologación antes de producción.
+  - **`node-forge`** firma el pedido de acceso (TRA) en CMS/PKCS#7 con SHA-256. Es JavaScript puro: no necesita `openssl` en la imagen ni escribir la clave en archivos temporales (`node:crypto` no arma CMS).
+  - **`fast-xml-parser`** lee las respuestas SOAP; los sobres se arman con plantillas de texto escapadas, porque son pocos y fijos. Se descartó el paquete `soap`: baja el WSDL en tiempo de ejecución y oculta los errores de red que hay que distinguir de los rechazos.
+  - **`fetch`** nativo con timeout de 15 s, como el cliente de WAHA.
+  - El ticket de acceso se guarda en la base (`tickets_acceso_arca`) y se reutiliza mientras falte más de un minuto para que venza.
+  - Se descartaron `@afipsdk/afip.js` (sus versiones actuales pasan por un servicio en la nube del proveedor: el certificado o los datos saldrían a un tercero) y `pyafipws` (otro lenguaje).
+- **Emisión de facturas:** la tabla `facturas` hace de cola, como los avisos. Una tarea dentro de la app la revisa cada 10 s (y enseguida después de cada venta) y emite de a una (`apps/api/src/modules/facturacion/emision.ts`). Así ARCA nunca demora una venta.
 - **WAHA:** `fetch` a su API REST dentro de la red interna de Docker Compose, con API key y sin puertos publicados. Motor **GOWS** (Go, sin navegador): WEBJS, el motor por defecto, levanta un Chromium entero para unos pocos mensajes por día. La imagen queda fijada en una versión. La app solo usa endpoints comunes a todos los motores, así que pasar a NOWEB es cambiar la imagen.
 - **Envío de avisos:** la tabla `notificaciones` hace de cola de salida. Un proceso dentro de la app la revisa cada 15 s y manda los pendientes (`apps/api/src/modules/whatsapp/envio.ts`). Así WhatsApp nunca demora una venta o un cierre.
 
 ### Impresión de tickets
 - Fase inicial: `window.print()` con una hoja de estilos para papel de 58/80 mm y la térmica como impresora por defecto del navegador del kiosco.
 - Si el diálogo de impresión molesta: impresión silenciosa (Chrome con `--kiosk-printing`) o **QZ Tray** como agente local.
-- El comprobante con CAE y QR de ARCA se define en la etapa de facturación.
+- El ticket con factura suma los datos del emisor y un bloque por Factura C con su CAE y el QR de ARCA. El QR lo dibuja la web en SVG con **`qrcode`** (`QRCode.create` es sincrónico, así entra en el render del ticket antes de `window.print()`); generarlo en la API agrandaría cada detalle de venta sin evitar la librería.
 
 ### Hosting / infraestructura
 - Un **VPS** con **Docker Compose** (`infra/docker-compose.prod.yml`; el paso a paso está en [`infra/README.md`](../infra/README.md)):
@@ -93,7 +99,8 @@
 | Autenticación | JWT | Revocar sesiones es más difícil y no hay clientes de terceros |
 | Tarea programada | Cron del sistema operativo | Queda fuera del código y del despliegue con Docker Compose. Solo los backups usan un timer de systemd, porque corren fuera de la app |
 | Tarea programada | Cola tipo BullMQ | Requiere Redis; excesivo para una tarea diaria |
-| Facturación | `@afipsdk/afip.js` como opción principal | Depende de un servicio intermedio con token propio; queda como plan B |
+| Facturación | `@afipsdk/afip.js` | Sus versiones actuales pasan por un servicio en la nube del proveedor: el certificado o los datos saldrían a un tercero |
+| Facturación | Paquete `soap` | Baja el WSDL en tiempo de ejecución, es pesado y oculta los errores de red |
 | Hosting | PaaS (Railway, Render) | WAHA necesita sesión persistente y un contenedor siempre encendido; en un VPS es más barato |
 
 ## Pendiente

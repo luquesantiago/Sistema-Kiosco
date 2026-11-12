@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { comparar } from './decimales.js';
 import { montoPositivoSchema, montoSalidaSchema, montoSchema } from './montos.js';
-import { MEDIOS_PAGO, referenciaSchema } from './ventas.js';
+import { fechaSchema, MEDIOS_PAGO, referenciaSchema } from './ventas.js';
 
 const motivoSchema = z.string().trim().min(3, 'Escribí el motivo (al menos 3 letras).').max(200);
 
@@ -44,32 +44,106 @@ export const cierreSchema = z
   });
 export type Cierre = z.input<typeof cierreSchema>;
 
-export const TIPOS_MOVIMIENTO_CAJA = ['gasto', 'retiro', 'ingreso'] as const;
+/**
+ * `pago_proveedor` solo lo crea el pago de un pedido y `devolucion_cobro` la devolución en
+ * efectivo de un cobro de Mercado Pago de una venta cancelada; no se registran sueltos.
+ */
+export const TIPOS_MOVIMIENTO_CAJA = [
+  'gasto',
+  'retiro',
+  'ingreso',
+  'pago_proveedor',
+  'devolucion_cobro',
+] as const;
 export const tipoMovimientoCajaSchema = z.enum(TIPOS_MOVIMIENTO_CAJA);
+/** Los que se registran sueltos, desde F8 o la pantalla de Mercado Pago. */
+export const TIPOS_MOVIMIENTO_SUELTO = ['gasto', 'retiro', 'ingreso'] as const;
+export type TipoMovimientoSuelto = (typeof TIPOS_MOVIMIENTO_SUELTO)[number];
 export type TipoMovimientoCaja = z.infer<typeof tipoMovimientoCajaSchema>;
 
 export const NOMBRE_MOVIMIENTO_CAJA: Record<TipoMovimientoCaja, string> = {
   gasto: 'Gasto',
   retiro: 'Retiro',
   ingreso: 'Ingreso',
+  pago_proveedor: 'Pago a proveedor',
+  devolucion_cobro: 'Devolución de cobro de Mercado Pago',
 };
 
-export const movimientoCajaEntradaSchema = z.object({
-  tipo: tipoMovimientoCajaSchema,
-  monto: montoPositivoSchema,
-  motivo: motivoSchema,
+/** Lista fija: los pagos a proveedor no son gastos (van por pedidos). */
+export const CATEGORIAS_GASTO = ['servicios', 'insumos', 'otro'] as const;
+export const categoriaGastoSchema = z.enum(CATEGORIAS_GASTO, {
+  error: 'Elegí la categoría del gasto.',
 });
+export type CategoriaGasto = z.infer<typeof categoriaGastoSchema>;
+
+export const NOMBRE_CATEGORIA_GASTO: Record<CategoriaGasto, string> = {
+  servicios: 'Servicios',
+  insumos: 'Insumos',
+  otro: 'Otro',
+};
+
+/** De dónde sale o adónde entra la plata: el cajón o la cuenta de MP del kiosco. */
+export const CUENTAS = ['efectivo', 'mercado_pago'] as const;
+export const cuentaSchema = z.enum(CUENTAS);
+export type Cuenta = z.infer<typeof cuentaSchema>;
+
+export const NOMBRE_CUENTA: Record<Cuenta, string> = {
+  efectivo: 'Efectivo',
+  mercado_pago: 'Mercado Pago',
+};
+
+/** El gasto exige categoría; el retiro y el ingreso no la aceptan. Sin cuenta, es efectivo. */
+export const movimientoCajaEntradaSchema = z.discriminatedUnion('tipo', [
+  z.object({
+    tipo: z.literal('gasto'),
+    categoria: categoriaGastoSchema,
+    cuenta: cuentaSchema.default('efectivo'),
+    monto: montoPositivoSchema,
+    motivo: motivoSchema,
+  }),
+  z.object({
+    tipo: z.enum(['retiro', 'ingreso']),
+    categoria: z.null({ error: 'Solo los gastos llevan categoría.' }).optional(),
+    cuenta: cuentaSchema.default('efectivo'),
+    monto: montoPositivoSchema,
+    motivo: motivoSchema,
+  }),
+]);
 export type MovimientoCajaEntrada = z.input<typeof movimientoCajaEntradaSchema>;
 
 export const movimientoCajaSchema = z.object({
   id: z.uuid(),
   tipo: tipoMovimientoCajaSchema,
+  categoria: categoriaGastoSchema.nullable(),
+  cuenta: cuentaSchema,
+  /** Vacío solo en movimientos de Mercado Pago del admin sin turno abierto. */
+  turnoId: z.uuid().nullable(),
   monto: montoSalidaSchema,
   motivo: z.string(),
   usuario: referenciaSchema,
   creadoEn: z.iso.datetime(),
 });
 export type MovimientoCaja = z.infer<typeof movimientoCajaSchema>;
+
+/** "Gasto · Insumos · Mercado Pago" o "Retiro": cómo se nombra un movimiento en los listados. */
+export function nombreMovimientoCaja(
+  m: Pick<MovimientoCaja, 'tipo' | 'categoria' | 'cuenta'>,
+): string {
+  const partes = [NOMBRE_MOVIMIENTO_CAJA[m.tipo]];
+  if (m.categoria) partes.push(NOMBRE_CATEGORIA_GASTO[m.categoria]);
+  if (m.cuenta === 'mercado_pago') partes.push(NOMBRE_CUENTA.mercado_pago);
+  return partes.join(' · ');
+}
+
+/** Movimientos de Mercado Pago del admin, por rango de fechas en hora de Argentina. */
+export const listadoMovimientosMpQuerySchema = z.object({
+  desde: fechaSchema.optional(),
+  hasta: fechaSchema.optional(),
+  pagina: z.coerce.number().int().min(1).default(1),
+});
+export type ListadoMovimientosMpQuery = z.input<typeof listadoMovimientosMpQuerySchema>;
+
+export const MOVIMIENTOS_MP_POR_PAGINA = 50;
 
 /** Lo que necesita el mostrador para decidir si pide abrir, cerrar o deja vender. */
 export const estadoCajaSchema = z.object({
@@ -83,8 +157,23 @@ export const estadoCajaSchema = z.object({
     .nullable(),
   /** Lo que quedó en caja al cerrar el último turno ($0 si nunca hubo uno). */
   montoSugerido: montoSalidaSchema,
+  /**
+   * El mostrador ofrece pedir factura (F10). Solo viene, en `true`, si la
+   * facturación con ARCA está configurada; sin configuración no se manda.
+   */
+  facturacionHabilitada: z.boolean().optional(),
+  /**
+   * El cobro con débito, crédito o Mercado Pago pasa por el Point. Solo viene, en `true`,
+   * con el Point configurado; sin él no se manda (y tampoco `devolucionesPendientes`).
+   */
+  pointHabilitado: z.boolean().optional(),
+  /** Cobros de ventas canceladas que se aprobaron igual: devolverlos en efectivo. */
+  devolucionesPendientes: z
+    .array(z.object({ cobroId: z.uuid(), monto: montoSalidaSchema, ventaNumero: z.number().int() }))
+    .optional(),
 });
 export type EstadoCaja = z.infer<typeof estadoCajaSchema>;
+export type DevolucionPendiente = NonNullable<EstadoCaja['devolucionesPendientes']>[number];
 
 /** Respuesta del cierre. El empleado no recibe `esperado` ni `diferencia` (cierre ciego). */
 export const cierreRespuestaSchema = z.object({
@@ -95,7 +184,11 @@ export const cierreRespuestaSchema = z.object({
 });
 export type CierreRespuesta = z.infer<typeof cierreRespuestaSchema>;
 
-/** Cómo se llega al esperado: monto inicial + efectivo vendido + ingresos - gastos - retiros - anulado. */
+/**
+ * Cómo se llega al esperado: monto inicial + efectivo vendido + ingresos - gastos - retiros -
+ * devoluciones. Solo cuentan los movimientos en efectivo; las anulaciones se devuelven siempre
+ * en efectivo, por el total de la venta.
+ */
 export const resumenCajaSchema = z.object({
   cantidadVentas: z.number().int(),
   porMedio: z.object(
@@ -109,7 +202,8 @@ export const resumenCajaSchema = z.object({
   ingresos: montoSalidaSchema,
   gastos: montoSalidaSchema,
   retiros: montoSalidaSchema,
-  efectivoAnulado: montoSalidaSchema,
+  pagosProveedor: montoSalidaSchema,
+  devoluciones: montoSalidaSchema,
   esperado: montoSalidaSchema,
 });
 export type ResumenCaja = z.infer<typeof resumenCajaSchema>;
@@ -136,7 +230,7 @@ export const turnoDetalleSchema = turnoResumenSchema.extend({
   motivoRetiroCierre: z.string().nullable(),
   quedoEnCaja: montoSalidaSchema.nullable(),
   movimientos: z.array(movimientoCajaSchema),
-  /** Ventas anuladas durante este turno con pago en efectivo, que salieron de esta caja. */
+  /** Ventas anuladas durante este turno: su total se devolvió en efectivo de esta caja. */
   anulaciones: z.array(
     z.object({
       ventaId: z.uuid(),

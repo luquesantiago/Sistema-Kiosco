@@ -1,7 +1,12 @@
 import {
+  comparar,
+  NOMBRE_ESTADO_VENTA,
   NOMBRE_MEDIO,
+  restar,
+  sumar,
   VENTAS_POR_PAGINA,
   type Anulacion,
+  type FacturaVenta,
   type VentaDetalle,
   type VentaResumen,
 } from '@kiosco/shared';
@@ -16,15 +21,130 @@ import { formatearPesos } from '../lib/montos.js';
 import { useImpresionTicket } from '../pos/Ticket.js';
 
 function Estado({ venta }: { venta: VentaResumen }) {
-  return venta.estado === 'anulada' ? (
-    <span className="rounded bg-red-100 px-2 py-0.5 text-sm text-red-800">Anulada</span>
-  ) : (
-    <span className="text-sm text-slate-600">Pagada</span>
-  );
+  switch (venta.estado) {
+    case 'anulada':
+      return <span className="rounded bg-red-100 px-2 py-0.5 text-sm text-red-800">Anulada</span>;
+    // Cobro con el Point: esperando la aprobación, o no se llegó a cobrar.
+    case 'pendiente':
+      return (
+        <span className="rounded bg-amber-100 px-2 py-0.5 text-sm text-amber-900">
+          {NOMBRE_ESTADO_VENTA.pendiente}
+        </span>
+      );
+    case 'cancelada':
+      return (
+        <span className="rounded bg-slate-200 px-2 py-0.5 text-sm text-slate-700">
+          {NOMBRE_ESTADO_VENTA.cancelada}
+        </span>
+      );
+    default:
+      return <span className="text-sm text-slate-600">Pagada</span>;
+  }
 }
 
 function medios(venta: VentaResumen): string {
   return venta.medios.map((m) => NOMBRE_MEDIO[m]).join(' + ');
+}
+
+/** "Factura" si todo está facturado y autorizado, "Factura parcial" si solo una parte. */
+function MarcaFactura({ venta }: { venta: VentaResumen }) {
+  const facturado = venta.importeFacturado ?? '0.00';
+  if (comparar(facturado, 0) <= 0) return null;
+  const completa = comparar(facturado, venta.total) >= 0;
+  return (
+    <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-900">
+      {completa ? 'Factura' : 'Factura parcial'}
+    </span>
+  );
+}
+
+/** Cómo se lee el estado de una factura en el detalle. */
+function textoFactura(f: FacturaVenta): string {
+  if (f.estado === 'autorizada') return `Factura C ${f.numero}`;
+  if (f.estado === 'pendiente' || f.estado === 'en_curso') return 'En trámite';
+  if (f.estado === 'error') return 'Con error (la revisa el admin)';
+  return 'Cancelada';
+}
+
+/** Facturas de la venta, lo que quedó sin facturar y el pedido de la factura del efectivo. */
+function FacturasDeLaVenta({ venta }: { venta: VentaDetalle }) {
+  const queryClient = useQueryClient();
+  const pedido = useMutation({
+    mutationFn: () => pedir<FacturaVenta>('POST', `/ventas/${venta.id}/factura`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ventas'] }),
+  });
+  const facturas = venta.facturas ?? [];
+  // Sin facturación configurada y sin facturas, no hay nada que mostrar.
+  if (!venta.emisor && facturas.length === 0) return null;
+
+  const enTramite = sumar(
+    '0',
+    ...facturas
+      .filter((f) => f.estado === 'pendiente' || f.estado === 'en_curso')
+      .map((f) => f.importe),
+  );
+  const sinFacturar = restar(venta.sinFacturar ?? '0', enTramite);
+  const puedePedir = venta.estado === 'pagada' && venta.puedePedirFactura === true;
+
+  return (
+    <section className="space-y-2 rounded-lg bg-white p-3 shadow">
+      <h2 className="font-semibold">Factura</h2>
+      {facturas.length === 0 ? (
+        <p className="text-slate-600">Sin factura.</p>
+      ) : (
+        <ul className="space-y-1" aria-label="Facturas">
+          {facturas.map((f) => (
+            <li key={f.id} className="flex flex-wrap justify-between gap-2">
+              <span>
+                {textoFactura(f)}
+                {f.estado === 'autorizada' && f.cae && (
+                  <span className="text-sm text-slate-600">
+                    {' '}
+                    · CAE {f.cae}
+                    {f.caeVencimiento &&
+                      ` · vence ${f.caeVencimiento.split('-').reverse().join('/')}`}
+                  </span>
+                )}
+              </span>
+              <span>{formatearPesos(f.importe)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {facturas.length > 0 && comparar(sinFacturar, 0) > 0 && (
+        <p className="text-slate-600">Sin facturar: {formatearPesos(sinFacturar)}</p>
+      )}
+      {puedePedir && (
+        <button
+          type="button"
+          className="boton-secundario"
+          disabled={pedido.isPending}
+          onClick={() => pedido.mutate()}
+        >
+          Pedir factura
+        </button>
+      )}
+      <MensajeError error={pedido.error} />
+    </section>
+  );
+}
+
+/** Antes de anular: las facturas autorizadas siguen vigentes y no hay nota de crédito. */
+function AvisoFacturasVigentes({ venta }: { venta: VentaDetalle }) {
+  const vigentes = (venta.facturas ?? []).filter((f) => f.estado === 'autorizada');
+  if (vigentes.length === 0) return null;
+  return (
+    <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      <ul>
+        {vigentes.map((f) => (
+          <li key={f.id}>
+            Factura C {f.numero} por {formatearPesos(f.importe)}: sigue vigente en ARCA.
+          </li>
+        ))}
+      </ul>
+      <p>El sistema no hace notas de crédito: la nota de crédito se hace por fuera.</p>
+    </div>
+  );
 }
 
 /** Ventas del día (el admin puede elegir fechas), para reimprimir o anular. */
@@ -106,6 +226,7 @@ export function Ventas() {
                 {v.usuario.nombre} · {medios(v)}
               </span>
               <Estado venta={v} />
+              <MarcaFactura venta={v} />
             </Link>
           </li>
         ))}
@@ -148,6 +269,7 @@ export function Ventas() {
                 <td className="p-3">{medios(v)}</td>
                 <td className="p-3">
                   <Estado venta={v} />
+                  <MarcaFactura venta={v} />
                 </td>
               </tr>
             ))}
@@ -227,6 +349,7 @@ function FormularioAnulacion({ venta }: { venta: VentaDetalle }) {
       <p className="text-sm text-slate-600">
         El stock vuelve a sumar lo vendido y se le avisa al admin.
       </p>
+      <AvisoFacturasVigentes venta={venta} />
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
@@ -246,7 +369,7 @@ function FormularioAnulacion({ venta }: { venta: VentaDetalle }) {
 
 export function DetalleVenta() {
   const { id = '' } = useParams();
-  const { imprimir, ticket } = useImpresionTicket();
+  const { imprimirConFactura, ticket } = useImpresionTicket();
   const {
     data: venta,
     isPending,
@@ -255,6 +378,8 @@ export function DetalleVenta() {
     queryKey: ['ventas', 'detalle', id],
     queryFn: () => pedir<VentaDetalle>('GET', `/ventas/${id}`),
   });
+  // La API manda el costo solo al admin: si viene, se muestra la columna.
+  const conCostos = venta?.items.some((i) => i.costoUnitario !== undefined) ?? false;
 
   return (
     <section className="space-y-4">
@@ -276,6 +401,11 @@ export function DetalleVenta() {
           <p className="text-slate-700">
             {formatearFechaHora(venta.creadaEn)} · Vendió {venta.usuario.nombre}
           </p>
+          {venta.cancelacion && (
+            <p className="rounded-lg bg-slate-100 p-3 text-slate-800">
+              {`No se cobró. Cancelada el ${formatearFechaHora(venta.cancelacion.en)}: ${venta.cancelacion.motivo}`}
+            </p>
+          )}
           {venta.anulacion && (
             <p className="rounded-lg bg-red-50 p-3 text-red-900">
               Anulada el {formatearFechaHora(venta.anulacion.en)} por {venta.anulacion.por.nombre}:{' '}
@@ -290,6 +420,7 @@ export function DetalleVenta() {
                   <th className="p-3">Producto</th>
                   <th className="p-3 text-right">Cant.</th>
                   <th className="p-3 text-right">Precio</th>
+                  {conCostos && <th className="p-3 text-right">Costo</th>}
                   <th className="p-3 text-right">Subtotal</th>
                 </tr>
               </thead>
@@ -299,6 +430,11 @@ export function DetalleVenta() {
                     <td className="p-3">{item.descripcion}</td>
                     <td className="p-3 text-right">{item.cantidad}</td>
                     <td className="p-3 text-right">{formatearPesos(item.precioUnitario)}</td>
+                    {conCostos && (
+                      <td className="p-3 text-right text-slate-600">
+                        {item.costoUnitario ? formatearPesos(item.costoUnitario) : '—'}
+                      </td>
+                    )}
                     <td className="p-3 text-right">{formatearPesos(item.subtotal)}</td>
                   </tr>
                 ))}
@@ -327,10 +463,19 @@ export function DetalleVenta() {
             ))}
           </ul>
 
+          <FacturasDeLaVenta venta={venta} />
+
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="boton-secundario" onClick={() => imprimir(venta)}>
-              Reimprimir ticket
-            </button>
+            {/* Una venta en espera o cancelada no se cobró: no tiene ticket. */}
+            {(venta.estado === 'pagada' || venta.estado === 'anulada') && (
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={() => void imprimirConFactura(venta)}
+              >
+                Reimprimir ticket
+              </button>
+            )}
             {venta.estado === 'pagada' && <FormularioAnulacion venta={venta} />}
           </div>
         </>

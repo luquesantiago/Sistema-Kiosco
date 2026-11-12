@@ -2,7 +2,7 @@ import {
   comparar,
   MEDIOS_PAGO,
   NOMBRE_MEDIO,
-  NOMBRE_MOVIMIENTO_CAJA,
+  nombreMovimientoCaja,
   type TurnoDetalle,
   type TurnoResumen,
 } from '@kiosco/shared';
@@ -138,7 +138,8 @@ export function DetalleTurno() {
           <Fila nombre="Ingresos" monto={r.ingresos} signo="+" />
           <Fila nombre="Gastos" monto={r.gastos} signo="−" />
           <Fila nombre="Retiros" monto={r.retiros} signo="−" />
-          <Fila nombre="Anulaciones en efectivo" monto={r.efectivoAnulado} signo="−" />
+          <Fila nombre="Pagos a proveedores" monto={r.pagosProveedor} signo="−" />
+          <Fila nombre="Devoluciones" monto={r.devoluciones} signo="−" />
           <div className="flex justify-between gap-2 py-1 text-lg font-semibold">
             <dt>Esperado</dt>
             <dd>{formatearPesos(r.esperado)}</dd>
@@ -176,7 +177,7 @@ export function DetalleTurno() {
           {turno.movimientos.map((m) => (
             <li key={m.id} className="flex justify-between gap-2 py-1">
               <span>
-                {formatearHora(m.creadoEn)} · {NOMBRE_MOVIMIENTO_CAJA[m.tipo]}: {m.motivo} (
+                {formatearHora(m.creadoEn)} · {nombreMovimientoCaja(m)}: {m.motivo} (
                 {m.usuario.nombre})
               </span>
               <span className="font-medium">{formatearPesos(m.monto)}</span>

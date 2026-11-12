@@ -1,20 +1,32 @@
 import {
+  CATEGORIAS_GASTO,
+  CODIGOS_ERROR,
   comparar,
+  CUENTAS,
+  NOMBRE_CATEGORIA_GASTO,
+  NOMBRE_CUENTA,
   NOMBRE_MOVIMIENTO_CAJA,
+  nombreMovimientoCaja,
+  sumar,
+  type CategoriaGasto,
   type CierreRespuesta,
+  type Cuenta,
   type EstadoCaja,
   type MovimientoCaja,
-  type TipoMovimientoCaja,
+  type MovimientoCajaEntrada,
+  type TipoMovimientoSuelto,
 } from '@kiosco/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { pedir } from '../api/cliente.js';
+import { ErrorDeApi, pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
+import { OpcionesBoton } from '../app/OpcionesBoton.js';
+import { LineaSaldoMercadoPago } from '../app/SaldoMercadoPago.js';
 import { useSalir } from '../app/sesion.js';
 import { formatearHora } from '../lib/fechas.js';
 import { entradaAMonto, formatearPesos, montoParaEditar } from '../lib/montos.js';
-import { CLAVE_ESTADO_CAJA, esErrorDeTurno } from './estadoCaja.js';
+import { CLAVE_ESTADO_CAJA, esErrorDeTurno, useEstadoCaja } from './estadoCaja.js';
 import { Dialogo } from './Dialogos.js';
 
 type Responsable = NonNullable<EstadoCaja['turnoAbierto']>['responsable'];
@@ -133,6 +145,17 @@ export function DialogoCerrarTurno({
     mutationFn: (datos: { montoContado: string; retiro: string | null; motivoRetiro: string }) =>
       pedir<CierreRespuesta>('POST', `/caja/turnos/${turnoId}/cerrar`, datos),
   });
+  // Con un cobro del Point en espera o una devolución pendiente, el turno no se cierra.
+  const devoluciones = useEstadoCaja().data?.devolucionesPendientes ?? [];
+  const avisoDevolucion =
+    devoluciones.length > 0
+      ? `Antes de cerrar, devolvé ${formatearPesos(sumar(...devoluciones.map((d) => d.monto)))} en efectivo de un cobro cancelado`
+      : null;
+  const bloqueadoPorServidor =
+    cierre.error instanceof ErrorDeApi &&
+    (cierre.error.codigo === CODIGOS_ERROR.cobroEnEspera ||
+      cierre.error.codigo === CODIGOS_ERROR.devolucionPendiente);
+  const bloqueado = avisoDevolucion !== null || bloqueadoPorServidor;
   // El estado de la caja se refresca recién al salir del diálogo, para no
   // desmontarlo antes de mostrar lo que quedó.
   const continuar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_CAJA });
@@ -154,7 +177,7 @@ export function DialogoCerrarTurno({
       return;
     }
     setProblema(null);
-    if (!cierre.isPending) {
+    if (!cierre.isPending && !bloqueado) {
       cierre.mutate({ montoContado, retiro: montoRetiro, motivoRetiro: motivo.trim() });
     }
   };
@@ -203,6 +226,11 @@ export function DialogoCerrarTurno({
   return (
     <Dialogo titulo={titulo} alCerrar={alCancelar}>
       <form onSubmit={cerrar} className="space-y-4">
+        {avisoDevolucion && (
+          <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">
+            {avisoDevolucion}
+          </p>
+        )}
         <label className="block">
           <span className="text-sm font-medium">Efectivo contado en la caja</span>
           <input
@@ -241,7 +269,7 @@ export function DialogoCerrarTurno({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <button type="submit" className="boton" disabled={cierre.isPending}>
+          <button type="submit" className="boton" disabled={cierre.isPending || bloqueado}>
             Cerrar turno (Enter)
           </button>
           <button type="button" className="boton-secundario" onClick={alCancelar}>
@@ -259,11 +287,16 @@ const CLAVE_MOVIMIENTOS = ['caja', 'movimientos'] as const;
 /** F8: gasto o retiro (más ingreso para el admin) y los movimientos del turno. */
 export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar: () => void }) {
   const queryClient = useQueryClient();
-  const tipos: TipoMovimientoCaja[] = esAdmin
+  const tipos: TipoMovimientoSuelto[] = esAdmin
     ? ['gasto', 'retiro', 'ingreso']
     : ['gasto', 'retiro'];
-  const [tipo, setTipo] = useState<TipoMovimientoCaja>('gasto');
+  const [tipo, setTipo] = useState<TipoMovimientoSuelto>('gasto');
   const [monto, setMonto] = useState('');
+  // Sin categoría preseleccionada, para que "Otro" no se llene por apuro.
+  const [categoria, setCategoria] = useState<CategoriaGasto | null>(null);
+  // Efectivo es lo común en el mostrador; el empleado solo elige cuenta en los gastos.
+  const [cuenta, setCuenta] = useState<Cuenta>('efectivo');
+  const conCuenta = tipo === 'gasto' || esAdmin;
   const [motivo, setMotivo] = useState('');
   const [problema, setProblema] = useState<string | null>(null);
   const movimientos = useQuery({
@@ -271,10 +304,12 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
     queryFn: () => pedir<MovimientoCaja[]>('GET', '/caja/movimientos'),
   });
   const registro = useMutation({
-    mutationFn: (datos: { tipo: TipoMovimientoCaja; monto: string; motivo: string }) =>
+    mutationFn: (datos: MovimientoCajaEntrada) =>
       pedir<MovimientoCaja>('POST', '/caja/movimientos', datos),
     onSuccess: () => {
       setMonto('');
+      setCategoria(null);
+      setCuenta('efectivo');
       setMotivo('');
       void queryClient.invalidateQueries({ queryKey: CLAVE_MOVIMIENTOS });
     },
@@ -293,12 +328,26 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
       setProblema('Escribí un monto mayor que cero.');
       return;
     }
+    if (tipo === 'gasto' && categoria === null) {
+      setProblema('Elegí la categoría del gasto.');
+      return;
+    }
     if (motivo.trim().length < 3) {
       setProblema('Escribí el motivo (al menos 3 letras).');
       return;
     }
     setProblema(null);
-    if (!registro.isPending) registro.mutate({ tipo, monto: valor, motivo: motivo.trim() });
+    if (registro.isPending) return;
+    const base = {
+      cuenta: conCuenta ? cuenta : ('efectivo' as const),
+      monto: valor,
+      motivo: motivo.trim(),
+    };
+    if (tipo === 'gasto') {
+      if (categoria !== null) registro.mutate({ tipo, categoria, ...base });
+    } else {
+      registro.mutate({ tipo, ...base });
+    }
   };
 
   return (
@@ -330,12 +379,32 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
             onChange={(e) => setMonto(e.target.value)}
           />
         </label>
+        {tipo === 'gasto' && (
+          <OpcionesBoton
+            leyenda="Categoría"
+            nombre="categoria"
+            opciones={CATEGORIAS_GASTO}
+            nombres={NOMBRE_CATEGORIA_GASTO}
+            valor={categoria}
+            alCambiar={setCategoria}
+          />
+        )}
+        {conCuenta && (
+          <OpcionesBoton
+            leyenda="Sale de"
+            nombre="cuenta"
+            opciones={CUENTAS}
+            nombres={NOMBRE_CUENTA}
+            valor={cuenta}
+            alCambiar={setCuenta}
+          />
+        )}
         <label className="block">
           <span className="text-sm font-medium">Motivo</span>
           <input
             className="campo"
             autoComplete="off"
-            placeholder={tipo === 'gasto' ? 'Por ejemplo: pago a proveedor' : undefined}
+            placeholder={tipo === 'gasto' ? 'Por ejemplo: bolsas, luz, limpieza' : undefined}
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
           />
@@ -360,14 +429,16 @@ export function DialogoCaja({ esAdmin, alCerrar }: { esAdmin: boolean; alCerrar:
         </div>
         <MensajeError error={registro.error} />
       </form>
-      <div>
+      <div className="space-y-2">
+        {/* Solo el saldo de MP: el esperado de la caja nunca se muestra en el mostrador. */}
+        <LineaSaldoMercadoPago />
         <h3 className="text-sm font-semibold text-slate-600">Movimientos del turno</h3>
         {movimientos.data?.length === 0 && <p className="text-sm text-slate-600">Ninguno.</p>}
         <ul aria-label="Movimientos del turno" className="max-h-40 overflow-y-auto text-sm">
           {movimientos.data?.map((m) => (
             <li key={m.id} className="flex justify-between gap-2 border-b py-1 last:border-0">
               <span>
-                {formatearHora(m.creadoEn)} · {NOMBRE_MOVIMIENTO_CAJA[m.tipo]}: {m.motivo}
+                {formatearHora(m.creadoEn)} · {nombreMovimientoCaja(m)}: {m.motivo}
               </span>
               <span className="font-medium">{formatearPesos(m.monto)}</span>
             </li>

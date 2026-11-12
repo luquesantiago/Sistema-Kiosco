@@ -33,3 +33,15 @@ export function formatearFechaHora(instante: Date): string {
 export function formatearHora(instante: Date): string {
   return hora.format(instante);
 }
+
+const NOMBRE_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/**
+ * "jueves 12/11" para una fecha "AAAA-MM-DD". Es una fecha sin hora: se lee en
+ * UTC para que no se corra un día.
+ */
+export function formatearDiaYFecha(fecha: string): string {
+  const [, mes, dia] = fecha.split('-');
+  const diaSemana = NOMBRE_DIA[new Date(`${fecha}T00:00:00Z`).getUTCDay()]!;
+  return `${diaSemana} ${dia}/${mes}`;
+}

@@ -1,8 +1,19 @@
-import { comparar, NOMBRE_MEDIO, restar, type ResumenCaja } from '@kiosco/shared';
+import {
+  comparar,
+  NOMBRE_CATEGORIA_GASTO,
+  NOMBRE_MEDIO,
+  restar,
+  type CategoriaGasto,
+  type Cuenta,
+  type ResumenCaja,
+} from '@kiosco/shared';
 import { formatearFechaHora, formatearHora, formatearPesos } from '../../lib/formato.js';
 
 export interface DatosAvisoMovimiento {
   tipo: 'gasto' | 'retiro';
+  /** Solo en los gastos. */
+  categoria: CategoriaGasto | null;
+  cuenta: Cuenta;
   monto: string;
   motivo: string;
   usuario: string;
@@ -12,13 +23,18 @@ export interface DatosAvisoMovimiento {
 /** Aviso al admin por un gasto o retiro que registró un empleado. */
 export function textoAvisoMovimiento({
   tipo,
+  categoria,
+  cuenta,
   monto,
   motivo,
   usuario,
   creadoEn,
 }: DatosAvisoMovimiento): string {
+  const origen = cuenta === 'mercado_pago' ? 'de Mercado Pago' : 'de caja';
+  const titulo = `${tipo === 'gasto' ? 'Gasto' : 'Retiro'} ${origen}`;
+  const encabezado = categoria ? `${titulo} · ${NOMBRE_CATEGORIA_GASTO[categoria]}` : titulo;
   return [
-    `*${tipo === 'gasto' ? 'Gasto' : 'Retiro'} de caja: ${formatearPesos(monto)}*`,
+    `*${encabezado}: ${formatearPesos(monto)}*`,
     `Fecha y hora: ${formatearFechaHora(creadoEn)}`,
     `Registró: ${usuario}`,
     `Motivo: ${motivo}`,
@@ -67,7 +83,9 @@ export function textoAvisoCierre(d: DatosAvisoCierre): string {
     ['Ingresos', r.ingresos],
     ['Gastos', r.gastos],
     ['Retiros', r.retiros],
-    ['Anulaciones en efectivo', r.efectivoAnulado],
+    ['Pagos a proveedores', r.pagosProveedor],
+    // Anulaciones y cobros de Mercado Pago de ventas canceladas, devueltos en efectivo.
+    ['Devoluciones', r.devoluciones],
   ];
   for (const [nombre, monto] of movimientos) {
     if (!esCero(monto)) lineas.push(`${nombre}: ${formatearPesos(monto)}`);

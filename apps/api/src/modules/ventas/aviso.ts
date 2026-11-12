@@ -7,6 +7,8 @@ export interface DatosAvisoAnulacion {
   anuladaPor: string;
   motivo: string;
   anuladaEn: Date;
+  /** Facturas autorizadas de la venta: siguen vigentes en ARCA. `numero` formateado. */
+  facturasVigentes?: { numero: string; importe: string }[];
 }
 
 /** Texto del aviso al admin por una venta anulada, legible en WhatsApp. */
@@ -17,8 +19,9 @@ export function textoAvisoAnulacion({
   anuladaPor,
   motivo,
   anuladaEn,
+  facturasVigentes = [],
 }: DatosAvisoAnulacion): string {
-  return [
+  const lineas = [
     `*Venta #${numero} anulada*`,
     `Fecha y hora: ${formatearFechaHora(anuladaEn)}`,
     `Anuló: ${anuladaPor}`,
@@ -26,5 +29,16 @@ export function textoAvisoAnulacion({
     '',
     ...items.map((i) => `${i.cantidad} × ${i.descripcion}: ${formatearPesos(i.subtotal)}`),
     `*Total: ${formatearPesos(total)}*`,
-  ].join('\n');
+  ];
+  if (facturasVigentes.length > 0) {
+    // El sistema no emite notas de crédito.
+    lineas.push(
+      '',
+      ...facturasVigentes.map(
+        (f) => `Factura C ${f.numero} por ${formatearPesos(f.importe)}: sigue vigente.`,
+      ),
+      'Hay que hacer la nota de crédito por fuera del sistema.',
+    );
+  }
+  return lineas.join('\n');
 }

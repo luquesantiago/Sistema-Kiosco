@@ -1,6 +1,8 @@
 import {
   CODIGOS_ERROR,
   preciosActualesSchema,
+  type DevolucionPendiente,
+  type FacturaVenta,
   type MedioPago,
   type PagoEntrada,
   type ProductoVenta,
@@ -13,6 +15,7 @@ import { ErrorDeApi, pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { useSesion } from '../app/sesion.js';
 import { formatearPesos } from '../lib/montos.js';
+import { RecordatoriosPedidos } from '../pedidos/Recordatorios.js';
 import { EscanerDeProductos } from '../stock/EscanerDeProductos.js';
 import {
   cargarCarrito,
@@ -24,9 +27,11 @@ import {
 } from './carrito.js';
 import { CLAVE_ESTADO_CAJA, esErrorDeTurno, useEstadoCaja } from './estadoCaja.js';
 import { AbrirTurno, DialogoCaja, DialogoCerrarTurno, TurnoDeOtro } from './Caja.js';
+import { DialogoDevolucionCobro, DialogoEsperaCobro } from './CobroPoint.js';
 import { DialogoCobro, DialogoPagoMixto, DialogoVarios } from './Dialogos.js';
 import { sonarError } from './sonido.js';
 import { useImpresionTicket } from './Ticket.js';
+import { UltimaVenta } from './UltimaVenta.js';
 
 type Dialogo =
   | { tipo: 'cobro'; medio: MedioPago }
@@ -58,6 +63,16 @@ const REFERENCIA_ATAJOS: [string, string][] = [
   ['Ctrl+Supr', 'Vaciar'],
   ['F9', 'Imprimir ticket'],
 ];
+/** Solo con la facturación configurada. */
+const ATAJO_FACTURA: [string, string] = ['F10', 'Pedir factura'];
+
+/** Suma la factura recién pedida a la venta, sin esperar a consultarla de nuevo. */
+function conFactura(venta: VentaDetalle, factura: FacturaVenta): VentaDetalle {
+  const facturas = [...(venta.facturas ?? []).filter((f) => f.id !== factura.id), factura].sort(
+    (a, b) => (a.parte === b.parte ? 0 : a.parte === 'electronica' ? -1 : 1),
+  );
+  return { ...venta, facturas, puedePedirFactura: false };
+}
 
 let contadorVarios = 0;
 
@@ -67,7 +82,7 @@ let contadorVarios = 0;
  */
 export function Venta() {
   const { data: sesion } = useSesion();
-  const { data: estado, error } = useEstadoCaja();
+  const { data: estado, error } = useEstadoCaja({ sondear: true });
 
   if (error) return <MensajeError error={error} />;
   if (!estado || !sesion) return <p>Cargando caja…</p>;
@@ -82,6 +97,9 @@ export function Venta() {
       responsable={turno.responsable}
       esMio={turno.esMio}
       esAdmin={sesion.rol === 'admin'}
+      facturacionHabilitada={estado.facturacionHabilitada === true}
+      pointHabilitado={estado.pointHabilitado === true}
+      devolucion={estado.devolucionesPendientes?.[0] ?? null}
     />
   );
 }
@@ -92,19 +110,31 @@ function PuntoDeVenta({
   responsable,
   esMio,
   esAdmin,
+  facturacionHabilitada,
+  pointHabilitado,
+  devolucion,
 }: {
   turnoId: string;
   responsable: { id: string; nombre: string };
   esMio: boolean;
   esAdmin: boolean;
+  /** La API tiene ARCA configurado: se ofrece pedir factura (F10). */
+  facturacionHabilitada: boolean;
+  /** Débito, crédito y Mercado Pago se cobran con la terminal Point. */
+  pointHabilitado: boolean;
+  /** Un pago que entró después de cancelar: bloquea la venta hasta resolverlo. */
+  devolucion: DevolucionPendiente | null;
 }) {
   const [carrito, despachar] = useReducer(reducirCarrito, undefined, cargarCarrito);
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   const [ultimaVenta, setUltimaVenta] = useState<VentaDetalle | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  /** Venta esperando el cobro en el Point: el carrito queda intacto hasta que se resuelve. */
+  const [enEspera, setEnEspera] = useState<VentaDetalle | null>(null);
+  const bloqueada = enEspera !== null || devolucion !== null;
   const campo = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-  const { imprimir, ticket } = useImpresionTicket();
+  const { imprimirConFactura, ticket } = useImpresionTicket();
   const total = totalCarrito(carrito);
   const vacio = carrito.items.length === 0;
 
@@ -112,12 +142,34 @@ function PuntoDeVenta({
 
   // Al cerrar un diálogo, el foco vuelve al campo de escaneo.
   useEffect(() => {
-    if (dialogo === null) campo.current?.focus();
-  }, [dialogo]);
+    if (dialogo === null && !bloqueada) campo.current?.focus();
+  }, [dialogo, bloqueada]);
+
+  // Con el Point, al entrar se retoma la venta que quedó esperando el cobro (recarga).
+  useEffect(() => {
+    if (!pointHabilitado) return;
+    let vigente = true;
+    pedir<VentaDetalle | null>('GET', '/ventas/en-espera').then(
+      (venta) => {
+        if (vigente && venta) setEnEspera((actual) => actual ?? venta);
+      },
+      () => {},
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [pointHabilitado]);
 
   const cobro = useMutation({
     mutationFn: (datos: VentaEntrada) => pedir<VentaDetalle>('POST', '/ventas', datos),
     onSuccess: (venta) => {
+      if (venta.estado === 'pendiente') {
+        // El cobro fue al Point: el carrito se guarda hasta que se apruebe o se cancele.
+        setAviso(null);
+        setDialogo(null);
+        setEnEspera(venta);
+        return;
+      }
       setUltimaVenta(venta);
       setAviso(null);
       despachar({ tipo: 'vaciar' });
@@ -143,6 +195,34 @@ function PuntoDeVenta({
   const cobrar = (pagos: PagoEntrada[]) =>
     cobro.mutate({ items: itemsParaVenta(carrito), pagos, totalEsperado: total });
 
+  // Factura a pedido del cliente por lo cobrado en efectivo: sin diálogos ni datos.
+  const pedidoFactura = useMutation({
+    mutationFn: (venta: VentaDetalle) => pedir<FacturaVenta>('POST', `/ventas/${venta.id}/factura`),
+    onSuccess: (factura, venta) => {
+      setUltimaVenta((actual) => (actual?.id === venta.id ? conFactura(actual, factura) : actual));
+      void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+    },
+    onSettled: () => campo.current?.focus(),
+  });
+  const puedePedirFactura =
+    facturacionHabilitada &&
+    ultimaVenta !== null &&
+    ultimaVenta.estado === 'pagada' &&
+    ultimaVenta.puedePedirFactura === true;
+  const pedirFactura = () => {
+    if (!ultimaVenta || !puedePedirFactura || pedidoFactura.isPending) return;
+    pedidoFactura.mutate(ultimaVenta);
+  };
+
+  // F9: si la factura está en trámite, espera hasta 5 s a que se autorice.
+  const imprimirUltima = () => {
+    // Solo de una venta cobrada: una en espera o cancelada no tiene ticket.
+    if (ultimaVenta?.estado !== 'pagada') return;
+    void imprimirConFactura(ultimaVenta).then((impresa) =>
+      setUltimaVenta((actual) => (actual?.id === impresa.id ? impresa : actual)),
+    );
+  };
+
   const abrir = (nuevo: Exclude<Dialogo, null>) => {
     const esCobro = nuevo.tipo === 'cobro' || nuevo.tipo === 'mixto';
     if (esCobro && vacio) {
@@ -157,7 +237,15 @@ function PuntoDeVenta({
   useEffect(() => {
     const alPresionar = (e: KeyboardEvent) => {
       const medio = ATAJOS_COBRO[e.key];
-      const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9'].includes(e.key);
+      const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9', 'F10'].includes(e.key);
+      if (bloqueada) {
+        // La espera del cobro y el aviso de devolución manejan sus teclas.
+        if (esAtajoF) e.preventDefault();
+        if (enEspera && (medio || e.key === 'F6')) {
+          setAviso('Primero hay que terminar o cancelar el cobro en espera.');
+        }
+        return;
+      }
       if (dialogo !== null) {
         // El diálogo maneja Enter y Esc; las F no tienen que llegar al navegador (F1 = ayuda).
         if (esAtajoF) e.preventDefault();
@@ -168,12 +256,14 @@ function PuntoDeVenta({
         abrir({ tipo: 'cobro', medio });
         return;
       }
-      if (['F6', 'F7', 'F8', 'F9'].includes(e.key)) {
+      if (esAtajoF) {
+        // F10 también: en el navegador abre la barra de menú.
         e.preventDefault();
         if (e.key === 'F6') abrir({ tipo: 'mixto' });
         if (e.key === 'F7') abrir({ tipo: 'varios' });
         if (e.key === 'F8') abrir({ tipo: 'caja' });
-        if (e.key === 'F9' && ultimaVenta) imprimir(ultimaVenta);
+        if (e.key === 'F9') imprimirUltima();
+        if (e.key === 'F10') pedirFactura();
         return;
       }
       if (e.key === 'Delete' && e.ctrlKey) {
@@ -238,16 +328,19 @@ function PuntoDeVenta({
           </button>
         </span>
       </div>
+      <RecordatoriosPedidos />
       <div className="rounded-lg bg-white p-4 shadow">
-        <EscanerDeProductos<ProductoVenta>
-          campoRef={campo}
-          alElegir={(producto) => {
-            setAviso(null);
-            despachar({ tipo: 'agregar', producto });
-          }}
-          alNoEncontrar={sonarError}
-          avisoInexistente="Revisá el código o usá F7 para cobrarlo como Varios."
-        />
+        <fieldset disabled={bloqueada} className="contents">
+          <EscanerDeProductos<ProductoVenta>
+            campoRef={campo}
+            alElegir={(producto) => {
+              setAviso(null);
+              despachar({ tipo: 'agregar', producto });
+            }}
+            alNoEncontrar={sonarError}
+            avisoInexistente="Revisá el código o usá F7 para cobrarlo como Varios."
+          />
+        </fieldset>
       </div>
 
       {aviso && (
@@ -327,37 +420,40 @@ function PuntoDeVenta({
       </div>
 
       {ultimaVenta && (
-        <div
-          role="region"
-          aria-label="Última venta"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-green-50 p-4 text-green-900"
-        >
-          <p>
-            <strong>Venta #{ultimaVenta.numero} cobrada</strong> ·{' '}
-            {formatearPesos(ultimaVenta.total)}
-            {ultimaVenta.pagos.map((p) =>
-              p.vuelto ? (
-                <span key={p.medio} className="ml-2 text-xl font-bold">
-                  Vuelto: {formatearPesos(p.vuelto)}
-                </span>
-              ) : null,
-            )}
-          </p>
-          <button
-            type="button"
-            className="boton-secundario"
-            onClick={() => {
-              imprimir(ultimaVenta);
-              campo.current?.focus();
-            }}
-          >
-            Imprimir ticket (F9)
-          </button>
-        </div>
+        <UltimaVenta
+          venta={ultimaVenta}
+          puedePedirFactura={puedePedirFactura}
+          pidiendoFactura={pedidoFactura.isPending}
+          errorFactura={pedidoFactura.error}
+          alPedirFactura={pedirFactura}
+          alImprimir={() => {
+            imprimirUltima();
+            campo.current?.focus();
+          }}
+        />
       )}
 
       {dialogo?.tipo === 'cobro' && <DialogoCobro medio={dialogo.medio} {...propsCobro} />}
-      {dialogo?.tipo === 'mixto' && <DialogoPagoMixto {...propsCobro} />}
+      {dialogo?.tipo === 'mixto' && <DialogoPagoMixto conPoint={pointHabilitado} {...propsCobro} />}
+      {enEspera && (
+        <DialogoEsperaCobro
+          key={enEspera.id}
+          venta={enEspera}
+          alAprobar={(venta, llegoAPagar) => {
+            setEnEspera(null);
+            setUltimaVenta(venta);
+            setAviso(llegoAPagar ? 'El cliente llegó a pagar: la venta quedó cobrada' : null);
+            despachar({ tipo: 'vaciar' });
+            void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+          }}
+          alVolverAlCarrito={(avisoAlVolver) => {
+            setEnEspera(null);
+            setAviso(avisoAlVolver);
+            void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+          }}
+        />
+      )}
+      {devolucion && !enEspera && <DialogoDevolucionCobro devolucion={devolucion} />}
       {dialogo?.tipo === 'caja' && (
         <DialogoCaja esAdmin={esAdmin} alCerrar={() => setDialogo(null)} />
       )}
@@ -389,11 +485,13 @@ function PuntoDeVenta({
         className="fixed right-0 bottom-0 left-0 border-t bg-slate-800 px-4 py-2 text-sm text-slate-100"
       >
         <ul className="mx-auto flex max-w-5xl flex-wrap gap-x-4 gap-y-1">
-          {REFERENCIA_ATAJOS.map(([tecla, accion]) => (
-            <li key={tecla}>
-              <kbd className="rounded bg-slate-600 px-1.5 font-mono">{tecla}</kbd> {accion}
-            </li>
-          ))}
+          {(facturacionHabilitada ? [...REFERENCIA_ATAJOS, ATAJO_FACTURA] : REFERENCIA_ATAJOS).map(
+            ([tecla, accion]) => (
+              <li key={tecla}>
+                <kbd className="rounded bg-slate-600 px-1.5 font-mono">{tecla}</kbd> {accion}
+              </li>
+            ),
+          )}
         </ul>
       </footer>
       {ticket}

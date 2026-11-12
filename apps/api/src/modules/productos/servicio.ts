@@ -204,11 +204,17 @@ export async function editarProducto(
  */
 export async function buscarProductos(
   prisma: PrismaClient,
-  { q, pagina, incluirInactivos }: z.output<typeof busquedaProductosSchema>,
+  { q, pagina, incluirInactivos, sinCosto }: z.output<typeof busquedaProductosSchema>,
   rol: Rol,
 ): Promise<ProductoAdmin[] | ProductoVenta[]> {
   const soloActivos = rol !== 'admin' || !incluirInactivos;
-  const filtroActivo = soloActivos ? { activo: true } : {};
+  // "Sin costo" es solo del admin y siempre sobre los activos.
+  const filtroActivo =
+    rol === 'admin' && sinCosto
+      ? { activo: true, costo: null }
+      : soloActivos
+        ? { activo: true }
+        : {};
   const formatear = (productos: ProductoConProveedor[]) =>
     rol === 'admin' ? productos.map(aAdmin) : productos.map(aVenta);
 

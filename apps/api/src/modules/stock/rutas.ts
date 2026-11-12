@@ -3,7 +3,6 @@ import {
   conteoStockSchema,
   ingresoDetalleSchema,
   ingresoListadoSchema,
-  ingresoMercaderiaSchema,
   movimientoStockSchema,
   paginaSchema,
   proveedorOpcionSchema,
@@ -22,7 +21,6 @@ import {
   opcionesDeProveedor,
   registrarAjuste,
   registrarConteo,
-  registrarIngreso,
   registrarVentasSinSistema,
 } from './servicio.js';
 
@@ -35,18 +33,8 @@ export const rutasStock: FastifyPluginAsyncZod<{ prisma: PrismaClient }> = async
   app,
   { prisma },
 ) => {
-  // El ingreso de mercadería (y la lista de proveedores para elegir en él) lo
-  // usan admin y empleado; el resto es solo del admin.
-  app.post(
-    '/ingresos',
-    {
-      preValidation: requiereSesion,
-      schema: { body: ingresoMercaderiaSchema, response: { 201: ingresoListadoSchema } },
-    },
-    async (request, reply) =>
-      reply.status(201).send(await registrarIngreso(prisma, request.body, usuarioActual(request))),
-  );
-
+  // La lista de proveedores para elegir la usan admin y empleado (pedidos);
+  // el resto es solo del admin. La carga de mercadería va por /api/pedidos.
   app.get(
     '/proveedores',
     {

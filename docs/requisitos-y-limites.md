@@ -42,8 +42,9 @@
 
 ### Stock
 - La venta descuenta el stock automáticamente.
-- **Ingreso de mercadería** (compra a un proveedor): lo cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre. El proveedor es opcional y se puede agregar una nota (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
-- **Costo en el ingreso:** opcional y **solo visible para el admin**, que ve el costo actual precargado. Si lo cambia, se actualiza el costo del producto y queda en el historial de precios. El empleado no ve ni carga costos.
+- **Ingreso de mercadería:** la mercadería entra **solo como la carga de un pedido** (ver "Pedidos a proveedor"). La cargan **el admin o el empleado**, escaneando los productos con el lector (escanear dos veces suma una unidad) o buscándolos por nombre, con una nota opcional (por ejemplo, el número de remito). Suma stock con un movimiento `compra` por producto.
+- **Costo en la carga:** el admin y el empleado ven el costo actual precargado de cada producto y lo corrigen según el remito. Si cambia, se actualiza el costo del producto y queda en el historial de precios con quien lo cargó. Fuera de la carga, el empleado sigue sin ver costos.
+- **Mercadería que no se paga** (bonificaciones, muestras): se carga con un **ajuste de stock** del admin, porque un pedido siempre tiene un total mayor que cero.
 - Si se escanea un código que no está cargado, la pantalla avisa que lo tiene que cargar el admin, sin perder lo ya cargado.
 - **Ajustes manuales:** solo el admin, con un motivo obligatorio: rotura, vencimiento, robo, conteo, venta sin sistema, corrección u otro (con "otro" la nota es obligatoria).
 - **Conteo rápido:** el admin carga la cantidad contada y el sistema registra un ajuste por la diferencia (nada si coincide).
@@ -53,17 +54,35 @@
 - El admin tiene una carga rápida para descontar varios productos de una vez, con motivo "venta sin sistema" (ver "Corte de internet o de luz").
 - El admin ve el historial de movimientos de cada producto y la lista de ingresos con su detalle.
 
+### Pedidos a proveedor
+- **El admin pide** desde el celular: proveedor, total a pagar, cuándo llega (precargado con el próximo día de entrega del proveedor) y una nota. Mientras no llegue, lo puede editar o cancelar.
+- **Mercadería y pago avanzan por separado.** La mercadería pasa de *por llegar* a *llegó* y después a *cargada*. El pago se hace al recibir o después, siempre por la entrega entera (no hay pagos parciales ni cuenta corriente). El pedido queda **cerrado** cuando está cargado y pagado.
+- **Recibir:** el empleado marca que llegó, corrige el total si hace falta (por ejemplo, por faltantes, con una nota) y elige **Efectivo**, **Mercado Pago** o **Queda debiendo**. La mercadería se puede cargar en ese momento o después de atender; el pedido no se cierra hasta cargarla.
+- **Recibir sin pedido** (pan, hielo): con proveedor obligatorio, crea el pedido ya recibido.
+- **Pagar después:** lo que quedó debiendo lo paga el empleado desde la caja o el admin desde el celular (con Mercado Pago, aunque no haya turno). El total se puede corregir al pagar.
+- El pago es un movimiento de caja de tipo `pago_proveedor`: en efectivo resta del esperado del turno y aparece como "Pagos a proveedores" en el cierre.
+- **Recordatorios en el POS:** los pedidos que llegan hoy o están atrasados, y los que llegaron y falta cargar.
+- **Aviso al admin por WhatsApp** cuando un empleado deja un pedido cerrado (proveedor, total, cómo se pagó, productos cargados y quién hizo cada paso).
+
 ### Ventas (POS)
 - Venta rápida escaneando con el lector de código de barras: el campo de escaneo queda siempre listo y escanear de nuevo suma una unidad. Los productos sin código se buscan por nombre y se eligen con las flechas.
 - Ítem **"Varios"** con precio libre (y descripción opcional) para lo que no está cargado; no mueve stock.
 - Modificar cantidades y quitar ítems antes de cobrar. El carrito sobrevive a una recarga accidental de la página.
 - **Atajos de teclado** (siempre visibles al pie): F1 efectivo, F2 débito, F3 crédito, F4 Mercado Pago, F6 pago mixto, F7 "Varios", flechas para elegir un ítem, + y − para la cantidad, Supr para quitar, Ctrl+Supr para vaciar (con confirmación) y F9 para imprimir el ticket.
-- Medios de pago: **efectivo**, **débito**, **crédito** y **Mercado Pago**. Las transferencias se reciben por Mercado Pago y se registran con ese medio.
+- Medios de pago: **efectivo**, **débito**, **crédito** y **Mercado Pago** (QR en la pantalla del Point). **No se aceptan transferencias por alias**: todo cobro de Mercado Pago pasa por el sistema.
 - **Pago mixto:** el total se puede repartir entre varios medios (un pago por medio); no se confirma hasta que lo asignado sume exactamente el total.
 - **Vuelto opcional:** en efectivo, el empleado puede escribir con cuánto paga el cliente y ve el vuelto; si lo deja vacío, se cobra el total justo.
 - **Precios definidos por el servidor:** el precio de cada producto se toma del catálogo al registrar la venta. Si cambió mientras se armaba el carrito, la venta se rechaza, el carrito muestra los precios nuevos y se vuelve a cobrar.
 - Cada venta tiene un número correlativo, y la venta, sus pagos y el descuento de stock se guardan juntos o nada.
-- Con **Mercado Pago**: el sistema genera el cobro mediante la API de MP y **espera la confirmación del pago** antes de cerrar la venta (Etapa 5; antes se registra a mano).
+- **Costo de lo vendido:** cada ítem guarda el costo que tenía el producto al venderse, para calcular la ganancia. Si el producto no tenía costo (o es "Varios"), el ítem queda sin costo y no se completa después. Solo el admin ve los costos en el detalle de la venta.
+- **Cobro con el Point integrado** (Point Smart en modo integrado, PDV; cambio `cobro-mercado-pago`): con F2 (débito), F3 (crédito) o F4 (Mercado Pago, QR en la pantalla del Point) el sistema le manda a la terminal el monto exacto; el empleado no tipea nada. La terminal acepta solo el medio elegido y el cobro vence en MP a los 3 minutos si nadie paga.
+  - La venta nace **en espera** (`pendiente`): no descuenta stock ni cuenta en la caja ni en el dashboard, y pasa a `pagada` (con el stock y la factura automática) cuando Mercado Pago aprueba el pago. El estado se toma siempre de la consulta a MP: cada 3 s mientras el cobro está activo y, con el servidor con HTTPS, también al llegar una notificación firmada.
+  - **Pantalla de espera:** monto, medio y estado, actualizados solos. Ante un rechazo (con el motivo), un vencimiento o la falta de respuesta: **Reintentar** (Enter), **Cobrar de otra forma** (vuelve al carrito intacto) y **Cancelar** (Esc, con confirmación). Si se recarga la página, la espera se retoma. Un cobro a la vez.
+  - **Pago mixto:** una sola parte por el Point, el resto en efectivo. Primero se cobra el Point; al aprobarse, la pantalla dice "Cobrá $X en efectivo · vuelto $Y".
+  - **Vencimiento:** una venta en espera se cancela sola 10 minutos después del último intento ("Venció la espera"). Las canceladas conservan su número y figuran como "Cobro no realizado".
+  - **Mercado Pago caído:** no hay registro manual. Mientras MP no responde solo se cobra en efectivo, y el mostrador lo dice: "Mercado Pago no responde. Por ahora cobrá solo en efectivo (F1) o reintentá en un rato."
+  - **Pago aprobado después de cancelar:** la venta no revive (sigue cancelada, sin stock ni factura). Lo cobrado entra como ingreso en la cuenta de MP y se le devuelve al cliente **en efectivo desde la caja abierta**: el mostrador muestra un aviso que bloquea la venta con **Ya devolví $X** (sale del turno, baja el esperado y avisa al admin) y **El cliente ya se fue** (lo resuelve el admin en Administración → Mercado Pago → Cobros a revisar).
+  - Sin el Point configurado (`MP_TERMINAL_ID`), F2, F3 y F4 registran la venta pagada en el momento, como antes.
 - No hay descuentos.
 - **Ticket solo a pedido:** después de cobrar (F9 o botón) o desde el detalle de una venta. Papel de 58 u 80 mm, con la leyenda "No válido como factura".
 - **Listado de ventas:** el empleado ve las del día; el admin, cualquier rango de fechas.
@@ -71,7 +90,7 @@
   - El empleado puede anular solo las ventas del turno abierto que él abrió; las demás solo las anula el admin.
   - El motivo es obligatorio.
   - La venta queda en estado `anulada` y nunca se borra, y el stock se repone.
-  - Si la venta tenía un pago en efectivo, la devolución sale de la caja del turno abierto al anular, aunque la venta sea de otro turno. Si el admin anula sin ningún turno abierto, no afecta ninguna caja.
+  - **La devolución es siempre en efectivo, por el total de la venta**, aunque se haya cobrado con débito, crédito o Mercado Pago (nunca se devuelve por transferencia). Sale de la caja del turno abierto al anular, aunque la venta sea de otro turno. Si el admin anula sin ningún turno abierto, no afecta ninguna caja.
   - Se avisa al admin por WhatsApp con la hora, quién anuló, el motivo y el detalle de la venta.
 
 ### Caja y turnos
@@ -80,9 +99,17 @@
 - **Quién opera:** el empleado vende y mueve la caja solo en el turno que abrió; el admin, en el turno abierto de cualquiera.
 - **Apertura:** el monto inicial sale precargado con lo que quedó en la caja al cerrar el turno anterior. Quien abre puede corregirlo con lo que contó, y la diferencia de apertura queda registrada.
 - **Cierre ciego:** quien cierra cuenta el efectivo sin ver cuánto debería haber. Opcionalmente registra un retiro al cierre, con motivo; lo que queda en la caja es lo contado menos ese retiro.
-- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos − gastos − retiros − efectivo de las ventas anuladas durante el turno. El vuelto no cuenta y las tarjetas y Mercado Pago no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Dos cuentas:** el **efectivo** del cajón y la **cuenta de Mercado Pago del kiosco**, donde caen las ventas con débito, crédito y MP cobradas con el Point. Es una cuenta distinta de la cuenta personal del admin.
+- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − pagos a proveedores en efectivo − devoluciones (total de las ventas anuladas durante el turno y cobros de MP de ventas canceladas devueltos en efectivo). Solo cuentan las ventas pagadas y anuladas: las que están en espera o canceladas, no. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Cierre bloqueado:** el turno no se puede cerrar con un cobro del Point en espera ("esperalo o cancelalo") ni con una devolución en efectivo pendiente.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
-- **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos (por ejemplo, el pago a un proveedor) y retiros; los ingresos son solo del admin. No se editan ni se borran.
+- **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
+- **Cuenta de cada movimiento:** al registrar un gasto se elige si sale del **Efectivo** (lo preseleccionado) o de **Mercado Pago**. Los retiros e ingresos de Mercado Pago (por ejemplo, la plata que el admin pasa a su cuenta personal) son solo del admin, que los registra desde **Administración → Mercado Pago** aunque no haya un turno abierto. El retiro al cierre es siempre en efectivo.
+- **Saldo de Mercado Pago:** se lee de la API de Mercado Pago (lo disponible y, si MP lo informa, lo que está a liberar, con la hora de la lectura). Nunca se calcula con las ventas ni los movimientos del sistema, ni se ajusta a mano.
+  - **Caché de 60 s** en el servidor: varias pantallas abiertas hacen como mucho una consulta a MP por minuto. Si MP no responde en 10 s o rechaza la consulta, se muestra el último saldo leído, marcado como desactualizado y con el motivo ("Mercado Pago no responde" o "Mercado Pago rechazó las credenciales"); si nunca se pudo leer, "Saldo no disponible". Sin credenciales dice "Mercado Pago no configurado" y todo lo demás funciona igual.
+  - **Quién lo ve:** el admin en **Administración → Mercado Pago** (con **Actualizar**) y en el dashboard; el empleado (y el admin) en **Caja (F8)**, que solo existe con un turno abierto. No afecta el efectivo esperado.
+  - **Plan B:** el recurso de saldo de MP no está en la documentación oficial vigente y hay que probarlo con las credenciales reales. Si no funciona, el admin cargaría un saldo de referencia que el sistema actualiza con los movimientos de MP (o se lee el reporte "Dinero liberado"), como cambio aparte.
+- **Categoría de los gastos:** cada gasto lleva una categoría fija, elegida con botones: **Servicios** (luz, internet, alquiler), **Insumos** (bolsas, rollos, limpieza) u **Otro**. No hay categoría de proveedor: los pagos a proveedores van por los pedidos (Etapa 3).
 - **Avisos al admin:** cada gasto o retiro de un empleado y cada cierre de turno (con ventas por medio, movimientos, esperado, contado, diferencia y lo que quedó) dejan un aviso que se envía por WhatsApp (ver "Avisos por WhatsApp").
 - El admin ve la lista de turnos con sus diferencias y el detalle de cada uno desde el celular.
 
@@ -95,25 +122,52 @@
 - Puede llegar algún aviso repetido (si WhatsApp tarda en confirmar el envío): es preferible a perder uno.
 
 ### Dashboard (admin)
-- Ventas por día, semana y mes.
-- Productos más vendidos.
-- Ingresos y egresos.
-- Resumen de turnos y diferencias de caja.
-- Accesible desde el celular.
+- Solo para el admin, arriba de todo en el panel de administración y pensado para el celular. El empleado no lo ve, para que el cierre siga siendo ciego.
+- **Ahora:** efectivo en caja (el esperado del turno abierto o lo que quedó en el último cierre), el saldo de Mercado Pago tal como lo informa MP, con su hora (no depende del período, y si MP falla o tarda el resto del dashboard se muestra igual), y pendiente de pagar (pedidos por llegar más entregas que deben).
+- **Período:** Hoy (por defecto), Ayer, Semana (de lunes a hoy), Mes (del 1 a hoy), Mes anterior o fechas elegidas, en hora de Argentina.
+- **Ventas y ganancia**, comparadas con el período anterior. El mes en curso se compara contra los mismos días del mes anterior. La ganancia se calcula solo sobre los ítems con costo, y lo vendido sin costo se muestra aparte, con un enlace a los productos sin costo para completarlos.
+- **Gastos** de las dos cuentas por categoría y **resultado** = ganancia − gastos. Los pagos a proveedores, los retiros y los ingresos se muestran aparte y no cambian el resultado.
+- Ventas por día (por hora en un solo día), por medio de pago y los 10 más vendidos (por unidades, importe o ganancia; sin "Varios").
+- Diferencias de caja de los turnos cerrados en el período, con enlace a Turnos, y ventas anuladas.
 
 ### Reposición
-- **Fase A (inicial):** un producto necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual.
+- **Fase A (inicial):** un producto activo necesita reposición cuando su stock actual es menor o igual al stock mínimo. Cantidad sugerida = stock máximo − stock actual (con stock negativo, el sugerido supera al máximo).
+  - **Mínimo y máximo en 0** significa "no reponer nunca": el producto no aparece, cualquiera sea su stock. Con mínimo 0 y máximo mayor que 0, entra al llegar a 0 o menos.
+  - Un renglón con **sugerido 0** (mínimo igual al máximo y el stock en ese valor) no aparece.
 - **Fase B (futura):** la sugerencia se calcula según el promedio de ventas diarias y los días hasta la próxima entrega del proveedor.
-- Las recomendaciones se agrupan **por proveedor**.
-- Todos los días a las **12:00** se envía un WhatsApp, vía WAHA, al número que recibe los avisos.
-- Primero aparecen los proveedores que toman pedido ese día.
+- Las recomendaciones se agrupan **por proveedor**. Primero los proveedores que toman pedido ese día (en Argentina), después el resto, cada parte por nombre; los productos, por nombre, sin distinguir mayúsculas ni acentos.
+- Los productos sin proveedor o con el proveedor desactivado van al final, en el grupo **Sin proveedor**, siempre con el detalle de cada producto.
+- Si el proveedor ya tiene un pedido **por llegar**, sus productos aparecen igual con la marca "Ya hay un pedido por llegar el <día>" (la fecha más cercana, aunque esté atrasada).
+- No hay pantalla de reposición: todo llega por WhatsApp.
+
+#### Aviso diario
+- Todos los días a las **12:00** de Argentina se genera un aviso, que se envía por WhatsApp (WAHA) al número que recibe los avisos. Un solo mensaje con la fecha, "Stock a las HH:MM", el detalle de los proveedores que piden hoy y del grupo Sin proveedor, y de los demás cuántos productos les faltan. Un día sin faltantes llega igual: "Hoy no hay nada para reponer".
+- **Recuperación:** si el sistema estaba apagado a las 12:00, el aviso se genera al volver, siempre que sea el mismo día y antes de las **19:00**. El aviso de un día que ya pasó no se genera nunca.
+- **Uno solo por día**, aunque el sistema revise varias veces o se reinicie: lo garantiza la base (`ejecuciones_tarea`).
+- Sin WhatsApp configurado o caído, el aviso se genera igual y queda pendiente en **Avisos**. **Con WhatsApp caído varios días, al volver llega solo el último aviso de reposición:** los anteriores que seguían pendientes pasan a `reemplazada` ("No enviado" en Avisos, sin Reintentar). Los avisos de reposición ya enviados o en error, y los de otros tipos, no cambian.
+- La hora del aviso y el límite de recuperación son fijos (no se configuran desde el panel).
 
 ### Facturación
-- Factura electrónica mediante los web services de ARCA (WSFE), con obtención de CAE.
-- Tipo de comprobante: **Factura C** (monotributista).
-- **Toda venta cobrada con Mercado Pago se factura automáticamente.**
-- Las demás ventas se facturan **solo si el cliente lo pide**.
-- El comprobante impreso incluye el CAE y el código QR exigido por ARCA.
+- Factura electrónica mediante los web services de ARCA (WSAA + WSFEv1), con obtención de CAE.
+- Tipo de comprobante: **Factura C** (monotributista), siempre a **consumidor final sin identificar**: el sistema nunca pide datos del cliente.
+- **Qué se factura:**
+  - **Sola, la parte electrónica** de cada venta pagada: la suma de lo cobrado con débito, crédito y Mercado Pago.
+  - **Lo cobrado en efectivo, solo si el cliente pide factura** (F10 en el mostrador o **Pedir factura** en el detalle de la venta). En una venta mixta ya facturada en parte, es una segunda factura.
+  - Una venta tiene **como máximo dos facturas** (la automática y la del efectivo), y nunca suman más que su total.
+- **El mostrador nunca espera a ARCA:** la venta se guarda y la factura queda en una cola que se emite por detrás, de a una, con reintentos (5 intentos, con esperas de 30 s, 2 min, 10 min y 30 min). Si ARCA no responde, la espera no gasta intentos.
+- **Tope por factura:** una factura de $10.000.000 o más no se emite (hay que identificar al cliente) y queda con error para el admin.
+- **Plazo:** el empleado pide factura solo de ventas del día; el admin, hasta 5 días atrás. Una factura de la cola que pasó ese plazo queda con error.
+- **Sin notas de crédito:** al anular una venta facturada, el sistema avisa qué facturas siguen vigentes y la nota de crédito se hace por fuera. Si la factura todavía no se había emitido, la emisión se cancela.
+- El ticket con factura lleva el nombre de fantasía en grande, la razón social con el CUIT, los datos del emisor, un bloque por factura con número, "Facturado: $X", CAE, vencimiento y el QR de ARCA, y lo que quedó sin facturar. En homologación dice "HOMOLOGACIÓN – SIN VALIDEZ FISCAL".
+- El admin ve el estado de ARCA y las facturas trabadas en **Administración → Facturación**, con **Reintentar**; una factura con error genera un aviso por WhatsApp.
+- Sin las variables `ARCA_*`, el sistema vende igual que siempre, sin facturar.
+- **Datos normativos a verificar** con el contador o el manual de WSFEv1 vigente antes de producción (son constantes en `modules/facturacion/reglas.ts`):
+  - Que sea válido facturar solo la parte electrónica de una venta mixta, con el ticket mostrando la venta completa y "Facturado: $X".
+  - El tope de $10.000.000 (RG 5700/2025) y que el borde sea "igual o mayor".
+  - Los 5 días hacia atrás para concepto productos y que la fecha no pueda ser anterior a la del último comprobante.
+  - `CondicionIVAReceptorId = 5` como obligatorio.
+  - El formato y la dirección del QR (RG 4892/2020).
+  - Los rangos de 5 dígitos del punto de venta y 8 del número, los datos obligatorios de la Factura C impresa (RG 1415) y las direcciones de WSAA y WSFEv1.
 
 ## Requisitos no funcionales
 
@@ -139,7 +193,7 @@
 
 - **WAHA no es la API oficial de WhatsApp.** Usa una sesión de WhatsApp Web vinculada por QR y el número puede ser bloqueado. Por eso se usa un chip dedicado, que solo le escribe al número del admin y con pausa entre mensajes.
 - **ARCA:** requiere certificado digital, un punto de venta habilitado para web services y pruebas en el entorno de homologación antes de producción.
-- **Mercado Pago:** requiere credenciales de la cuenta del kiosco y una URL pública para recibir notificaciones (webhooks).
+- **Mercado Pago:** requiere credenciales de la cuenta del kiosco y el Point Smart en modo integrado. Las notificaciones (webhooks) necesitan la URL HTTPS del servidor; hasta tenerla, la consulta cada 3 s alcanza sola. La firma de las notificaciones se implementó con el formato de los SDK de MP y hay que confirmarla con "Simular notificación" del panel.
 - **Dependencia de internet:** al estar hosteado, sin conexión en el kiosco no se puede usar el sistema. No hay modo sin conexión (ver abajo).
 
 ## Corte de internet o de luz
@@ -153,12 +207,12 @@ No hay modo sin conexión. Durante un corte:
 ## Preguntas abiertas
 
 - [x] ¿Qué pasa si se corta internet en el kiosco? → No hay modo sin conexión; se anota en papel y se carga después (ver "Corte de internet o de luz").
-- [ ] ¿Qué modalidad de Mercado Pago: QR dinámico, QR estático o terminal Point?
+- [x] ¿Qué modalidad de Mercado Pago: QR dinámico, QR estático o terminal Point? → Point Smart en modo integrado (PDV), con tarjeta o con el QR que muestra la propia terminal. Sin QR generado por el sistema ni transferencias por alias (confirmado por el dueño el 2026-11-11).
 - [x] ¿Qué otros medios de pago hay además de efectivo y MP? → Débito y crédito. Las transferencias entran por Mercado Pago.
-- [ ] ¿Se facturan las ventas con débito y crédito, o solo si el cliente lo pide?
+- [x] ¿Se facturan las ventas con débito y crédito, o solo si el cliente lo pide? → Se factura sola la parte cobrada con débito, crédito o Mercado Pago; el efectivo, solo si el cliente lo pide (ver "Facturación").
 - [x] ¿Hay productos sin código de barras? → Sí: el código es opcional, se buscan por nombre y hay un ítem "Varios" con precio libre.
 - [x] ¿Se manejan productos por peso (balanza)? → No.
 - [x] ¿El empleado puede hacer descuentos o anular ventas? → No hay descuentos. El empleado puede anular ventas de su turno, con motivo y aviso al admin por WhatsApp.
 - [ ] ¿Se registran fiado o cuentas corrientes de clientes?
 - [x] ¿Desde qué número sale el aviso de WhatsApp (el chip vinculado a WAHA)? → Desde un chip dedicado del dueño, vinculado por QR desde Administración → WhatsApp.
-- [ ] ¿Hace falta cancelar facturas (notas de crédito C) ante devoluciones?
+- [x] ¿Hace falta cancelar facturas (notas de crédito C) ante devoluciones? → El sistema no hace notas de crédito: al anular, avisa qué facturas siguen vigentes y la nota se hace por fuera.

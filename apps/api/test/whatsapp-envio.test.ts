@@ -151,6 +151,72 @@ describe('espera mientras WhatsApp no está disponible', () => {
   });
 });
 
+describe('tres días sin WhatsApp con avisos de reposición', () => {
+  it('al volver a vincular el chip llegan solo el aviso de reposición del 10/11 y la anulación pendiente', async () => {
+    // Import dinámico: mientras la tarea no exista, falla solo este test y no el archivo entero.
+    const { generarAvisoDelDia } = await import('../src/jobs/aviso-reposicion.js');
+    const { falso, cliente } = crearWhatsappFalso();
+    falso.estadoActual = 'desvinculado';
+    await cargarDestino();
+    await prismaTest.notificacion.create({
+      data: {
+        tipo: 'anulacion_venta',
+        destino: 'admin',
+        texto: 'Venta #120 anulada',
+        creadaEn: new Date('2026-11-09T18:00:00Z'),
+      },
+    });
+
+    // Sábado 07/11 a martes 10/11, a las 12:00 de Argentina, con el chip desvinculado.
+    for (const fecha of ['2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10']) {
+      ahora = new Date(`${fecha}T15:00:00Z`);
+      expect(await generarAvisoDelDia({ prisma: prismaTest, ahora: () => ahora })).toBe('generado');
+      await procesar(cliente);
+    }
+    expect(falso.enviados).toEqual([]);
+    const delDia10 = await prismaTest.notificacion.findFirstOrThrow({
+      where: { tipo: 'reposicion', estado: 'pendiente' },
+    });
+
+    falso.estadoActual = 'conectado';
+    adelantar(60_000);
+    await procesar(cliente);
+
+    expect(falso.enviados.map((e) => e.texto)).toEqual(['Venta #120 anulada', delDia10.texto]);
+    expect(delDia10.texto.split('\n')[0]).toBe('*Reposición - martes 10/11*');
+    const reposicion = await prismaTest.notificacion.findMany({
+      where: { tipo: 'reposicion' },
+      orderBy: { creadaEn: 'asc' },
+    });
+    expect(reposicion.map((a) => a.estado)).toEqual([
+      'reemplazada',
+      'reemplazada',
+      'reemplazada',
+      'enviada',
+    ]);
+  });
+
+  it('un aviso reemplazada no se envía aunque WhatsApp esté disponible', async () => {
+    const { falso, cliente } = crearWhatsappFalso();
+    await cargarDestino();
+    const aviso = await prismaTest.notificacion.create({
+      data: {
+        tipo: 'reposicion',
+        destino: 'admin',
+        texto: 'Reposición vieja',
+        estado: 'reemplazada',
+      },
+    });
+
+    await procesar(cliente);
+
+    expect(falso.enviados).toEqual([]);
+    expect(
+      (await prismaTest.notificacion.findUniqueOrThrow({ where: { id: aviso.id } })).estado,
+    ).toBe('reemplazada');
+  });
+});
+
 describe('avisos acumulados en orden', () => {
   it('envía de a uno, del más antiguo al más reciente, con pausa entre envíos', async () => {
     const { falso, cliente } = crearWhatsappFalso();

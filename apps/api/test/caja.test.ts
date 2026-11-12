@@ -17,6 +17,7 @@ import {
   sesionDe,
 } from './ayudas.js';
 import { crearProductoDePrueba } from './stock-ayudas.js';
+import { crearAppConPoint, revisar } from './cobro-mp-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -56,12 +57,36 @@ function abrir(ctx: Ctx, cookies: Cookies, montoInicial: string) {
   });
 }
 
-function movimiento(ctx: Ctx, cookies: Cookies, tipo: string, monto: string, motivo = 'motivo') {
+/** Los gastos van como "otro" salvo que se indique la categoría. */
+function movimiento(
+  ctx: Ctx,
+  cookies: Cookies,
+  tipo: string,
+  monto: string,
+  motivo = 'motivo',
+  categoria = tipo === 'gasto' ? 'otro' : undefined,
+) {
   return ctx.app.inject({
     method: 'POST',
     url: '/api/caja/movimientos',
     cookies,
-    payload: { tipo, monto, motivo },
+    payload: { tipo, categoria, monto, motivo },
+  });
+}
+
+/** Gasto, retiro o ingreso de la cuenta Mercado Pago (los gastos, como "insumos"). */
+function movimientoMp(ctx: Ctx, cookies: Cookies, tipo: string, monto: string, motivo = 'motivo') {
+  return ctx.app.inject({
+    method: 'POST',
+    url: '/api/caja/movimientos',
+    cookies,
+    payload: {
+      tipo,
+      categoria: tipo === 'gasto' ? 'insumos' : undefined,
+      cuenta: 'mercado_pago',
+      monto,
+      motivo,
+    },
   });
 }
 
@@ -183,7 +208,13 @@ describe('estado de la caja para quien opera', () => {
     });
 
     expect(z.array(movimientoCajaSchema).parse(movs.json())).toMatchObject([
-      { tipo: 'gasto', monto: '500.00', motivo: 'Hielo', usuario: { id: ctx.usuarios.ana.id } },
+      {
+        tipo: 'gasto',
+        categoria: 'otro',
+        monto: '500.00',
+        motivo: 'Hielo',
+        usuario: { id: ctx.usuarios.ana.id },
+      },
     ]);
     expect(lista.statusCode).toBe(403);
     expect(JSON.stringify((await estado(ctx, ctx.ana)).json())).not.toContain('esperado');
@@ -243,7 +274,7 @@ describe('quién opera en el turno abierto', () => {
 });
 
 describe('movimientos de caja', () => {
-  it('el empleado registra un gasto con monto, motivo, usuario y fecha', async () => {
+  it('el empleado registra un gasto con categoría, monto, motivo, usuario y fecha', async () => {
     const ctx = await preparar();
     const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
 
@@ -252,6 +283,7 @@ describe('movimientos de caja', () => {
     expect(res.statusCode).toBe(201);
     expect(movimientoCajaSchema.parse(res.json())).toMatchObject({
       tipo: 'gasto',
+      categoria: 'otro',
       monto: '8000.00',
       motivo: 'pago a proveedor - Coca',
       creadoEn: MARTES_0702.toISOString(),
@@ -268,8 +300,17 @@ describe('movimientos de caja', () => {
   });
 
   it.each([
-    ['sin motivo', { tipo: 'gasto', monto: '100', motivo: '' }],
+    ['sin motivo', { tipo: 'gasto', categoria: 'otro', monto: '100', motivo: '' }],
     ['con monto cero', { tipo: 'retiro', monto: '0', motivo: 'algo' }],
+    ['de gasto sin categoría', { tipo: 'gasto', monto: '100', motivo: 'Hielo' }],
+    [
+      'de gasto con la categoría proveedor',
+      { tipo: 'gasto', categoria: 'proveedor', monto: '100', motivo: 'Coca' },
+    ],
+    [
+      'de retiro con categoría',
+      { tipo: 'retiro', categoria: 'otro', monto: '100', motivo: 'algo' },
+    ],
   ])('un movimiento %s responde 400', async (_caso, payload) => {
     const ctx = await preparar();
     await abrirTurnoDePrueba(ctx.app, ctx.ana);
@@ -280,6 +321,19 @@ describe('movimientos de caja', () => {
       payload,
     });
     expect(res.statusCode).toBe(400);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('el admin registra un gasto de Servicios y el retiro queda sin categoría', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.admin);
+
+    const gasto = await movimiento(ctx, ctx.admin, 'gasto', '45000', 'luz de octubre', 'servicios');
+    const retiro = await movimiento(ctx, ctx.admin, 'retiro', '1000', 'Al banco');
+
+    expect(gasto.statusCode).toBe(201);
+    expect(gasto.json()).toMatchObject({ tipo: 'gasto', categoria: 'servicios' });
+    expect(retiro.json()).toMatchObject({ tipo: 'retiro', categoria: null });
   });
 });
 
@@ -288,7 +342,7 @@ describe('aviso por gasto o retiro del empleado', () => {
     const ctx = await preparar();
     await abrirTurnoDePrueba(ctx.app, ctx.ana);
 
-    await movimiento(ctx, ctx.ana, 'gasto', '8000', 'pago a proveedor - Coca');
+    await movimiento(ctx, ctx.ana, 'gasto', '8000', 'bolsas de camiseta', 'insumos');
     await movimiento(ctx, ctx.ana, 'retiro', '5000', 'Lo pidió el dueño');
     await movimiento(ctx, ctx.admin, 'retiro', '1000', 'Para cambio');
     await movimiento(ctx, ctx.admin, 'gasto', '1000', 'Hielo');
@@ -298,26 +352,31 @@ describe('aviso por gasto o retiro del empleado', () => {
     const gasto = avisos.find((a) => a.tipo === 'gasto_caja')!;
     expect(gasto).toMatchObject({ destino: 'admin', estado: 'pendiente' });
     expect(gasto.texto).toContain('8.000');
-    expect(gasto.texto).toContain('pago a proveedor - Coca');
+    expect(gasto.texto).toContain('Insumos');
+    expect(gasto.texto).toContain('bolsas de camiseta');
     expect(gasto.texto).toContain('Nombre ana');
     expect(gasto.texto).toContain('07:02');
+    const retiro = avisos.find((a) => a.tipo === 'retiro_caja')!;
+    expect(retiro.texto).toMatch(/^\*Retiro de caja: /);
   });
 
   it('texto del aviso de gasto', () => {
     expect(
       textoAvisoMovimiento({
         tipo: 'gasto',
+        categoria: 'insumos',
+        cuenta: 'efectivo',
         monto: '8000.00',
-        motivo: 'pago a proveedor - Coca',
+        motivo: 'bolsas de camiseta',
         usuario: 'Juan',
         creadoEn: new Date('2026-10-21T13:15:00Z'),
       }),
     ).toBe(
       [
-        '*Gasto de caja: $ 8.000,00*',
+        '*Gasto de caja · Insumos: $ 8.000,00*',
         'Fecha y hora: 21/10/2026 10:15',
         'Registró: Juan',
-        'Motivo: pago a proveedor - Coca',
+        'Motivo: bolsas de camiseta',
       ].join('\n'),
     );
   });
@@ -345,7 +404,8 @@ describe('efectivo esperado', () => {
       ingresos: '0.50',
       gastos: '8000.00',
       retiros: '10000.00',
-      efectivoAnulado: '0.00',
+      pagosProveedor: '0.00',
+      devoluciones: '0.00',
       esperado: '52000.50',
     });
   });
@@ -360,10 +420,34 @@ describe('efectivo esperado', () => {
 
     expect(turno.resumen).toMatchObject({
       efectivoVendido: '3000.00',
-      efectivoAnulado: '3000.00',
+      devoluciones: '3000.00',
       esperado: '1000.00',
     });
     expect(turno.anulaciones).toMatchObject([{ ventaId: id, efectivo: '3000.00' }]);
+  });
+
+  it('una venta con débito anulada en el mismo turno resta su total, porque se devuelve en efectivo', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana, '5000');
+    const { id } = (await vender(ctx, ctx.ana, [{ medio: 'debito', monto: '3000' }], 3)).json();
+    await anular(ctx, ctx.ana, id);
+
+    const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
+
+    expect(turno.resumen).toMatchObject({ devoluciones: '3000.00', esperado: '2000.00' });
+  });
+
+  it('los movimientos de Mercado Pago no tocan el efectivo', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana, '52000');
+    await movimientoMp(ctx, ctx.ana, 'gasto', '45000');
+    await movimientoMp(ctx, ctx.admin, 'retiro', '1000');
+    await movimientoMp(ctx, ctx.admin, 'ingreso', '500');
+
+    const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
+
+    expect(turno.resumen).toMatchObject({ gastos: '0.00', retiros: '0.00', esperado: '52000.00' });
+    expect(turno.movimientos).toHaveLength(3);
   });
 });
 
@@ -377,20 +461,22 @@ describe('devolución de una anulación en la caja', () => {
         ctx.ana,
         [
           { medio: 'efectivo', monto: '2000' },
-          { medio: 'debito', monto: '1000' },
+          { medio: 'mercado_pago', monto: '3000' },
         ],
-        3,
+        5,
       )
     ).json();
     await cerrarTurnoDePrueba(ctx.app, ctx.ana, ayer, { montoContado: '2000' });
-    const hoy = await abrirTurnoDePrueba(ctx.app, ctx.juan, '2000');
+    const hoy = await abrirTurnoDePrueba(ctx.app, ctx.juan, '5000');
 
     await anular(ctx, ctx.admin, id);
 
+    // Pago mixto: se devuelve todo en efectivo, también la parte de Mercado Pago.
     const deHoy = turnoDetalleSchema.parse((await detalle(ctx, hoy)).json());
     const deAyer = turnoDetalleSchema.parse((await detalle(ctx, ayer)).json());
-    expect(deHoy.resumen).toMatchObject({ efectivoAnulado: '2000.00', esperado: '0.00' });
-    expect(deAyer.resumen).toMatchObject({ efectivoAnulado: '0.00', esperado: '2000.00' });
+    expect(deHoy.resumen).toMatchObject({ devoluciones: '5000.00', esperado: '0.00' });
+    expect(deHoy.anulaciones).toMatchObject([{ ventaId: id, efectivo: '5000.00' }]);
+    expect(deAyer.resumen).toMatchObject({ devoluciones: '0.00', esperado: '2000.00' });
     expect(deAyer.diferencia).toBe('0.00');
   });
 
@@ -403,7 +489,7 @@ describe('devolución de una anulación en la caja', () => {
     expect((await anular(ctx, ctx.admin, id)).statusCode).toBe(200);
 
     const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
-    expect(turno.resumen).toMatchObject({ efectivoAnulado: '0.00', esperado: '1000.00' });
+    expect(turno.resumen).toMatchObject({ devoluciones: '0.00', esperado: '1000.00' });
   });
 });
 
@@ -595,7 +681,8 @@ describe('resumen del cierre de turno', () => {
         ingresos: '0.00',
         gastos: '8000.00',
         retiros: '10000.00',
-        efectivoAnulado: '0.00',
+        pagosProveedor: '0.00',
+        devoluciones: '0.00',
         esperado: '51500.00',
       },
       montoContado: '51000.00',
@@ -662,7 +749,9 @@ describe('turnos para el admin', () => {
     const turno = turnoDetalleSchema.parse((await detalle(ctx, turnoId)).json());
 
     expect(turno.resumen.esperado).toBe('70.00');
-    expect(turno.movimientos).toMatchObject([{ tipo: 'gasto', monto: '30.00', motivo: 'Hielo' }]);
+    expect(turno.movimientos).toMatchObject([
+      { tipo: 'gasto', categoria: 'otro', monto: '30.00', motivo: 'Hielo' },
+    ]);
     expect(turno.montoContado).toBe(null);
   });
 
@@ -676,5 +765,306 @@ describe('turnos para el admin', () => {
       cookies: ctx.ana,
     });
     expect(lista.statusCode).toBe(403);
+  });
+});
+
+describe('cuenta de cada movimiento', () => {
+  it('el empleado paga un gasto con Mercado Pago en su turno', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.ana, 'gasto', '6000', 'bolsas');
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ tipo: 'gasto', cuenta: 'mercado_pago', turnoId });
+  });
+
+  it('sin cuenta, el movimiento es en efectivo', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimiento(ctx, ctx.ana, 'gasto', '100', 'Hielo');
+
+    expect(res.json()).toMatchObject({ cuenta: 'efectivo' });
+  });
+
+  it('el empleado no puede hacer un retiro de Mercado Pago', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.ana, 'retiro', '1000');
+
+    expect(res.statusCode).toBe(403);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('el admin registra movimientos de Mercado Pago sin turno abierto', async () => {
+    const ctx = await preparar();
+
+    const gasto = await movimientoMp(ctx, ctx.admin, 'gasto', '45000', 'luz de octubre');
+    const retiro = await movimientoMp(ctx, ctx.admin, 'retiro', '100000', 'a mi cuenta');
+
+    expect(gasto.statusCode).toBe(201);
+    expect(retiro.json()).toMatchObject({ cuenta: 'mercado_pago', turnoId: null });
+  });
+
+  it('sin turno abierto, el admin no puede mover efectivo ni el empleado Mercado Pago', async () => {
+    const ctx = await preparar();
+
+    expect((await movimiento(ctx, ctx.admin, 'gasto', '100')).statusCode).toBe(409);
+    expect((await movimientoMp(ctx, ctx.ana, 'gasto', '100')).statusCode).toBe(409);
+    expect(await prismaTest.movimientoCaja.count()).toBe(0);
+  });
+
+  it('con un turno abierto, el movimiento de Mercado Pago del admin queda en ese turno', async () => {
+    const ctx = await preparar();
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    const res = await movimientoMp(ctx, ctx.admin, 'retiro', '1000');
+
+    expect(res.json()).toMatchObject({ turnoId });
+  });
+});
+
+describe('movimientos de Mercado Pago para el admin', () => {
+  function listarMp(ctx: Ctx, query = '', cookies = ctx.admin) {
+    return ctx.app.inject({ method: 'GET', url: `/api/caja/movimientos-mp${query}`, cookies });
+  }
+
+  it('lista solo los de Mercado Pago del rango, del más reciente al más antiguo', async () => {
+    const ctx = await preparar();
+    const viejo = (await movimientoMp(ctx, ctx.admin, 'gasto', '100', 'de septiembre')).json();
+    await prismaTest.movimientoCaja.update({
+      where: { id: viejo.id },
+      data: { creadoEn: new Date('2026-09-30T12:00:00Z') },
+    });
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+    await movimiento(ctx, ctx.ana, 'gasto', '200', 'en efectivo');
+    const primero = (await movimientoMp(ctx, ctx.admin, 'retiro', '300', 'primero')).json();
+    ctx.adelantar(HORA);
+    const segundo = (await movimientoMp(ctx, ctx.ana, 'gasto', '400', 'segundo')).json();
+
+    const res = await listarMp(ctx, '?desde=2026-10-01&hasta=2026-10-20');
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      z
+        .array(movimientoCajaSchema)
+        .parse(res.json())
+        .map((m) => m.id),
+    ).toEqual([segundo.id, primero.id]);
+  });
+
+  it('sin fechas lista los de hoy; desde posterior a hasta responde 400', async () => {
+    const ctx = await preparar();
+    await movimientoMp(ctx, ctx.admin, 'gasto', '100');
+
+    expect((await listarMp(ctx)).json()).toHaveLength(1);
+    expect((await listarMp(ctx, '?desde=2026-10-21&hasta=2026-10-20')).statusCode).toBe(400);
+  });
+
+  it('un empleado recibe 403', async () => {
+    const ctx = await preparar();
+    expect((await listarMp(ctx, '', ctx.ana)).statusCode).toBe(403);
+  });
+});
+
+describe('aviso de un gasto de Mercado Pago', () => {
+  it('el aviso del empleado dice que salió de Mercado Pago', async () => {
+    const ctx = await preparar();
+    await abrirTurnoDePrueba(ctx.app, ctx.ana);
+
+    await movimientoMp(ctx, ctx.ana, 'gasto', '6000', 'bolsas');
+
+    const aviso = await prismaTest.notificacion.findFirstOrThrow({ where: { tipo: 'gasto_caja' } });
+    expect(aviso.texto).toMatch(/^\*Gasto de Mercado Pago · Insumos: \$ 6\.000,00\*/);
+  });
+});
+
+/*
+ * cobro-mercado-pago: las ventas en espera (`pendiente`) y las canceladas no cuentan
+ * en la caja; las pagadas y las anuladas sí. Hoy `resumenDeCaja` suma sin mirar el
+ * estado (error latente del design). La app y el cliente falso de MP están en
+ * `cobro-mp-ayudas.ts`.
+ */
+describe('ventas en espera fuera de la caja', () => {
+  async function prepararConPoint() {
+    const ctx = await crearAppConPoint(MARTES_0702);
+    await crearUsuarioDePrueba('admin', 'admin');
+    await crearUsuarioDePrueba('ana');
+    const admin = await sesionDe(ctx.app, 'admin');
+    const ana = await sesionDe(ctx.app, 'ana');
+    const alfajor = await crearProductoDePrueba('Alfajor', { precio: '1000' });
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ana, '52000');
+    return { ...ctx, admin, ana, alfajor, turnoId };
+  }
+
+  type CtxPoint = Awaited<ReturnType<typeof prepararConPoint>>;
+
+  /** $5.000 (5 alfajores): $3.000 en débito por el Point y $2.000 en efectivo. */
+  async function ventaMixtaEnEspera(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.ana,
+      payload: {
+        items: [{ productoId: ctx.alfajor.id, cantidad: 5 }],
+        pagos: [
+          { medio: 'debito', monto: '3000' },
+          { medio: 'efectivo', monto: '2000' },
+        ],
+        totalEsperado: '5000',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().estado).toBe('pendiente');
+    return res.json() as { id: string; numero: number };
+  }
+
+  async function resumen(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/caja/turnos/${ctx.turnoId}`,
+      cookies: ctx.admin,
+    });
+    return turnoDetalleSchema.parse(res.json()).resumen;
+  }
+
+  const SIN_VENTAS = { efectivo: '0.00', debito: '0.00', credito: '0.00', mercado_pago: '0.00' };
+
+  it('venta en espera con parte en efectivo: el esperado sigue en $52.000 y no figura en ventas ni medios', async () => {
+    const ctx = await prepararConPoint();
+
+    await ventaMixtaEnEspera(ctx);
+
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '52000.00',
+      efectivoVendido: '0.00',
+      cantidadVentas: 0,
+      porMedio: SIN_VENTAS,
+    });
+  });
+
+  it('al aprobarse cuenta en su turno: esperado $54.000, una venta más y $2.000 + $3.000 por medio', async () => {
+    const ctx = await prepararConPoint();
+    await ventaMixtaEnEspera(ctx);
+    ctx.falso.aprobar(ctx.falso.ultimaOrden().id);
+    ctx.adelantar(3_000);
+
+    await revisar(ctx);
+
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '54000.00',
+      cantidadVentas: 1,
+      porMedio: { ...SIN_VENTAS, efectivo: '2000.00', debito: '3000.00' },
+    });
+  });
+
+  it('venta en espera cancelada: el esperado sigue en $52.000 y no figura en ventas ni medios', async () => {
+    const ctx = await prepararConPoint();
+    const venta = await ventaMixtaEnEspera(ctx);
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/ventas/${venta.id}/cancelar`,
+      cookies: ctx.ana,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '52000.00',
+      cantidadVentas: 0,
+      porMedio: SIN_VENTAS,
+    });
+  });
+
+  it('pagada por el Point y después anulada en el mismo turno: cuenta por medio y el esperado baja $3.000', async () => {
+    const ctx = await prepararConPoint();
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.ana,
+      payload: {
+        items: [{ productoId: ctx.alfajor.id, cantidad: 3 }],
+        pagos: [{ medio: 'debito', monto: '3000' }],
+        totalEsperado: '3000',
+      },
+    });
+    ctx.falso.aprobar(ctx.falso.ultimaOrden().id);
+    ctx.adelantar(3_000);
+    await revisar(ctx);
+
+    const anulacion = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/ventas/${res.json().id}/anular`,
+      cookies: ctx.ana,
+      payload: { motivo: 'devolución' },
+    });
+    expect(anulacion.statusCode).toBe(200);
+
+    expect(await resumen(ctx)).toMatchObject({
+      cantidadVentas: 1,
+      porMedio: { ...SIN_VENTAS, debito: '3000.00' },
+      devoluciones: '3000.00',
+      esperado: '49000.00',
+    });
+  });
+
+  describe('cierre con un cobro en espera', () => {
+    it('con la venta esperando el pago en el Point → 409 con la venta, y el turno sigue abierto', async () => {
+      const ctx = await prepararConPoint();
+      const venta = await ventaMixtaEnEspera(ctx);
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.ana, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatchObject({
+        codigo: 'COBRO_EN_ESPERA',
+        mensaje: `Hay un cobro con Mercado Pago en espera (venta #${venta.numero}): esperalo o cancelalo`,
+      });
+      const estadoCaja = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/caja/estado',
+        cookies: ctx.ana,
+      });
+      expect(estadoCaja.json().turnoAbierto?.id).toBe(ctx.turnoId);
+    });
+
+    it('después de cancelar la venta en espera, cierra normalmente', async () => {
+      const ctx = await prepararConPoint();
+      const venta = await ventaMixtaEnEspera(ctx);
+      await ctx.app.inject({
+        method: 'POST',
+        url: `/api/ventas/${venta.id}/cancelar`,
+        cookies: ctx.ana,
+      });
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.ana, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('con ventas canceladas y ninguna en espera, cierra normalmente con el esperado sin ellas', async () => {
+      const ctx = await prepararConPoint();
+      for (let i = 0; i < 2; i++) {
+        const venta = await ventaMixtaEnEspera(ctx);
+        await ctx.app.inject({
+          method: 'POST',
+          url: `/api/ventas/${venta.id}/cancelar`,
+          cookies: ctx.ana,
+        });
+      }
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.admin, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ esperado: '52000.00', diferencia: '0.00' });
+    });
   });
 });

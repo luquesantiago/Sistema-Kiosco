@@ -73,6 +73,27 @@ Lo detiene. La sesión vinculada queda en el volumen `waha-sesiones`. Si el 3200
 
 Sin `WAHA_URL`, la API funciona igual: los avisos quedan pendientes y la pantalla de WhatsApp dice que no está configurado.
 
+## Mercado Pago de desarrollo
+
+Para leer el saldo real hace falta el **Access Token** de la aplicación del kiosco (Mercado Pago Developers → Tus integraciones → la aplicación → Credenciales). Descomentar `MP_ACCESS_TOKEN` en `apps/api/.env` con el token de prueba (o el de producción, para comparar con la app de MP) y reiniciar `pnpm dev`. El token nunca se sube al repositorio ni se pasa por chat. Sin `MP_ACCESS_TOKEN`, la API funciona igual y el saldo dice "Mercado Pago no configurado"; definida y vacía, la API no arranca.
+
+### Cobro con el Point en desarrollo
+
+Sin `MP_TERMINAL_ID`, F2, F3 y F4 registran la venta pagada en el momento (como antes): así se trabaja sin credenciales. Para probar con el Point hacen falta las **credenciales de prueba** y los **usuarios de prueba** (vendedor y comprador) de la aplicación, y la terminal encendida, con sesión iniciada y vinculada a la cuenta:
+
+```bash
+pnpm --filter api mp:terminales                  # lista las terminales (id y modo)
+pnpm --filter api mp:terminales --pdv <id>       # pasa esa terminal a modo integrado (PDV)
+```
+
+Después, descomentar `MP_TERMINAL_ID=<id>` en `apps/api/.env` y reiniciar `pnpm dev`. Sin URL HTTPS no hay notificaciones: el sistema consulta cada cobro cada 3 s y alcanza. El comando nunca muestra el token.
+
+## ARCA de desarrollo (homologación)
+
+Para probar la factura electrónica hace falta el **certificado de homologación** del CUIT del dueño (ARCA → "Autogestión Certificados Homologación", WSASS), con el servicio `wsfe` asociado, y la clave privada con la que se pidió (ver [Facturación con ARCA](#facturación-con-arca)). Guardar los dos archivos en `infra/arca/` (está en el `.gitignore`), descomentar **todas** las variables `ARCA_*` de `apps/api/.env` con `ARCA_ENTORNO=homologacion` y reiniciar `pnpm dev`. El log de arranque dice el entorno y el punto de venta, y las facturas impresas dicen "HOMOLOGACIÓN – SIN VALIDEZ FISCAL".
+
+Sin las variables `ARCA_*`, la API funciona igual y vende sin facturar. Con algunas sí y otras no, la API no arranca y dice cuál falta.
+
 ## Producción (runbook)
 
 ```
@@ -288,6 +309,12 @@ cd /opt/kiosco
   2. Restaurar la copia previa al deploy: `./infra/restaurar.sh /var/backups/kiosco/kiosco-<fecha-hora>-predeploy.dump`. No usar "la última": después de las 03:00, la última es la del timer, que ya tiene la migración aplicada.
   3. Lo vendido desde el deploy se carga como en un corte de luz (ver `docs/requisitos-y-limites.md`).
   4. Corregir la migración en `main` antes de volver a desplegar.
+- **Volver a una versión anterior al aviso de reposición** (`aviso-reposicion-diario`): esas versiones no conocen el estado `reemplazada` y la lista de **Avisos** fallaría. Antes de `./infra/deploy.sh <commit anterior>`, pasar esos avisos a enviados (como `kiosco`, en `/opt/kiosco`):
+
+  ```bash
+  docker compose -f infra/docker-compose.prod.yml exec db psql -U kiosco -d kiosco \
+    -c "UPDATE notificaciones SET estado = 'enviada' WHERE estado = 'reemplazada'"
+  ```
 
 #### Revisión semanal (hasta que lleguen las alertas por WhatsApp)
 
@@ -321,6 +348,80 @@ Un aviso con **Error al enviar** (5 fallas con WhatsApp conectado, por ejemplo c
 
 - **Chip:** **Administración → WhatsApp → Desvincular** y vincular el nuevo (paso 7). Mientras tanto los avisos esperan.
 - **Número del dueño:** cargar el nuevo en la misma pantalla y mandar la prueba. Los avisos pendientes van al número nuevo.
+
+#### Cargar o cambiar el token de Mercado Pago
+
+El saldo de Mercado Pago (Administración → Mercado Pago, dashboard y Caja F8) se lee con el **Access Token de producción** de la aplicación del kiosco. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+nano infra/.env   # descomentar MP_ACCESS_TOKEN=APP_USR-... (sin comillas, sin espacios)
+docker compose -f infra/docker-compose.prod.yml up -d app   # recrea la app con el token nuevo
+```
+
+- El token queda solo en `infra/.env` (fuera del repositorio): la app no lo manda a la web, no lo guarda en la base ni lo escribe en los logs.
+- Sin el token, todo funciona y el saldo dice "Mercado Pago no configurado". Si la línea queda descomentada pero vacía, la app no arranca: dejarla comentada.
+- Si el saldo dice "Mercado Pago rechazó las credenciales", el token está mal copiado o se renovó en Mercado Pago: cargar el actual y repetir.
+
+#### Activar el cobro con el Point
+
+Con el Point configurado, débito, crédito y Mercado Pago se cobran con la terminal (Point Smart en modo integrado) y la venta queda en espera hasta que MP aprueba el pago. Hace falta el token de producción ya cargado (paso anterior) y la terminal encendida, con sesión iniciada. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml exec app node dist/cli/mp-terminales.js
+docker compose -f infra/docker-compose.prod.yml exec app node dist/cli/mp-terminales.js --pdv <id>
+nano infra/.env   # descomentar MP_TERMINAL_ID=<id>
+docker compose -f infra/docker-compose.prod.yml up -d app
+```
+
+Notificaciones (más rápidas; sin ellas el sistema consulta cada 3 s): en Mercado Pago Developers → la aplicación → **Webhooks**, modo productivo, URL `https://<dominio>/api/mercado-pago/webhook` y evento **Order**. Al guardar, MP muestra la **clave secreta**: cargarla como `MP_WEBHOOK_SECRET` en `infra/.env` y reiniciar la app como arriba. Con **Simular notificación** se prueba la firma: tiene que responder `200`.
+
+- `MP_TERMINAL_ID` exige `MP_ACCESS_TOKEN`, y `MP_WEBHOOK_SECRET` exige `MP_TERMINAL_ID`: si falta la otra, la app no arranca y dice cuál.
+- **Vuelta atrás:** comentar `MP_TERMINAL_ID` y reiniciar. Antes, cancelar las ventas que estén en espera (Ventas → "En espera").
+- Mientras MP no responde, el mostrador solo deja cobrar en efectivo. Los cobros raros (la terminal pidió revisar, el cliente se fue sin la devolución) aparecen en **Administración → Mercado Pago → Cobros a revisar**.
+
+#### Facturación con ARCA
+
+La Factura C sale sola por lo cobrado con débito, crédito y Mercado Pago, y por el efectivo si el cliente la pide (F10). La emite la app por detrás, con los web services de ARCA (WSAA y WSFEv1). Lo que tiene que aportar el dueño: clave fiscal nivel 3, los datos del comprobante (nombre de fantasía, razón social, domicilio, CUIT, ingresos brutos e inicio de actividades) y la confirmación del contador sobre los datos normativos (ver `docs/requisitos-y-limites.md`).
+
+**1. Clave y pedido de certificado (CSR).** La clave privada se genera en el servidor (o en la PC del kiosco, para homologación) y **nunca sale de ahí**. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+mkdir -p infra/arca && chmod 700 infra/arca
+openssl genrsa -out infra/arca/clave.key 2048
+openssl req -new -key infra/arca/clave.key -out infra/arca/pedido.csr \
+  -subj "/C=AR/O=Nombre y apellido del titular/CN=kiosco/serialNumber=CUIT 20123456786"
+```
+
+Cambiar el titular y el CUIT (sin guiones) por los del dueño.
+
+**2. Certificado.**
+- **Homologación:** en ARCA, "Autogestión Certificados Homologación" (WSASS): crear el certificado pegando el contenido de `pedido.csr` y asociarle el servicio `wsfe`.
+- **Producción:** en ARCA, "Administración de Certificados Digitales": agregar un alias (por ejemplo `kiosco`) y subir `pedido.csr`. Descargar el certificado y guardarlo como `infra/arca/certificado.crt`.
+- **Permisos:** la app corre en el contenedor como el usuario `node` (uid 1000) y lee los archivos de solo lectura. **Como `admin`**: `sudo chown -R 1000:1000 /opt/kiosco/infra/arca && sudo chmod 500 /opt/kiosco/infra/arca && sudo chmod 400 /opt/kiosco/infra/arca/*`. Para reemplazarlos después, hacerlo también con `sudo`.
+- **Asociar el servicio:** en "Administrador de Relaciones de Clave Fiscal" → Nueva relación → ARCA → WebServices → **Facturación Electrónica** (`wsfe`), con el alias del certificado como representante.
+
+**3. Punto de venta.** En "Administración de puntos de venta y domicilios": un punto de venta nuevo **exclusivo del sistema**, del tipo "Factura Electrónica – Monotributo – Web Services" (RECE), con el domicilio del kiosco. Nunca facturar a mano en ese punto de venta: se cruza la numeración (ver "Numeración inconsistente" abajo).
+
+**4. Variables.** En `infra/.env`, descomentar **todas** las `ARCA_*` con sus valores (`ARCA_CERT_PATH=/run/secrets/arca/certificado.crt`, `ARCA_KEY_PATH=/run/secrets/arca/clave.key`; el Compose monta `infra/arca/` de solo lectura en `/run/secrets/arca`), y recrear la app:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml up -d app
+docker compose -f infra/docker-compose.prod.yml logs app | grep -i arca   # "Facturación con ARCA activa: producción, punto de venta N"
+```
+
+Si falta una variable o no se puede leer el certificado o la clave, la app no arranca y el log dice cuál (nunca el contenido). Hacer una venta de prueba con tarjeta, verla autorizada en **Administración → Facturación** y en "Comprobantes en línea" de ARCA.
+
+**Pasar de homologación a producción:** repetir los pasos 1 a 3 con el certificado de producción, cambiar `ARCA_ENTORNO=produccion`, `ARCA_PUNTO_VENTA` y las rutas, y recrear la app. Los tickets de acceso se guardan por entorno: no se mezclan.
+
+**Vuelta atrás:** comentar las `ARCA_*` y recrear la app. Se vende sin facturar; las facturas pendientes quedan en la base y se emiten al volver a configurar, salvo las que pasaron el plazo de 5 días.
+
+**Renovar el certificado** (dura hasta 2 años; **anotar la fecha de vencimiento**): pedir uno nuevo con el mismo CSR (o una clave nueva, pasos 1 y 2), reemplazar `infra/arca/certificado.crt` (y la clave si cambió) y recrear la app. Con el certificado vencido, la pantalla de Facturación dice "ARCA no disponible" y las facturas esperan sin gastar intentos.
+
+**"Autenticación bloqueada"** (en Administración → Facturación): ARCA ya dio un ticket de acceso que el sistema no tiene guardado (por ejemplo, después de restaurar un backup viejo o cambiar de base) y no da otro hasta que venza, **como mucho 12 h**. No hay que hacer nada: las facturas esperan sin gastar intentos y salen solas cuando vence. Si es urgente, se puede pedir un certificado nuevo (ARCA lo trata como otro) y cargarlo.
+
+**"Numeración inconsistente":** ARCA tiene el número que el sistema iba a usar con otros datos, casi siempre porque se facturó a mano en el punto de venta del sistema. La emisión se frena para no saltear ni repetir números. Revisar en "Comprobantes en línea" qué es ese comprobante; si es correcto que exista, apretar **Reintentar** en la factura trabada: toma el número siguiente. Avisar a quien factura a mano que use otro punto de venta.
+
+**Una factura con error** (rechazo de ARCA 5 veces, tope de $10.000.000, más de 5 días o numeración agotada) llega también como aviso por WhatsApp. Las rechazadas se pueden **Reintentar**; las del tope o del plazo hay que resolverlas por fuera del sistema. El sistema no hace notas de crédito: al anular una venta facturada, la nota se hace en ARCA.
 
 #### Restaurar un backup
 

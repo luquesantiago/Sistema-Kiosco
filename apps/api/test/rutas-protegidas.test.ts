@@ -9,8 +9,15 @@ import {
   sesionDe,
 } from './ayudas.js';
 
-/** Las únicas rutas de la API que se pueden usar sin sesión. */
-const RUTAS_ABIERTAS = ['POST /api/auth/ingresar', 'GET /api/health'];
+/**
+ * Las únicas rutas de la API que se pueden usar sin sesión. El webhook de Mercado Pago
+ * se protege con la firma (ver `cobro-mp.test.ts`).
+ */
+const RUTAS_ABIERTAS = [
+  'POST /api/auth/ingresar',
+  'GET /api/health',
+  'POST /api/mercado-pago/webhook',
+];
 
 /** Módulos solo para el admin, salvo las rutas indicadas que también usa el empleado. */
 const PREFIJOS_ADMIN = [
@@ -21,16 +28,31 @@ const PREFIJOS_ADMIN = [
   '/api/notificaciones',
   '/api/caja',
   '/api/whatsapp',
+  '/api/pedidos',
+  '/api/dashboard',
+  '/api/mercado-pago',
+  '/api/facturacion',
+  '/api/facturas',
 ];
 const RUTAS_DEL_EMPLEADO = [
   'GET /api/productos',
-  'POST /api/stock/ingresos',
   'GET /api/stock/proveedores',
   'GET /api/caja/estado',
   'POST /api/caja/turnos',
   'POST /api/caja/turnos/:id/cerrar',
   'GET /api/caja/movimientos',
   'POST /api/caja/movimientos',
+  'GET /api/pedidos',
+  'GET /api/pedidos/productos',
+  'GET /api/pedidos/:id',
+  'POST /api/pedidos/:id/llego',
+  'POST /api/pedidos/sin-pedido',
+  'POST /api/pedidos/:id/carga',
+  'POST /api/pedidos/:id/pago',
+  'GET /api/mercado-pago/saldo',
+  // cobro-mercado-pago: la devolución en efectivo la confirma quien opera el turno.
+  'POST /api/mercado-pago/cobros/:id/devolucion',
+  'POST /api/mercado-pago/cobros/:id/sin-devolver',
 ];
 
 const ID_CUALQUIERA = '0198a5b0-0000-7000-8000-000000000000';
@@ -82,7 +104,7 @@ describe('acceso a la API según sesión', () => {
     expect(res.json().error.codigo).toBe('SIN_PERMISO');
   });
 
-  it('los módulos de admin responden 403 al empleado, salvo búsqueda e ingreso', async () => {
+  it('los módulos de admin responden 403 al empleado, salvo búsqueda y pedidos', async () => {
     const { app } = await crearAppDePrueba();
     await crearUsuarioDePrueba('juan');
     const cookies = await sesionDe(app, 'juan');
@@ -90,7 +112,8 @@ describe('acceso a la API según sesión', () => {
     const deAdmin = rutasDeApi(app).filter(
       ({ m, url }) =>
         PREFIJOS_ADMIN.some((p) => url === p || url.startsWith(`${p}/`)) &&
-        !RUTAS_DEL_EMPLEADO.includes(`${m} ${url}`),
+        !RUTAS_DEL_EMPLEADO.includes(`${m} ${url}`) &&
+        !RUTAS_ABIERTAS.includes(`${m} ${url}`),
     );
 
     expect(deAdmin.map(({ m, url }) => `${m} ${url}`)).toEqual(
@@ -107,6 +130,11 @@ describe('acceso a la API según sesión', () => {
         'POST /api/stock/ajustes',
         'GET /api/stock/ingresos',
         'GET /api/stock/productos/:id/movimientos',
+        'GET /api/caja/movimientos-mp',
+        'POST /api/pedidos',
+        'GET /api/dashboard',
+        'PATCH /api/pedidos/:id',
+        'POST /api/pedidos/:id/cancelar',
         'POST /api/productos/aumento',
         'GET /api/productos/:id/historial-precios',
       ]),
@@ -133,13 +161,132 @@ describe('acceso a la API según sesión', () => {
         stockMaximo: 0,
       },
     });
-    const ingreso = await app.inject({
-      method: 'POST',
-      url: '/api/stock/ingresos',
+    const paraCargar = await app.inject({
+      method: 'GET',
+      url: '/api/pedidos/productos?q=agua',
       cookies,
-      payload: { items: [{ productoId: producto.id, cantidad: 6 }] },
     });
-    expect(ingreso.statusCode).toBe(201);
+    expect(paraCargar.json()).toMatchObject([{ id: producto.id, costo: null }]);
+  });
+});
+
+describe('saldo de Mercado Pago', () => {
+  it('GET /api/mercado-pago/saldo está registrada, pide sesión y la usa también el empleado', async () => {
+    const { app } = await crearAppDePrueba();
+    await crearUsuarioDePrueba('juan');
+    await app.ready();
+
+    expect(rutasDeApi(app).map(({ m, url }) => `${m} ${url}`)).toContain(
+      'GET /api/mercado-pago/saldo',
+    );
+
+    const sinSesion = await app.inject({ method: 'GET', url: '/api/mercado-pago/saldo' });
+    expect(sinSesion.statusCode).toBe(401);
+    expect(sinSesion.json().error.codigo).toBe('NO_AUTENTICADO');
+
+    const cookies = await sesionDe(app, 'juan');
+    const empleado = await app.inject({ method: 'GET', url: '/api/mercado-pago/saldo', cookies });
+    expect(empleado.statusCode).toBe(200);
+  });
+});
+
+describe('rutas del cobro con el Point (cobro-mercado-pago)', () => {
+  // Se registran siempre, aunque el Point no esté configurado.
+  it('están registradas; el webhook es la única abierta y los cobros a revisar son del admin', async () => {
+    const { app } = await crearAppDePrueba();
+    await crearUsuarioDePrueba('juan');
+    await app.ready();
+
+    expect(rutasDeApi(app).map(({ m, url }) => `${m} ${url}`)).toEqual(
+      expect.arrayContaining([
+        'POST /api/mercado-pago/webhook',
+        'GET /api/mercado-pago/cobros-a-revisar',
+        'POST /api/mercado-pago/cobros/:id/revisado',
+        'POST /api/mercado-pago/cobros/:id/devolucion',
+        'POST /api/mercado-pago/cobros/:id/sin-devolver',
+        'GET /api/ventas/en-espera',
+        'GET /api/ventas/:id/cobro',
+        'POST /api/ventas/:id/cobro/reintentar',
+        'POST /api/ventas/:id/cancelar',
+      ]),
+    );
+
+    // Sin sesión, el webhook no pide login: sin clave configurada responde 401 por la
+    // firma, nunca NO_AUTENTICADO.
+    const webhook = await app.inject({
+      method: 'POST',
+      url: '/api/mercado-pago/webhook',
+      payload: {},
+    });
+    expect(webhook.statusCode).toBe(401);
+    expect(webhook.json().error?.codigo).not.toBe('NO_AUTENTICADO');
+
+    const cookies = await sesionDe(app, 'juan');
+    for (const [method, url] of [
+      ['GET', '/api/mercado-pago/cobros-a-revisar'],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/revisado`],
+    ] as const) {
+      const res = await app.inject({
+        method,
+        url,
+        cookies,
+        payload: method === 'POST' ? {} : undefined,
+      });
+      expect(res.statusCode, `${method} ${url}`).toBe(403);
+    }
+    for (const [method, url] of [
+      ['GET', '/api/ventas/en-espera'],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/devolucion`],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/sin-devolver`],
+      ['POST', `/api/ventas/${ID_CUALQUIERA}/cancelar`],
+    ] as const) {
+      const res = await app.inject({ method, url, cookies });
+      expect([401, 403], `${method} ${url}`).not.toContain(res.statusCode);
+    }
+  });
+});
+
+describe('rutas de facturación', () => {
+  // Se registran siempre, aunque ARCA no esté configurado (responden 409 o `no_configurado`).
+  it('están registradas, piden sesión, las de admin dan 403 al empleado y pedir factura es de los dos', async () => {
+    const { app } = await crearAppDePrueba();
+    await crearUsuarioDePrueba('juan');
+    await app.ready();
+
+    expect(rutasDeApi(app).map(({ m, url }) => `${m} ${url}`)).toEqual(
+      expect.arrayContaining([
+        'POST /api/ventas/:id/factura',
+        'GET /api/facturacion',
+        'POST /api/facturas/:id/reintentar',
+      ]),
+    );
+
+    for (const [method, url] of [
+      ['POST', `/api/ventas/${ID_CUALQUIERA}/factura`],
+      ['GET', '/api/facturacion'],
+      ['POST', `/api/facturas/${ID_CUALQUIERA}/reintentar`],
+    ] as const) {
+      const res = await app.inject({ method, url });
+      expect(res.statusCode, `${method} ${url}`).toBe(401);
+    }
+
+    const cookies = await sesionDe(app, 'juan');
+    const estado = await app.inject({ method: 'GET', url: '/api/facturacion', cookies });
+    const reintento = await app.inject({
+      method: 'POST',
+      url: `/api/facturas/${ID_CUALQUIERA}/reintentar`,
+      cookies,
+    });
+    const pedido = await app.inject({
+      method: 'POST',
+      url: `/api/ventas/${ID_CUALQUIERA}/factura`,
+      cookies,
+    });
+    expect(estado.statusCode).toBe(403);
+    expect(reintento.statusCode).toBe(403);
+    // El empleado sí puede pedir factura: la venta no existe, pero no es un problema de permisos.
+    expect(pedido.statusCode).not.toBe(403);
+    expect(pedido.statusCode).not.toBe(401);
   });
 });
 
@@ -206,7 +353,7 @@ describe('ventas para admin y empleado', () => {
       method: 'POST',
       url: '/api/caja/movimientos',
       cookies,
-      payload: { tipo: 'gasto', monto: '100', motivo: 'Hielo' },
+      payload: { tipo: 'gasto', categoria: 'otro', monto: '100', motivo: 'Hielo' },
     });
     const cierre = await cerrarTurnoDePrueba(app, cookies, turnoId);
 

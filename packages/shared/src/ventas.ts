@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { comparar, restar, sonIguales, sumar } from './decimales.js';
+import { emisorSchema, facturaVentaSchema } from './facturacion.js';
 import { montoPositivoSchema, montoSalidaSchema, montoSchema } from './montos.js';
 
 export const MEDIOS_PAGO = ['efectivo', 'debito', 'credito', 'mercado_pago'] as const;
@@ -13,8 +14,53 @@ export const NOMBRE_MEDIO: Record<MedioPago, string> = {
   mercado_pago: 'Mercado Pago',
 };
 
-export const ESTADOS_VENTA = ['pagada', 'anulada'] as const;
+/**
+ * `pendiente`: esperando que Mercado Pago apruebe el cobro del Point (sin stock ni caja).
+ * `cancelada`: la venta en espera no se cobró.
+ */
+export const ESTADOS_VENTA = ['pagada', 'anulada', 'pendiente', 'cancelada'] as const;
 export type EstadoVenta = (typeof ESTADOS_VENTA)[number];
+
+/** Cómo se muestran los estados que no son "pagada" en los listados. */
+export const NOMBRE_ESTADO_VENTA: Record<EstadoVenta, string> = {
+  pagada: 'Pagada',
+  anulada: 'Anulada',
+  pendiente: 'En espera',
+  cancelada: 'Cobro no realizado',
+};
+
+/** Estado de un cobro con el Point (ver la tabla del design de cobro-mercado-pago). */
+export const ESTADOS_COBRO_MP = [
+  'creando',
+  'en_espera',
+  'cancelando',
+  'aprobado',
+  'rechazado',
+  'vencido',
+  'cancelado',
+  'a_revisar',
+  'a_devolver',
+  'devuelto',
+  'sin_devolver',
+] as const;
+export type EstadoCobroMp = (typeof ESTADOS_COBRO_MP)[number];
+
+/** Último cobro con el Point de una venta, tal como lo ve el mostrador. */
+export const cobroMpSchema = z.object({
+  id: z.uuid(),
+  ventaId: z.uuid(),
+  intento: z.number().int(),
+  /** El medio que eligió el empleado. */
+  medio: medioPagoSchema,
+  /** Lo que se mandó al Point: la parte electrónica de la venta. */
+  monto: montoSalidaSchema,
+  estado: z.enum(ESTADOS_COBRO_MP),
+  /** Texto para el mostrador (por ejemplo, el motivo del rechazo), o null. */
+  motivo: z.string().nullable(),
+  /** Se pidió cancelar y MP todavía no lo confirmó. */
+  cancelacionPedida: z.boolean(),
+});
+export type CobroMp = z.infer<typeof cobroMpSchema>;
 
 export const MAX_ITEMS_POR_VENTA = 200;
 const cantidadVendidaSchema = z.number().int().min(1).max(999);
@@ -122,6 +168,8 @@ export const ventaResumenSchema = z.object({
   total: montoSalidaSchema,
   estado: z.enum(ESTADOS_VENTA),
   medios: z.array(medioPagoSchema),
+  /** Suma de las facturas autorizadas de la venta ("0.00" si no tiene). */
+  importeFacturado: montoSalidaSchema,
 });
 export type VentaResumen = z.infer<typeof ventaResumenSchema>;
 
@@ -132,6 +180,8 @@ export const ventaDetalleSchema = ventaResumenSchema.extend({
       descripcion: z.string(),
       cantidad: z.number().int(),
       precioUnitario: montoSalidaSchema,
+      /** Solo para el admin: vacío si el ítem no tiene costo; ausente para el empleado. */
+      costoUnitario: montoSalidaSchema.nullable().optional(),
       subtotal: montoSalidaSchema,
     }),
   ),
@@ -146,6 +196,18 @@ export const ventaDetalleSchema = ventaResumenSchema.extend({
   anulacion: z
     .object({ en: z.iso.datetime(), por: referenciaSchema, motivo: z.string() })
     .nullable(),
+  /** Solo en las ventas `cancelada`: cuándo y por qué ("Venció la espera"). */
+  cancelacion: z.object({ en: z.iso.datetime(), motivo: z.string() }).nullable(),
+  /** El último cobro con el Point, o null si la venta no pasó por el Point. */
+  cobro: cobroMpSchema.nullable(),
+  /** De 0 a 2: la automática (`electronica`) primero. */
+  facturas: z.array(facturaVentaSchema),
+  /** Total menos lo autorizado. */
+  sinFacturar: montoSalidaSchema,
+  /** Hay efectivo sin factura de la parte `efectivo` y la facturación está configurada. */
+  puedePedirFactura: z.boolean(),
+  /** Datos del emisor para el ticket; null sin facturación configurada. */
+  emisor: emisorSchema.nullable(),
 });
 export type VentaDetalle = z.infer<typeof ventaDetalleSchema>;
 
@@ -160,10 +222,15 @@ export const TIPOS_NOTIFICACION = [
   'gasto_caja',
   'retiro_caja',
   'cierre_turno',
+  'pedido_cerrado',
+  'reposicion',
+  'factura',
+  'cobro_mp_a_revisar',
+  'devolucion_cobro_mp',
 ] as const;
 export type TipoNotificacion = (typeof TIPOS_NOTIFICACION)[number];
 
-export const ESTADOS_NOTIFICACION = ['pendiente', 'enviada', 'error'] as const;
+export const ESTADOS_NOTIFICACION = ['pendiente', 'enviada', 'error', 'reemplazada'] as const;
 export type EstadoNotificacion = (typeof ESTADOS_NOTIFICACION)[number];
 
 export const notificacionSchema = z.object({

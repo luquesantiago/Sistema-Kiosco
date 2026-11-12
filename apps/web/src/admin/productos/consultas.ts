@@ -5,11 +5,17 @@ import { CLAVE_PROVEEDORES } from '../Proveedores.js';
 
 export const CLAVE_PRODUCTOS = ['productos'] as const;
 
-export function useBusquedaProductos(q: string, pagina: number, incluirInactivos: boolean) {
+export function useBusquedaProductos(
+  q: string,
+  pagina: number,
+  incluirInactivos: boolean,
+  sinCosto = false,
+) {
   const params = new URLSearchParams({ q, pagina: String(pagina) });
   if (incluirInactivos) params.set('incluirInactivos', 'true');
+  if (sinCosto) params.set('sinCosto', 'true');
   return useQuery({
-    queryKey: [...CLAVE_PRODUCTOS, 'busqueda', { q, pagina, incluirInactivos }],
+    queryKey: [...CLAVE_PRODUCTOS, 'busqueda', { q, pagina, incluirInactivos, sinCosto }],
     // El admin siempre recibe la ficha completa.
     queryFn: () => pedir<ProductoAdmin[]>('GET', `/productos?${params}`),
   });

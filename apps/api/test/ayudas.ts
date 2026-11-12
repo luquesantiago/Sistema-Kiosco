@@ -8,7 +8,7 @@ export const CONTRASENA = 'clave-segura-1';
 /** App de test con un reloj que se puede adelantar. */
 export async function crearAppDePrueba(
   inicio = new Date('2026-10-20T12:00:00Z'),
-  opciones: Pick<OpcionesApp, 'whatsapp'> = {},
+  opciones: Pick<OpcionesApp, 'whatsapp' | 'mercadoPago'> = {},
 ) {
   let ahora = inicio;
   const app = await crearApp({ prisma: prismaTest, ahora: () => ahora, ...opciones });
@@ -29,7 +29,7 @@ export function crearUsuarioDePrueba(usuario: string, rol: Rol = 'empleado') {
   });
 }
 
-type App = Awaited<ReturnType<typeof crearAppDePrueba>>['app'];
+export type App = Awaited<ReturnType<typeof crearAppDePrueba>>['app'];
 
 export function ingresar(app: App, usuario: string, contrasena = CONTRASENA) {
   return app.inject({
@@ -49,7 +49,7 @@ export async function sesionDe(app: App, usuario: string, contrasena = CONTRASEN
   return { kiosco_sesion: cookie.value };
 }
 
-type Cookies = Awaited<ReturnType<typeof sesionDe>>;
+export type Cookies = Awaited<ReturnType<typeof sesionDe>>;
 
 /** Abre un turno de caja con la sesión dada (por defecto con $0) y devuelve su id. */
 export async function abrirTurnoDePrueba(app: App, cookies: Cookies, montoInicial = '0') {

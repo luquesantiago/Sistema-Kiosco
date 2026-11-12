@@ -38,7 +38,7 @@ export const MAX_ITEMS_POR_CARGA = 200;
 const MAX_CANTIDAD = 100_000;
 
 /** Nota opcional: vacía o solo espacios se guarda como null. */
-const notaSchema = z
+export const notaSchema = z
   .string()
   .trim()
   .max(500)
@@ -89,15 +89,15 @@ export type VentasSinSistema = z.input<typeof ventasSinSistemaSchema>;
 export const resultadoVentasSinSistemaSchema = z.object({ productos: z.number().int() });
 export type ResultadoVentasSinSistema = z.infer<typeof resultadoVentasSinSistemaSchema>;
 
+/** La carga de la mercadería de un pedido: el proveedor es el del pedido. */
 export const ingresoMercaderiaSchema = z.object({
-  proveedorId: z.uuid().nullable().default(null),
   nota: notaSchema.default(null),
   items: z
     .array(
       z.object({
         productoId: z.uuid(),
         cantidad: cantidadPositivaSchema,
-        /** Solo el admin; vacío o ausente significa "sin cambios". */
+        /** Vacío o ausente significa "sin cambios". */
         costoUnitario: montoSchema.nullable().optional(),
       }),
     )
@@ -135,6 +135,8 @@ export const ingresoListadoSchema = z.object({
   usuario: referenciaSchema,
   nota: z.string().nullable(),
   cantidadProductos: z.number().int(),
+  /** Null solo en ingresos anteriores a los pedidos. */
+  pedido: z.object({ id: z.uuid(), numero: z.number().int() }).nullable(),
 });
 export type IngresoListado = z.infer<typeof ingresoListadoSchema>;
 

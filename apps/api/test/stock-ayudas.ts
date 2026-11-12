@@ -1,5 +1,6 @@
 import { expect } from 'vitest';
 import type { Prisma } from '../src/generated/prisma/client.js';
+import type { App, Cookies } from './ayudas.js';
 import { prismaTest } from './base.js';
 
 /** Producto activo con stock 0, sin código, precio $1.000 y costo $600 salvo que se indique otra cosa. */
@@ -38,4 +39,29 @@ export async function verificarStockConsistente(): Promise<void> {
       sumaPorProducto.get(p.id) ?? 0,
     );
   }
+}
+
+/**
+ * Ingresa mercadería como lo hace el kiosco: recibe sin pedido (de un proveedor
+ * de prueba, sin pagar) y carga los productos. Devuelve la respuesta de la carga.
+ */
+export async function ingresarMercaderia(
+  app: App,
+  cookies: Cookies,
+  items: { productoId: string; cantidad: number; costoUnitario?: string }[],
+) {
+  const proveedor = await prismaTest.proveedor.create({ data: { nombre: 'Proveedor de prueba' } });
+  const recepcion = await app.inject({
+    method: 'POST',
+    url: '/api/pedidos/sin-pedido',
+    cookies,
+    payload: { proveedorId: proveedor.id, total: '1000' },
+  });
+  expect(recepcion.statusCode).toBe(201);
+  return app.inject({
+    method: 'POST',
+    url: `/api/pedidos/${recepcion.json().id}/carga`,
+    cookies,
+    payload: { items },
+  });
 }

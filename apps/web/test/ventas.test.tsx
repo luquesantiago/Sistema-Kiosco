@@ -91,12 +91,34 @@ describe('detalle de una venta', () => {
     const items = await screen.findByRole('table', { name: 'Ítems de la venta' });
     expect(within(items).getByText('Caramelos')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Pagos' })).toHaveTextContent('vuelto $ 1.700,00');
+    expect(within(items).queryByRole('columnheader', { name: 'Costo' })).not.toBeInTheDocument();
     expect(window.print).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reimprimir ticket' }));
 
     expect(window.print).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('ticket')).toHaveTextContent('Venta #120');
+  });
+
+  it('al admin le muestra el costo de cada ítem, con "—" si no tiene', async () => {
+    const conCostos = {
+      ...DETALLE,
+      items: [
+        { ...DETALLE.items[0], costoUnitario: '600.00' },
+        { ...DETALLE.items[1], costoUnitario: null },
+      ],
+    };
+    simularApi({
+      'GET /auth/sesion': [200, ADMIN],
+      [`GET /ventas/${RESUMEN.id}`]: [200, conCostos],
+    });
+    renderApp(`/ventas/${RESUMEN.id}`);
+
+    const items = await screen.findByRole('table', { name: 'Ítems de la venta' });
+    expect(within(items).getByRole('columnheader', { name: 'Costo' })).toBeInTheDocument();
+    const [, alfajor, caramelos] = within(items).getAllByRole('row');
+    expect(alfajor).toHaveTextContent('$ 600,00');
+    expect(caramelos).toHaveTextContent('—');
   });
 
   it('la anulación pide motivo antes de enviarse', async () => {

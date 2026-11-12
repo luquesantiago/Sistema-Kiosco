@@ -144,6 +144,7 @@ export async function movimientosDeProducto(
 
 const incluirListado = {
   proveedor: { select: { id: true, nombre: true } },
+  pedido: { select: { id: true, numero: true } },
   usuario: { select: { id: true, nombre: true } },
   _count: { select: { items: true } },
 } as const;
@@ -158,27 +159,23 @@ function aIngresoListado(i: IngresoConDatos): IngresoListado {
     usuario: i.usuario,
     nota: i.nota,
     cantidadProductos: i._count.items,
+    pedido: i.pedido,
   };
 }
 
 /**
- * Registra la mercadería recibida: el ingreso, sus ítems y un movimiento
- * `compra` por producto, todo en una transacción. Si el admin cargó un costo
- * distinto del actual, actualiza el costo y lo deja en el historial de precios.
+ * Registra la carga de la mercadería de un pedido, dentro de la transacción
+ * del pedido: el ingreso (con el proveedor del pedido), sus ítems y un
+ * movimiento `compra` por producto. Si viene un costo distinto del actual
+ * (lo puede cargar el admin o el empleado, según el remito), actualiza el
+ * costo y lo deja en el historial de precios.
  */
 export async function registrarIngreso(
-  prisma: PrismaClient,
+  tx: Prisma.TransactionClient,
   datos: z.output<typeof ingresoMercaderiaSchema>,
+  pedido: { id: string; proveedorId: string },
   usuario: UsuarioSesion,
-): Promise<IngresoListado> {
-  const conCosto = datos.items.some((i) => i.costoUnitario != null);
-  if (conCosto && usuario.rol !== 'admin') {
-    throw new ErrorHttp(
-      400,
-      CODIGOS_ERROR.costoNoPermitido,
-      'Solo el admin puede cargar costos en un ingreso.',
-    );
-  }
+): Promise<string> {
   // Si el mismo producto trae costos distintos, gana el último cargado.
   const items = agruparPorProducto(datos.items, (anterior, nuevo) => ({
     ...anterior,
@@ -186,74 +183,52 @@ export async function registrarIngreso(
     costoUnitario: nuevo.costoUnitario ?? anterior.costoUnitario,
   }));
 
-  const id = await prisma.$transaction(
-    async (tx) => {
-      if (datos.proveedorId !== null) {
-        const proveedor = await tx.proveedor.findUnique({
-          where: { id: datos.proveedorId },
-          select: { activo: true },
-        });
-        if (!proveedor?.activo) {
-          throw new ErrorHttp(
-            400,
-            CODIGOS_ERROR.proveedorInactivo,
-            'El proveedor no existe o está desactivado.',
-          );
-        }
-      }
-
-      const ingreso = await tx.ingresoMercaderia.create({
-        data: {
-          proveedorId: datos.proveedorId,
-          nota: datos.nota,
-          usuarioId: usuario.id,
-          items: {
-            create: items.map((i) => ({
-              productoId: i.productoId,
-              cantidad: i.cantidad,
-              costoUnitario: i.costoUnitario ?? null,
-            })),
-          },
-        },
-      });
-
-      for (const item of items) {
-        await registrarMovimiento(tx, {
-          productoId: item.productoId,
-          tipo: 'compra',
-          cantidad: item.cantidad,
-          usuarioId: usuario.id,
-          ingresoId: ingreso.id,
-        });
-        if (item.costoUnitario == null) continue;
-
-        const producto = await tx.producto.findUniqueOrThrow({
-          where: { id: item.productoId },
-          select: { precio: true, costo: true },
-        });
-        const costoNuevo = new Prisma.Decimal(item.costoUnitario);
-        if (producto.costo !== null && producto.costo.equals(costoNuevo)) continue;
-        await tx.producto.update({ where: { id: item.productoId }, data: { costo: costoNuevo } });
-        await tx.cambioPrecio.create({
-          data: {
-            productoId: item.productoId,
-            usuarioId: usuario.id,
-            precioAnterior: producto.precio,
-            precioNuevo: producto.precio,
-            costoAnterior: producto.costo,
-            costoNuevo,
-            origen: 'manual',
-          },
-        });
-      }
-      return ingreso.id;
+  const ingreso = await tx.ingresoMercaderia.create({
+    data: {
+      proveedorId: pedido.proveedorId,
+      pedidoId: pedido.id,
+      nota: datos.nota,
+      usuarioId: usuario.id,
+      items: {
+        create: items.map((i) => ({
+          productoId: i.productoId,
+          cantidad: i.cantidad,
+          costoUnitario: i.costoUnitario ?? null,
+        })),
+      },
     },
-    { timeout: 30_000 },
-  );
+  });
 
-  return aIngresoListado(
-    await prisma.ingresoMercaderia.findUniqueOrThrow({ where: { id }, include: incluirListado }),
-  );
+  for (const item of items) {
+    await registrarMovimiento(tx, {
+      productoId: item.productoId,
+      tipo: 'compra',
+      cantidad: item.cantidad,
+      usuarioId: usuario.id,
+      ingresoId: ingreso.id,
+    });
+    if (item.costoUnitario == null) continue;
+
+    const producto = await tx.producto.findUniqueOrThrow({
+      where: { id: item.productoId },
+      select: { precio: true, costo: true },
+    });
+    const costoNuevo = new Prisma.Decimal(item.costoUnitario);
+    if (producto.costo !== null && producto.costo.equals(costoNuevo)) continue;
+    await tx.producto.update({ where: { id: item.productoId }, data: { costo: costoNuevo } });
+    await tx.cambioPrecio.create({
+      data: {
+        productoId: item.productoId,
+        usuarioId: usuario.id,
+        precioAnterior: producto.precio,
+        precioNuevo: producto.precio,
+        costoAnterior: producto.costo,
+        costoNuevo,
+        origen: 'manual',
+      },
+    });
+  }
+  return ingreso.id;
 }
 
 export async function listarIngresos(

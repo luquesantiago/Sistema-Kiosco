@@ -27,8 +27,36 @@ async function preparar() {
 
 type Ctx = Awaited<ReturnType<typeof preparar>>;
 
-function ingresar(ctx: Ctx, payload: Record<string, unknown>, cookies = ctx.admin) {
-  return ctx.app.inject({ method: 'POST', url: '/api/stock/ingresos', cookies, payload });
+/**
+ * La mercadería entra solo como la carga de un pedido: recibe sin pedido (del
+ * proveedor indicado, o Distribuidora Sur) y carga los productos. Devuelve la
+ * respuesta que falló o, si todo anduvo, el ingreso como lo ve el admin.
+ */
+async function ingresar(
+  ctx: Ctx,
+  { proveedorId, ...carga }: Record<string, unknown>,
+  cookies = ctx.admin,
+) {
+  const recepcion = await ctx.app.inject({
+    method: 'POST',
+    url: '/api/pedidos/sin-pedido',
+    cookies,
+    payload: { proveedorId: proveedorId ?? ctx.sur.id, total: '1000' },
+  });
+  if (recepcion.statusCode !== 201) return recepcion;
+  const res = await ctx.app.inject({
+    method: 'POST',
+    url: `/api/pedidos/${recepcion.json().id}/carga`,
+    cookies,
+    payload: carga,
+  });
+  if (res.statusCode !== 200) return res;
+  const ingreso = await ctx.app.inject({
+    method: 'GET',
+    url: `/api/stock/ingresos/${res.json().carga.ingresoId}`,
+    cookies: ctx.admin,
+  });
+  return { statusCode: 201, json: () => ingreso.json() };
 }
 
 async function producto(id: string) {
@@ -125,7 +153,7 @@ describe('registro de un ingreso de mercadería', () => {
   });
 });
 
-describe('costo opcional y precargado para el admin', () => {
+describe('costo opcional y precargado', () => {
   it('si llegó con otro costo, se actualiza y queda en el historial de precios', async () => {
     const ctx = await preparar();
 
@@ -174,7 +202,7 @@ describe('costo opcional y precargado para el admin', () => {
     expect((await producto(ctx.alfajor.id)).costo?.toFixed(2)).toBe('640.00');
   });
 
-  it('un costo de un empleado responde 400 y no registra nada', async () => {
+  it('el empleado carga el costo del remito y queda en el historial a su nombre', async () => {
     const ctx = await preparar();
 
     const res = await ingresar(
@@ -183,10 +211,10 @@ describe('costo opcional y precargado para el admin', () => {
       ctx.empleado,
     );
 
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.codigo).toBe('COSTO_NO_PERMITIDO');
-    expect(await prismaTest.ingresoMercaderia.count()).toBe(0);
-    expect((await producto(ctx.alfajor.id)).stockActual).toBe(0);
+    expect(res.statusCode).toBe(201);
+    expect((await producto(ctx.alfajor.id)).costo?.toFixed(2)).toBe('650.00');
+    const cambio = await prismaTest.cambioPrecio.findFirstOrThrow();
+    expect(cambio.usuarioId).toBe(ctx.juan.id);
   });
 });
 
@@ -243,10 +271,10 @@ describe('consulta de ingresos', () => {
       z
         .array(ingresoListadoSchema)
         .parse(lista.json())
-        .map((i) => [i.usuario.nombre, i.cantidadProductos]),
+        .map((i) => [i.usuario.nombre, i.cantidadProductos, i.pedido !== null]),
     ).toEqual([
-      ['Nombre juan', 2],
-      ['Nombre ana', 1],
+      ['Nombre juan', 2, true],
+      ['Nombre ana', 1, true],
     ]);
     expect(ingresoDetalleSchema.parse(detalle.json())).toMatchObject({
       usuario: { nombre: 'Nombre juan' },

@@ -2,7 +2,7 @@
 
 Sistema de gestión para un kiosco familiar: ventas con lector de código de barras, stock por proveedor, control de caja por turno, avisos diarios de reposición por WhatsApp, facturación electrónica ARCA y dashboard de ventas.
 
-> **Estado:** en desarrollo. Las Etapas 1 y 2 están terminadas en código: hay ventas, stock, caja por turno y avisos al admin por WhatsApp. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
+> **Estado:** en desarrollo. Las Etapas 1, 2 y 3 están terminadas en código: hay ventas, stock, caja por turno, avisos al admin por WhatsApp, pedidos a proveedor y dashboard. La instalación en el servidor se hace cuando el sistema esté completo. Las funcionalidades se agregan cambio por cambio. La documentación del proyecto está en [`docs/`](docs/).
 
 ## Funcionalidades previstas
 
@@ -22,9 +22,18 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
    - ✅ `caja-y-turnos`: turnos, apertura, cierre ciego, arqueo, gastos y retiros.
    - 🚧 `puesta-en-marcha`: imagen y Compose de producción con Caddy, deploy con script y backups diarios a Google Drive. Está implementado; falta instalarlo en el Cloud Server de DonWeb y configurar los backups con la cuenta del dueño. Se deja para cuando el sistema esté completo, así no se paga el servidor antes.
    - ✅ `envio-whatsapp`: WAHA y envío de avisos al admin (anulaciones, gastos, retiros y resumen de cada cierre), con vinculación del chip por QR desde **Administración → WhatsApp**. Probado con el chip.
-3. Dashboard
-4. Reposición: aviso diario de las 12:00 por WhatsApp
-5. Facturación electrónica ARCA e integración con Mercado Pago
+3. ✅ **Dashboard** (rama `etapa-3`), en 4 cambios, todos implementados:
+   - ✅ `costo-y-gastos`: costo guardado en cada venta y categoría de los gastos.
+   - ✅ `cuenta-mercado-pago`: efectivo y cuenta de MP separados; devoluciones siempre en efectivo.
+   - ✅ `pedidos-proveedor`: pedidos, recepción en dos tiempos, pagos ahora o después y recordatorios en el POS.
+   - ✅ `dashboard`: ventas, ganancia, gastos, resultado, más vendidos, efectivo en caja y pendiente de pagar.
+4. 🚧 **Reposición** (rama `etapa-4`):
+   - 🚧 `aviso-reposicion-diario`: aviso de las 12:00 por WhatsApp con lo que hay que reponer, agrupado por proveedor, con recuperación hasta las 19:00 y uno solo por día. Está implementado; falta probarlo con el chip.
+5. 🚧 **Facturación y cobro con Mercado Pago** (rama `etapa-4`):
+   - ✅ `saldo-mercado-pago`: saldo de la cuenta de MP leído de la API.
+   - ✅ `facturacion-arca`: Factura C electrónica automática por la parte electrónica y a pedido por el efectivo. Falta probarla en homologación con el certificado del dueño.
+   - 🚧 `cobro-mercado-pago`: débito, crédito y Mercado Pago cobrados con el Point Smart en modo integrado; la venta queda en espera hasta que MP aprueba el pago (consulta cada 3 s y webhooks firmados), con cancelación, reintento, vencimiento a los 10 minutos, pago mixto y devolución en efectivo de un pago que entra después de cancelar. Está implementado y probado con un Mercado Pago simulado; falta probarlo con las credenciales de prueba y el Point del dueño (y los webhooks, con el servidor con HTTPS).
+     - **Lo que tiene que aportar el dueño:** la aplicación en Mercado Pago Developers con Point habilitado, sus credenciales de prueba y de producción y los usuarios de prueba, el Point Smart vinculado a la cuenta del kiosco y actualizado, y (cuando esté el servidor) la clave secreta de webhooks del evento Order. Ver `infra/README.md`.
 
 ## Desarrollo
 

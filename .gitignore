@@ -6,6 +6,8 @@
 *.key
 *.crt
 *.p12
+# Certificado y clave de ARCA montados en producción
+infra/arca/
 
 # Configuración local de Claude Code (las skills y comandos de .claude/ sí van)
 .claude/settings.local.json

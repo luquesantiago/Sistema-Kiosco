@@ -222,7 +222,7 @@ describe('cerrar el turno desde el mostrador', () => {
 });
 
 describe('movimientos de caja desde el mostrador', () => {
-  it('F8 registra un gasto con el carrito intacto; el empleado no ve "Ingreso"', async () => {
+  it('F8 registra un gasto con categoría y el carrito intacto; el empleado no ve "Ingreso"', async () => {
     let movimiento: unknown;
     const registrados: unknown[] = [];
     simularApi({
@@ -248,21 +248,72 @@ describe('movimientos de caja desde el mostrador', () => {
     const dialogo = await screen.findByRole('dialog', { name: 'Caja' });
     expect(within(dialogo).queryByRole('radio', { name: 'Ingreso' })).not.toBeInTheDocument();
     expect(within(dialogo).getByRole('radio', { name: 'Gasto' })).toBeChecked();
+    const categorias = within(dialogo).getByRole('group', { name: 'Categoría' });
+    expect(
+      within(categorias)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('value')),
+    ).toEqual(['servicios', 'insumos', 'otro']);
+    expect(within(categorias).queryByRole('radio', { checked: true })).not.toBeInTheDocument();
+    const cuentas = within(dialogo).getByRole('group', { name: 'Sale de' });
+    expect(within(cuentas).getByRole('radio', { name: 'Efectivo' })).toBeChecked();
     await userEvent.type(within(dialogo).getByLabelText('Monto'), '8000');
-    await userEvent.type(within(dialogo).getByLabelText('Motivo'), 'pago a proveedor');
+    await userEvent.type(within(dialogo).getByLabelText('Motivo'), 'bolsas');
     await userEvent.keyboard('{Enter}');
+    expect(within(dialogo).getByRole('alert')).toHaveTextContent('Elegí la categoría del gasto.');
+    expect(movimiento).toBeUndefined();
+
+    await userEvent.click(within(categorias).getByRole('radio', { name: 'Insumos' }));
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Registrar (Enter)' }));
 
     await waitFor(() =>
-      expect(movimiento).toEqual({ tipo: 'gasto', monto: '8000.00', motivo: 'pago a proveedor' }),
+      expect(movimiento).toEqual({
+        tipo: 'gasto',
+        categoria: 'insumos',
+        cuenta: 'efectivo',
+        monto: '8000.00',
+        motivo: 'bolsas',
+      }),
     );
-    expect(await within(dialogo).findByText(/Gasto: pago a proveedor/)).toBeInTheDocument();
+    expect(await within(dialogo).findByText(/Gasto · Insumos: bolsas/)).toBeInTheDocument();
+    expect(within(categorias).queryByRole('radio', { checked: true })).not.toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('Alfajor')).toBeInTheDocument();
   });
 
-  it('el admin puede registrar un ingreso', async () => {
+  it('el empleado paga un gasto con Mercado Pago y no elige cuenta en los retiros', async () => {
+    let movimiento: unknown;
+    simularApi({
+      'GET /auth/sesion': [200, EMPLEADO],
+      'GET /caja/estado': [200, PROPIO],
+      'GET /caja/movimientos': [200, []],
+      'POST /caja/movimientos': (cuerpo) => {
+        movimiento = cuerpo;
+        return [201, {}];
+      },
+    });
+    renderApp('/venta');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Caja (F8)' }));
+    const dialogo = await screen.findByRole('dialog', { name: 'Caja' });
+    await userEvent.click(within(dialogo).getByRole('radio', { name: 'Retiro' }));
+    expect(within(dialogo).queryByRole('group', { name: 'Sale de' })).not.toBeInTheDocument();
+    await userEvent.click(within(dialogo).getByRole('radio', { name: 'Gasto' }));
+
+    await userEvent.type(within(dialogo).getByLabelText('Monto'), '6000');
+    await userEvent.click(within(dialogo).getByRole('radio', { name: 'Insumos' }));
+    await userEvent.click(within(dialogo).getByRole('radio', { name: 'Mercado Pago' }));
+    await userEvent.type(within(dialogo).getByLabelText('Motivo'), 'bolsas');
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Registrar (Enter)' }));
+
+    await waitFor(() =>
+      expect(movimiento).toMatchObject({ tipo: 'gasto', cuenta: 'mercado_pago' }),
+    );
+  });
+
+  it('el admin puede registrar un ingreso y elige la cuenta también en los retiros', async () => {
     simularApi({
       'GET /auth/sesion': [200, ADMIN],
       'GET /caja/estado': [200, turnoDe(OTRA, false)],
@@ -274,6 +325,8 @@ describe('movimientos de caja desde el mostrador', () => {
 
     const dialogo = await screen.findByRole('dialog', { name: 'Caja' });
     expect(within(dialogo).getByRole('radio', { name: 'Ingreso' })).toBeInTheDocument();
+    await userEvent.click(within(dialogo).getByRole('radio', { name: 'Retiro' }));
+    expect(within(dialogo).getByRole('group', { name: 'Sale de' })).toBeInTheDocument();
   });
 
   it('muestra F8 en la referencia de atajos', async () => {
@@ -334,7 +387,8 @@ describe('turnos para el admin', () => {
         ingresos: '0.00',
         gastos: '8000.00',
         retiros: '10000.00',
-        efectivoAnulado: '0.00',
+        pagosProveedor: '0.00',
+        devoluciones: '0.00',
         esperado: '51500.00',
       },
       montoContado: '51000.00',
@@ -345,10 +399,24 @@ describe('turnos para el admin', () => {
         {
           id: '0198a5b0-0000-7000-8000-000000000501',
           tipo: 'gasto',
+          categoria: 'insumos',
+          cuenta: 'efectivo',
+          turnoId: TURNO_ID,
           monto: '8000.00',
-          motivo: 'pago a proveedor',
+          motivo: 'bolsas',
           usuario: { id: EMPLEADO.id, nombre: EMPLEADO.nombre },
           creadoEn: '2026-10-20T13:15:00.000Z',
+        },
+        {
+          id: '0198a5b0-0000-7000-8000-000000000502',
+          tipo: 'gasto',
+          categoria: 'servicios',
+          cuenta: 'mercado_pago',
+          turnoId: TURNO_ID,
+          monto: '45000.00',
+          motivo: 'luz',
+          usuario: { id: ADMIN.id, nombre: ADMIN.nombre },
+          creadoEn: '2026-10-20T14:15:00.000Z',
         },
       ],
       anulaciones: [],
@@ -365,8 +433,14 @@ describe('turnos para el admin', () => {
     expect(efectivo).toHaveTextContent(/Diferencia\s*-\$\s?500,00/);
     expect(efectivo).toHaveTextContent('Retiro al cierre (Al banco)');
     expect(screen.getByRole('list', { name: 'Movimientos' })).toHaveTextContent(
-      'Gasto: pago a proveedor',
+      'Gasto · Insumos: bolsas',
     );
+    expect(screen.getByRole('list', { name: 'Movimientos' })).toHaveTextContent(
+      'Gasto · Servicios · Mercado Pago: luz',
+    );
+    // Desde cobro-mercado-pago la línea también suma las devoluciones de cobros.
+    expect(efectivo).toHaveTextContent('Devoluciones');
+    expect(efectivo).not.toHaveTextContent('Devoluciones de anulaciones');
   });
 
   it('un empleado no entra a los turnos', async () => {

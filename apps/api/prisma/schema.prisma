@@ -24,28 +24,33 @@ enum Rol {
 }
 
 model Usuario {
-  id               String                  @id @default(uuid(7)) @db.Uuid
-  nombre           String
+  id                String                  @id @default(uuid(7)) @db.Uuid
+  nombre            String
   /// Siempre en minúsculas: el ingreso no distingue mayúsculas.
-  usuario          String                  @unique
-  contrasenaHash   String                  @map("contrasena_hash")
-  rol              Rol
-  activo           Boolean                 @default(true)
-  intentosFallidos Int                     @default(0) @map("intentos_fallidos")
-  bloqueadoHasta   DateTime?               @map("bloqueado_hasta") @db.Timestamptz
-  ultimoIngreso    DateTime?               @map("ultimo_ingreso") @db.Timestamptz
-  creadoEn         DateTime                @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn    DateTime                @updatedAt @map("actualizado_en") @db.Timestamptz
-  sesiones         Sesion[]
-  cambiosPrecio    CambioPrecio[]
-  movimientosStock MovimientoStock[]
-  ingresos         IngresoMercaderia[]
-  ventas           Venta[]                 @relation("VentasVendidas")
-  ventasAnuladas   Venta[]                 @relation("VentasAnuladas")
-  turnosAbiertos   Turno[]                 @relation("TurnosAbiertos")
-  turnosCerrados   Turno[]                 @relation("TurnosCerrados")
-  movimientosCaja  MovimientoCaja[]
-  destinosWhatsapp ConfiguracionWhatsapp[]
+  usuario           String                  @unique
+  contrasenaHash    String                  @map("contrasena_hash")
+  rol               Rol
+  activo            Boolean                 @default(true)
+  intentosFallidos  Int                     @default(0) @map("intentos_fallidos")
+  bloqueadoHasta    DateTime?               @map("bloqueado_hasta") @db.Timestamptz
+  ultimoIngreso     DateTime?               @map("ultimo_ingreso") @db.Timestamptz
+  creadoEn          DateTime                @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn     DateTime                @updatedAt @map("actualizado_en") @db.Timestamptz
+  sesiones          Sesion[]
+  cambiosPrecio     CambioPrecio[]
+  movimientosStock  MovimientoStock[]
+  ingresos          IngresoMercaderia[]
+  ventas            Venta[]                 @relation("VentasVendidas")
+  ventasAnuladas    Venta[]                 @relation("VentasAnuladas")
+  turnosAbiertos    Turno[]                 @relation("TurnosAbiertos")
+  turnosCerrados    Turno[]                 @relation("TurnosCerrados")
+  movimientosCaja   MovimientoCaja[]
+  destinosWhatsapp  ConfiguracionWhatsapp[]
+  pedidosCreados    Pedido[]                @relation("PedidosCreados")
+  pedidosRecibidos  Pedido[]                @relation("PedidosRecibidos")
+  pedidosCancelados Pedido[]                @relation("PedidosCancelados")
+  facturasPedidas   Factura[]
+  cobrosRevisados   CobroMp[]
 
   @@map("usuarios")
 }
@@ -90,6 +95,7 @@ model Proveedor {
   actualizadoEn DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
   productos     Producto[]
   ingresos      IngresoMercaderia[]
+  pedidos       Pedido[]
 
   @@map("proveedores")
 }
@@ -189,6 +195,9 @@ model IngresoMercaderia {
   usuarioId   String            @map("usuario_id") @db.Uuid
   usuario     Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   nota        String?
+  /// La carga de un pedido. Vacío solo en ingresos anteriores a los pedidos.
+  pedidoId    String?           @unique @map("pedido_id") @db.Uuid
+  pedido      Pedido?           @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   creadoEn    DateTime          @default(now()) @map("creado_en") @db.Timestamptz
   items       ItemIngreso[]
   movimientos MovimientoStock[]
@@ -221,6 +230,10 @@ enum MedioPago {
 enum EstadoVenta {
   pagada
   anulada
+  /// Esperando que Mercado Pago apruebe el cobro del Point: sin stock ni caja.
+  pendiente
+  /// Venta en espera que no se cobró (cancelada en el mostrador o vencida).
+  cancelada
 }
 
 enum TipoNotificacion {
@@ -228,12 +241,19 @@ enum TipoNotificacion {
   gasto_caja
   retiro_caja
   cierre_turno
+  pedido_cerrado
+  reposicion
+  factura
+  cobro_mp_a_revisar
+  devolucion_cobro_mp
 }
 
 enum EstadoNotificacion {
   pendiente
   enviada
   error
+  /// Aviso de reposición que no se envía porque se generó uno más nuevo.
+  reemplazada
 }
 
 model Venta {
@@ -255,9 +275,18 @@ model Venta {
   /// Turno abierto al anular: de su caja sale la devolución en efectivo. Vacío si no había turno.
   anulacionTurnoId String?           @map("anulacion_turno_id") @db.Uuid
   anulacionTurno   Turno?            @relation("AnulacionesDelTurno", fields: [anulacionTurnoId], references: [id], onDelete: Restrict)
+  /// Cuándo se aprobó el cobro del Point. Vacío en las ventas que nacieron pagadas.
+  pagadaEn          DateTime?        @map("pagada_en") @db.Timestamptz
+  /// Solo en `pendiente`: 10 minutos después del último intento de cobro.
+  venceEn           DateTime?        @map("vence_en") @db.Timestamptz
+  canceladaEn       DateTime?        @map("cancelada_en") @db.Timestamptz
+  /// "Cancelada en el mostrador" o "Venció la espera". Se fija al pedir la cancelación.
+  motivoCancelacion String?          @map("motivo_cancelacion")
   items            ItemVenta[]
   pagos            PagoVenta[]
   movimientos      MovimientoStock[]
+  facturas         Factura[]
+  cobrosMp         CobroMp[]
 
   @@index([creadaEn])
   @@index([turnoId])
@@ -276,6 +305,8 @@ model ItemVenta {
   descripcion    String
   cantidad       Int
   precioUnitario Decimal   @map("precio_unitario") @db.Decimal(12, 2)
+  /// Copia fija de Producto.costo al vender. Vacío en "Varios" y en productos sin costo.
+  costoUnitario  Decimal?  @map("costo_unitario") @db.Decimal(12, 2)
   subtotal       Decimal   @db.Decimal(12, 2)
 
   @@index([ventaId])
@@ -332,22 +363,94 @@ enum TipoMovimientoCaja {
   gasto
   retiro
   ingreso
+  /// Solo se crea al pagar un pedido.
+  pago_proveedor
+  /// Devolución en efectivo de un cobro de MP aprobado después de cancelar la venta.
+  devolucion_cobro
+}
+
+/// De dónde sale o adónde entra la plata: el cajón o la cuenta de MP del kiosco.
+enum Cuenta {
+  efectivo
+  mercado_pago
+}
+
+/// Lista fija; los pagos a proveedor no son gastos (van por pedidos).
+enum CategoriaGasto {
+  servicios
+  insumos
+  otro
 }
 
 /// Plata que entra o sale del cajón fuera de las ventas. Inmutable.
 model MovimientoCaja {
   id        String             @id @default(uuid(7)) @db.Uuid
-  turnoId   String             @map("turno_id") @db.Uuid
-  turno     Turno              @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  /// Vacío solo en movimientos de Mercado Pago del admin sin turno abierto.
+  turnoId   String?            @map("turno_id") @db.Uuid
+  turno     Turno?             @relation(fields: [turnoId], references: [id], onDelete: Restrict)
   tipo      TipoMovimientoCaja
+  /// Solo los movimientos en efectivo cuentan para el esperado del turno.
+  cuenta    Cuenta             @default(efectivo)
+  /// Obligatoria en los gastos; vacía en retiros e ingresos (lo valida la entrada).
+  categoria CategoriaGasto?
   monto     Decimal            @db.Decimal(12, 2)
   motivo    String
   usuarioId String             @map("usuario_id") @db.Uuid
   usuario   Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  /// El pago de un pedido (tipo pago_proveedor). Único: un pedido se paga una vez.
+  pedidoId  String?            @unique @map("pedido_id") @db.Uuid
+  pedido    Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  /// Cobro del Point de una venta cancelada: su ingreso en MP y su devolución en efectivo.
+  cobroMpId String?            @map("cobro_mp_id") @db.Uuid
+  cobroMp   CobroMp?           @relation(fields: [cobroMpId], references: [id], onDelete: Restrict)
   creadoEn  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
 
+  // Un cobro tiene como mucho un ingreso y una devolución (los NULL no chocan).
+  @@unique([cobroMpId, tipo])
   @@index([turnoId, creadoEn])
   @@map("movimientos_caja")
+}
+
+/// Estado de la mercadería del pedido. El pago va aparte (su MovimientoCaja).
+enum EstadoPedido {
+  por_llegar
+  llego
+  cargado
+  cancelado
+}
+
+/// Pedido a un proveedor. Cerrado = mercadería cargada y pagado (cerradoEn).
+model Pedido {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  /// Número legible ("el pedido 12").
+  numero            Int                @unique @default(autoincrement())
+  proveedorId       String             @map("proveedor_id") @db.Uuid
+  proveedor         Proveedor          @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  /// Lo que se espera pagar, cargado por el admin (o al recibir sin pedido).
+  totalPedido       Decimal            @map("total_pedido") @db.Decimal(12, 2)
+  llegaEl           DateTime           @map("llega_el") @db.Date
+  nota              String?
+  creadoPorId       String             @map("creado_por_id") @db.Uuid
+  creadoPor         Usuario            @relation("PedidosCreados", fields: [creadoPorId], references: [id], onDelete: Restrict)
+  creadoEn          DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+  estado            EstadoPedido       @default(por_llegar)
+  /// Total final: se fija al llegar y se puede corregir al pagar.
+  total             Decimal?           @db.Decimal(12, 2)
+  notaRecepcion     String?            @map("nota_recepcion")
+  llegoEn           DateTime?          @map("llego_en") @db.Timestamptz
+  recibidoPorId     String?            @map("recibido_por_id") @db.Uuid
+  recibidoPor       Usuario?           @relation("PedidosRecibidos", fields: [recibidoPorId], references: [id], onDelete: Restrict)
+  canceladoEn       DateTime?          @map("cancelado_en") @db.Timestamptz
+  canceladoPorId    String?            @map("cancelado_por_id") @db.Uuid
+  canceladoPor      Usuario?           @relation("PedidosCancelados", fields: [canceladoPorId], references: [id], onDelete: Restrict)
+  motivoCancelacion String?            @map("motivo_cancelacion")
+  cerradoEn         DateTime?          @map("cerrado_en") @db.Timestamptz
+  ingreso           IngresoMercaderia?
+  pago              MovimientoCaja?
+
+  @@index([estado])
+  @@index([cerradoEn])
+  @@map("pedidos")
 }
 
 /// Aviso para el admin. La tabla hace de cola de salida: el proceso de envío
@@ -367,6 +470,7 @@ model Notificacion {
   intentos         Int                @default(0)
   /// Si está, el aviso no se reintenta antes de esta hora.
   proximoIntentoEn DateTime?          @map("proximo_intento_en") @db.Timestamptz
+  ejecucionTarea   EjecucionTarea?
 
   @@index([creadaEn])
   @@index([estado, creadaEn])
@@ -385,4 +489,158 @@ model ConfiguracionWhatsapp {
   actualizadoPor   Usuario  @relation(fields: [actualizadoPorId], references: [id], onDelete: Restrict)
 
   @@map("configuracion_whatsapp")
+}
+
+/// Registro de las tareas por horario: una fila por tarea y día de Argentina.
+/// La restricción única garantiza que una tarea diaria corra una sola vez.
+model EjecucionTarea {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// "aviso_reposicion"; es texto y no enum para sumar tareas sin ALTER TYPE.
+  tarea          String
+  /// Día de Argentina.
+  fecha          DateTime      @db.Date
+  ejecutadaEn    DateTime      @map("ejecutada_en") @db.Timestamptz
+  /// Aviso que generó la tarea, si generó uno.
+  notificacionId String?       @unique @map("notificacion_id") @db.Uuid
+  notificacion   Notificacion? @relation(fields: [notificacionId], references: [id], onDelete: Restrict)
+
+  @@unique([tarea, fecha])
+  @@map("ejecuciones_tarea")
+}
+
+enum EstadoFactura {
+  pendiente
+  /// Número reservado y pedido mandado a ARCA, sin saber todavía si lo autorizó.
+  en_curso
+  autorizada
+  error
+  cancelada
+}
+
+/// Qué parte de la venta ampara la factura.
+enum ParteFactura {
+  /// Débito, crédito y Mercado Pago: se factura sola.
+  electronica
+  /// Lo cobrado en efectivo: solo si el cliente pide factura.
+  efectivo
+}
+
+/// Factura C electrónica (ARCA). Hasta dos por venta, una por parte. La tabla
+/// hace de cola: la tarea de emisión (modules/facturacion/emision.ts) emite las pendientes.
+model Factura {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  ventaId          String        @map("venta_id") @db.Uuid
+  venta            Venta         @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  parte            ParteFactura
+  /// Quien la pidió (parte efectivo); vacío en la automática.
+  pedidaPorId      String?       @map("pedida_por_id") @db.Uuid
+  pedidaPor        Usuario?      @relation(fields: [pedidaPorId], references: [id], onDelete: Restrict)
+  estado           EstadoFactura @default(pendiente)
+  /// Del config al encolar.
+  puntoVenta       Int           @map("punto_venta")
+  tipoComprobante  Int           @map("tipo_comprobante")
+  /// Suma de los pagos de esa parte.
+  importe          Decimal       @db.Decimal(12, 2)
+  /// Se fija al reservar (paso a en_curso); un rechazo lo libera.
+  numero           Int?
+  fechaComprobante DateTime?     @map("fecha_comprobante") @db.Date
+  cae              String?
+  /// Tal como lo devuelve ARCA.
+  caeVencimiento   DateTime?     @map("cae_vencimiento") @db.Date
+  autorizadaEn     DateTime?     @map("autorizada_en") @db.Timestamptz
+  /// Rechazos de ARCA; al quinto, la factura pasa a `error`.
+  intentos         Int           @default(0)
+  /// Si está, la factura no se reintenta antes de esta hora.
+  proximoIntentoEn DateTime?     @map("proximo_intento_en") @db.Timestamptz
+  /// tope | fuera_de_plazo | rechazo_arca | numeracion_agotada | numeracion_inconsistente
+  codigoError      String?       @map("codigo_error")
+  /// Motivo legible del último error.
+  error            String?
+  creadaEn         DateTime      @default(now()) @map("creada_en") @db.Timestamptz
+
+  @@unique([ventaId, parte])
+  // Los NULL son distintos en Postgres: solo choca un número ya reservado.
+  @@unique([puntoVenta, tipoComprobante, numero])
+  @@index([estado, creadaEn])
+  @@map("facturas")
+}
+
+/// Estado de un cobro del Point (ver la tabla del design de cobro-mercado-pago).
+enum EstadoCobroMp {
+  /// Guardado y sin respuesta de MP todavía (o MP no respondió).
+  creando
+  en_espera
+  /// Se pidió cancelar con la orden en la pantalla del Point.
+  cancelando
+  aprobado
+  rechazado
+  vencido
+  cancelado
+  /// La terminal pidió revisar el pago (o MP lo devolvió sin pedirlo).
+  a_revisar
+  /// Aprobado después de cancelar la venta: se devuelve en efectivo.
+  a_devolver
+  devuelto
+  /// El cliente se fue sin la devolución: lo resuelve el admin.
+  sin_devolver
+}
+
+/// Cobro de una venta en la terminal Point (una orden de la Orders API por intento).
+/// Como máximo uno activo a la vez: lo garantiza el índice único parcial
+/// `cobros_mp_uno_activo`, agregado a mano en la migración `cobro_mercado_pago`.
+model CobroMp {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  ventaId           String           @map("venta_id") @db.Uuid
+  venta             Venta            @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  intento           Int
+  /// El medio que eligió el empleado (lo que informa MP queda en `tipoInformado`).
+  medio             MedioPago
+  monto             Decimal          @db.Decimal(12, 2)
+  /// `X-Idempotency-Key`: se guarda antes de llamar a MP y se reusa al reintentar sin respuesta.
+  claveIdempotencia String           @unique @map("clave_idempotencia") @db.Uuid
+  /// `venta-{numero}-{intento}`.
+  referenciaExterna String           @unique @map("referencia_externa")
+  ordenId           String?          @unique @map("orden_id")
+  estado            EstadoCobroMp
+  /// `status_detail` de MP o el código del rechazo al crear.
+  detalle           String?
+  tipoInformado     String?          @map("tipo_informado")
+  cancelacionPedida Boolean          @default(false) @map("cancelacion_pedida")
+  creadoEn          DateTime         @map("creado_en") @db.Timestamptz
+  consultadoEn      DateTime?        @map("consultado_en") @db.Timestamptz
+  resueltoEn        DateTime?        @map("resuelto_en") @db.Timestamptz
+  revisadoPorId     String?          @map("revisado_por_id") @db.Uuid
+  revisadoPor       Usuario?         @relation(fields: [revisadoPorId], references: [id], onDelete: Restrict)
+  revisadoEn        DateTime?        @map("revisado_en") @db.Timestamptz
+  notaRevision      String?          @map("nota_revision")
+  movimientosCaja   MovimientoCaja[]
+
+  @@unique([ventaId, intento])
+  @@index([estado])
+  @@map("cobros_mp")
+}
+
+/// Notificaciones de Mercado Pago ya recibidas: la clave primaria evita procesar dos veces la misma.
+model AvisoMp {
+  /// `id` del cuerpo de la notificación, o `x-request-id` si no viene.
+  id         String   @id
+  ordenId    String?  @map("orden_id")
+  recibidoEn DateTime @map("recibido_en") @db.Timestamptz
+
+  @@map("avisos_mp")
+}
+
+/// Ticket de acceso del WSAA de ARCA. Dura unas 12 h y ARCA no da otro mientras
+/// tanto, así que se guarda para reutilizarlo después de un reinicio.
+model TicketAccesoArca {
+  servicio   String
+  /// homologacion | produccion
+  entorno    String
+  token      String
+  sign       String
+  generadoEn DateTime @map("generado_en") @db.Timestamptz
+  expiraEn   DateTime @map("expira_en") @db.Timestamptz
+
+  @@id([servicio, entorno])
+  @@map("tickets_acceso_arca")
 }
