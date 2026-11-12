@@ -17,6 +17,7 @@ import {
   sesionDe,
 } from './ayudas.js';
 import { crearProductoDePrueba } from './stock-ayudas.js';
+import { crearAppConPoint, revisar } from './cobro-mp-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -877,5 +878,193 @@ describe('aviso de un gasto de Mercado Pago', () => {
 
     const aviso = await prismaTest.notificacion.findFirstOrThrow({ where: { tipo: 'gasto_caja' } });
     expect(aviso.texto).toMatch(/^\*Gasto de Mercado Pago · Insumos: \$ 6\.000,00\*/);
+  });
+});
+
+/*
+ * cobro-mercado-pago: las ventas en espera (`pendiente`) y las canceladas no cuentan
+ * en la caja; las pagadas y las anuladas sí. Hoy `resumenDeCaja` suma sin mirar el
+ * estado (error latente del design). La app y el cliente falso de MP están en
+ * `cobro-mp-ayudas.ts`.
+ */
+describe('ventas en espera fuera de la caja', () => {
+  async function prepararConPoint() {
+    const ctx = await crearAppConPoint(MARTES_0702);
+    await crearUsuarioDePrueba('admin', 'admin');
+    await crearUsuarioDePrueba('ana');
+    const admin = await sesionDe(ctx.app, 'admin');
+    const ana = await sesionDe(ctx.app, 'ana');
+    const alfajor = await crearProductoDePrueba('Alfajor', { precio: '1000' });
+    const turnoId = await abrirTurnoDePrueba(ctx.app, ana, '52000');
+    return { ...ctx, admin, ana, alfajor, turnoId };
+  }
+
+  type CtxPoint = Awaited<ReturnType<typeof prepararConPoint>>;
+
+  /** $5.000 (5 alfajores): $3.000 en débito por el Point y $2.000 en efectivo. */
+  async function ventaMixtaEnEspera(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.ana,
+      payload: {
+        items: [{ productoId: ctx.alfajor.id, cantidad: 5 }],
+        pagos: [
+          { medio: 'debito', monto: '3000' },
+          { medio: 'efectivo', monto: '2000' },
+        ],
+        totalEsperado: '5000',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().estado).toBe('pendiente');
+    return res.json() as { id: string; numero: number };
+  }
+
+  async function resumen(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/caja/turnos/${ctx.turnoId}`,
+      cookies: ctx.admin,
+    });
+    return turnoDetalleSchema.parse(res.json()).resumen;
+  }
+
+  const SIN_VENTAS = { efectivo: '0.00', debito: '0.00', credito: '0.00', mercado_pago: '0.00' };
+
+  it('venta en espera con parte en efectivo: el esperado sigue en $52.000 y no figura en ventas ni medios', async () => {
+    const ctx = await prepararConPoint();
+
+    await ventaMixtaEnEspera(ctx);
+
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '52000.00',
+      efectivoVendido: '0.00',
+      cantidadVentas: 0,
+      porMedio: SIN_VENTAS,
+    });
+  });
+
+  it('al aprobarse cuenta en su turno: esperado $54.000, una venta más y $2.000 + $3.000 por medio', async () => {
+    const ctx = await prepararConPoint();
+    await ventaMixtaEnEspera(ctx);
+    ctx.falso.aprobar(ctx.falso.ultimaOrden().id);
+    ctx.adelantar(3_000);
+
+    await revisar(ctx);
+
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '54000.00',
+      cantidadVentas: 1,
+      porMedio: { ...SIN_VENTAS, efectivo: '2000.00', debito: '3000.00' },
+    });
+  });
+
+  it('venta en espera cancelada: el esperado sigue en $52.000 y no figura en ventas ni medios', async () => {
+    const ctx = await prepararConPoint();
+    const venta = await ventaMixtaEnEspera(ctx);
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/ventas/${venta.id}/cancelar`,
+      cookies: ctx.ana,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(await resumen(ctx)).toMatchObject({
+      esperado: '52000.00',
+      cantidadVentas: 0,
+      porMedio: SIN_VENTAS,
+    });
+  });
+
+  it('pagada por el Point y después anulada en el mismo turno: cuenta por medio y el esperado baja $3.000', async () => {
+    const ctx = await prepararConPoint();
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.ana,
+      payload: {
+        items: [{ productoId: ctx.alfajor.id, cantidad: 3 }],
+        pagos: [{ medio: 'debito', monto: '3000' }],
+        totalEsperado: '3000',
+      },
+    });
+    ctx.falso.aprobar(ctx.falso.ultimaOrden().id);
+    ctx.adelantar(3_000);
+    await revisar(ctx);
+
+    const anulacion = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/ventas/${res.json().id}/anular`,
+      cookies: ctx.ana,
+      payload: { motivo: 'devolución' },
+    });
+    expect(anulacion.statusCode).toBe(200);
+
+    expect(await resumen(ctx)).toMatchObject({
+      cantidadVentas: 1,
+      porMedio: { ...SIN_VENTAS, debito: '3000.00' },
+      devoluciones: '3000.00',
+      esperado: '49000.00',
+    });
+  });
+
+  describe('cierre con un cobro en espera', () => {
+    it('con la venta esperando el pago en el Point → 409 con la venta, y el turno sigue abierto', async () => {
+      const ctx = await prepararConPoint();
+      const venta = await ventaMixtaEnEspera(ctx);
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.ana, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatchObject({
+        codigo: 'COBRO_EN_ESPERA',
+        mensaje: `Hay un cobro con Mercado Pago en espera (venta #${venta.numero}): esperalo o cancelalo`,
+      });
+      const estadoCaja = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/caja/estado',
+        cookies: ctx.ana,
+      });
+      expect(estadoCaja.json().turnoAbierto?.id).toBe(ctx.turnoId);
+    });
+
+    it('después de cancelar la venta en espera, cierra normalmente', async () => {
+      const ctx = await prepararConPoint();
+      const venta = await ventaMixtaEnEspera(ctx);
+      await ctx.app.inject({
+        method: 'POST',
+        url: `/api/ventas/${venta.id}/cancelar`,
+        cookies: ctx.ana,
+      });
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.ana, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('con ventas canceladas y ninguna en espera, cierra normalmente con el esperado sin ellas', async () => {
+      const ctx = await prepararConPoint();
+      for (let i = 0; i < 2; i++) {
+        const venta = await ventaMixtaEnEspera(ctx);
+        await ctx.app.inject({
+          method: 'POST',
+          url: `/api/ventas/${venta.id}/cancelar`,
+          cookies: ctx.ana,
+        });
+      }
+
+      const res = await cerrarTurnoDePrueba(ctx.app, ctx.admin, ctx.turnoId, {
+        montoContado: '52000',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ esperado: '52000.00', diferencia: '0.00' });
+    });
   });
 });

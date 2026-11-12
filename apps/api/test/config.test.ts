@@ -96,6 +96,79 @@ describe('cargarConfig', () => {
   });
 });
 
+describe('cargarConfig: Point de Mercado Pago (cobro-mercado-pago)', () => {
+  // La terminal exige el token y la clave de webhooks exige la terminal. Los errores
+  // nombran la variable que falta (con el formato de siempre) y nunca el valor.
+  const base = { DATABASE_URL: 'postgresql://u:p@localhost:5432/kiosco' };
+  const TOKEN = 'APP_USR-token-secreto';
+  const TERMINAL = 'NEWLAND_N950__N950NCB801293324';
+  const SECRETO = 'clave-secreta-de-webhooks';
+
+  it.each([
+    ['sin ninguna', {}],
+    ['solo el token (saldo sin Point)', { MP_ACCESS_TOKEN: TOKEN }],
+    ['token y terminal (Point sin webhooks)', { MP_ACCESS_TOKEN: TOKEN, MP_TERMINAL_ID: TERMINAL }],
+    [
+      'token, terminal y clave de webhooks',
+      { MP_ACCESS_TOKEN: TOKEN, MP_TERMINAL_ID: TERMINAL, MP_WEBHOOK_SECRET: SECRETO },
+    ],
+  ])('%s: arranca y guarda lo que vino', (_caso, variables) => {
+    const resultado = cargarConfig({ ...base, ...variables });
+
+    expect(resultado).toMatchObject({ ok: true, config: variables });
+  });
+
+  it.each([
+    ['terminal sin token', { MP_TERMINAL_ID: TERMINAL }, 'MP_ACCESS_TOKEN: falta la variable'],
+    [
+      'clave de webhooks sin terminal',
+      { MP_ACCESS_TOKEN: TOKEN, MP_WEBHOOK_SECRET: SECRETO },
+      'MP_TERMINAL_ID: falta la variable',
+    ],
+    ['clave de webhooks sola', { MP_WEBHOOK_SECRET: SECRETO }, 'MP_TERMINAL_ID: falta la variable'],
+  ])('%s: no arranca y nombra la variable que falta', (_caso, variables, error) => {
+    const resultado = cargarConfig({ ...base, ...variables });
+
+    expect(resultado.ok).toBe(false);
+    expect(resultado.ok ? [] : resultado.errores).toContain(error);
+    const texto = JSON.stringify(resultado);
+    for (const valor of [TOKEN, TERMINAL, SECRETO]) expect(texto).not.toContain(valor);
+  });
+
+  it.each([
+    ['MP_TERMINAL_ID', { MP_ACCESS_TOKEN: TOKEN, MP_TERMINAL_ID: '' }],
+    [
+      'MP_WEBHOOK_SECRET',
+      { MP_ACCESS_TOKEN: TOKEN, MP_TERMINAL_ID: TERMINAL, MP_WEBHOOK_SECRET: '' },
+    ],
+  ])('%s definida pero vacía: no arranca y la nombra como valor inválido', (variable, variables) => {
+    expect(cargarConfig({ ...base, ...variables })).toEqual({
+      ok: false,
+      errores: [`${variable}: valor inválido`],
+    });
+  });
+
+  it('con un carácter cada una: arranca', () => {
+    expect(
+      cargarConfig({ ...base, MP_ACCESS_TOKEN: 'x', MP_TERMINAL_ID: 'y', MP_WEBHOOK_SECRET: 'z' }),
+    ).toMatchObject({ ok: true, config: { MP_TERMINAL_ID: 'y', MP_WEBHOOK_SECRET: 'z' } });
+  });
+
+  it('si otra variable es inválida, el error no muestra la terminal ni la clave', () => {
+    const resultado = cargarConfig({
+      ...base,
+      PORT: 'no-es-puerto',
+      MP_ACCESS_TOKEN: TOKEN,
+      MP_TERMINAL_ID: TERMINAL,
+      MP_WEBHOOK_SECRET: SECRETO,
+    });
+
+    expect(resultado.ok).toBe(false);
+    const texto = JSON.stringify(resultado);
+    for (const valor of [TOKEN, TERMINAL, SECRETO]) expect(texto).not.toContain(valor);
+  });
+});
+
 describe('cargarConfig: facturación con ARCA (todas juntas o ninguna)', () => {
   const base = { DATABASE_URL: 'postgresql://u:p@localhost:5432/kiosco' };
   const CUIT = '20123456786';

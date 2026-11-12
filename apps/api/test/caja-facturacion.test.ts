@@ -57,4 +57,29 @@ describe('facturacionHabilitada en GET /api/caja/estado', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({ facturacionHabilitada: true });
   });
+
+  // Bordes agregados en la revisión: sin configuración, ni el estado ni la apertura
+  // lo mandan (ni siquiera en false), así la respuesta queda igual que antes.
+  it('sin configuración, al abrir el turno tampoco viene', async () => {
+    const { app, cookies } = await estadoDeCaja(false);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/caja/turnos',
+      cookies,
+      payload: { montoInicial: '0' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).not.toHaveProperty('facturacionHabilitada');
+  });
+
+  it('con la facturación configurada y el turno abierto, el estado sigue informándolo', async () => {
+    const { app, cookies } = await estadoDeCaja(true);
+    await app.inject({ method: 'POST', url: '/api/caja/turnos', cookies, payload: { montoInicial: '0' } });
+
+    const res = await app.inject({ method: 'GET', url: '/api/caja/estado', cookies });
+
+    expect(res.json()).toMatchObject({ facturacionHabilitada: true, turnoAbierto: { esMio: true } });
+  });
 });

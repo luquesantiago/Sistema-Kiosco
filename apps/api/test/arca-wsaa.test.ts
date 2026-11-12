@@ -52,6 +52,36 @@ describe('armarTra', () => {
     expect(tra).toContain('<expirationTime>2026-11-10T17:09:00-03:00</expirationTime>');
     expect(tra).toContain('<service>wsfe</service>');
   });
+
+  // Bordes agregados en la revisión.
+  it('uniqueId son los segundos enteros: 999 ms no suman un segundo', () => {
+    const tra = armarTra('wsfe', new Date('2026-11-10T19:59:00.999Z'));
+
+    expect(tra).toContain(`<uniqueId>${Date.parse('2026-11-10T19:59:00Z') / 1000}</uniqueId>`);
+    expect(tra).toContain('<generationTime>2026-11-10T16:49:00-03:00</generationTime>');
+  });
+
+  it('cerca de la medianoche de Argentina, generationTime cae el día anterior', () => {
+    // 00:05 del 11/11 en Argentina.
+    const tra = armarTra('wsfe', new Date('2026-11-11T03:05:00Z'));
+
+    expect(tra).toContain('<generationTime>2026-11-10T23:55:00-03:00</generationTime>');
+    expect(tra).toContain('<expirationTime>2026-11-11T00:15:00-03:00</expirationTime>');
+  });
+
+  it('expirationTime − generationTime son exactamente 20 minutos', () => {
+    const tra = armarTra('wsfe', new Date('2026-11-10T19:59:30Z'));
+    const hora = (etiqueta: string) =>
+      Date.parse(new RegExp(`<${etiqueta}>([^<]+)</${etiqueta}>`).exec(tra)![1]!);
+
+    expect(hora('expirationTime') - hora('generationTime')).toBe(20 * 60_000);
+  });
+
+  it('escapa el nombre del servicio', () => {
+    expect(armarTra('a<b&c', new Date('2026-11-10T19:59:00Z'))).toContain(
+      '<service>a&lt;b&amp;c</service>',
+    );
+  });
 });
 
 describe('firmarTra', () => {
@@ -87,5 +117,15 @@ describe('firmarTra', () => {
     );
 
     expect(verify('sha256', atributos, uno.publica, firma)).toBe(false);
+  });
+
+  it('el digest firmado corresponde al TRA exacto: otro TRA da otro digest', () => {
+    const { certificado, clave } = credenciales();
+    const tra = armarTra('wsfe', new Date('2026-11-10T19:59:00Z'));
+    const otro = armarTra('wsfe', new Date('2026-11-10T19:59:01Z'));
+
+    const { atributos } = leerFirma(firmarTra(tra, certificado, clave));
+
+    expect(atributos.includes(createHash('sha256').update(otro, 'utf8').digest())).toBe(false);
   });
 });

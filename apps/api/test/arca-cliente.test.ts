@@ -22,7 +22,9 @@ const AHORA = new Date('2026-11-10T13:00:00Z');
 
 let servidor: Server | undefined;
 let pedidos: { accion: string; cuerpo: string }[] = [];
-let responder: (accion: string) => { status: number; xml: string } | 'colgar';
+let responder: (
+  accion: string,
+) => { status: number; xml: string; demoraMs?: number } | 'colgar';
 
 function sobre(contenido: string) {
   return (
@@ -81,6 +83,8 @@ async function wsfeLocal(): Promise<string> {
     pedidos.push({ accion, cuerpo });
     const respuesta = responder(accion);
     if (respuesta === 'colgar') return; // Nunca contesta: el cliente corta por timeout.
+    if (respuesta.demoraMs) await new Promise((listo) => setTimeout(listo, respuesta.demoraMs));
+    if (res.destroyed) return;
     res.writeHead(respuesta.status, { 'Content-Type': 'text/xml; charset=utf-8' });
     res.end(respuesta.xml);
   });
@@ -171,6 +175,31 @@ describe('estadoServidores (FEDummy)', () => {
 
     expect(await arca.estadoServidores()).toBe('caido');
   });
+
+  // Bordes agregados en la revisión.
+  it('sin respuesta antes del timeout → caido (no tira error)', async () => {
+    const arca = await cliente({ timeoutMs: 200 });
+    responder = () => 'colgar';
+
+    expect(await arca.estadoServidores()).toBe('caido');
+  });
+
+  it('si falta uno de los tres servidores en la respuesta → caido', async () => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer>'),
+    });
+
+    expect(await arca.estadoServidores()).toBe('caido');
+  });
+
+  it('con una respuesta 200 que no es XML → caido', async () => {
+    const arca = await cliente();
+    responder = () => ({ status: 200, xml: 'Service Unavailable' });
+
+    expect(await arca.estadoServidores()).toBe('caido');
+  });
 });
 
 describe('solicitarCae', () => {
@@ -249,6 +278,67 @@ describe('solicitarCae', () => {
 
     expect(error).toBeInstanceOf(ArcaNoDisponible);
   });
+
+  // Bordes agregados en la revisión.
+  it('responde antes del límite de tiempo → CAE (el timeout no corta antes)', async () => {
+    const arca = await cliente({ timeoutMs: 1_000 });
+    responder = () => ({ status: 200, xml: CAE_APROBADO, demoraMs: 300 });
+
+    expect(await arca.solicitarCae(PEDIDO)).toEqual({
+      cae: '76451234567890',
+      vencimiento: '2026-11-20',
+    });
+  });
+
+  it('un SOAP Fault largo que repite el token no lo deja ver, ni siquiera cortado', async () => {
+    const arca = await cliente();
+    // El token queda justo donde el mensaje se recorta a 200 caracteres.
+    const faultstring = `${'x'.repeat(190)} ${TOKEN.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')} fin`;
+    responder = () => ({
+      status: 500,
+      xml: sobre(
+        `<soap:Fault><faultcode>soap:Server</faultcode><faultstring>${faultstring}</faultstring></soap:Fault>`,
+      ),
+    });
+
+    const error = await arca.solicitarCae(PEDIDO).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ArcaNoDisponible);
+    expect((error as Error).message).not.toContain('secreto');
+    expect((error as Error).message).not.toContain('TOKEN<&>');
+  });
+
+  it('el mensaje de un rechazo largo se recorta a 200 caracteres', async () => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado(
+        'FECAESolicitar',
+        '<FeCabResp><Resultado>R</Resultado></FeCabResp>' +
+          `<Errors><Err><Code>10016</Code><Msg>${'motivo '.repeat(80)}</Msg></Err></Errors>`,
+      ),
+    });
+
+    const error = await arca.solicitarCae(PEDIDO).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ArcaRechazo);
+    expect((error as Error).message.length).toBeLessThanOrEqual(200);
+    expect((error as Error).message).toContain('10016');
+  });
+
+  it('Resultado A sin CAE no se toma como autorizada', async () => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado(
+        'FECAESolicitar',
+        '<FeCabResp><Resultado>A</Resultado></FeCabResp>' +
+          '<FeDetResp><FECAEDetResponse><CbteDesde>42</CbteDesde><Resultado>A</Resultado><CAE></CAE><CAEFchVto></CAEFchVto></FECAEDetResponse></FeDetResp>',
+      ),
+    });
+
+    await expect(arca.solicitarCae(PEDIDO)).rejects.toBeInstanceOf(Error);
+  });
 });
 
 describe('ultimoAutorizado y consultar', () => {
@@ -287,6 +377,87 @@ describe('ultimoAutorizado y consultar', () => {
 
     expect(await arca.ultimoAutorizado(5, 11)).toEqual({ numero: 0, fecha: null });
     expect(pedidos).toHaveLength(1);
+  });
+
+  // Bordes agregados en la revisión.
+  it('una respuesta sin CbteNro no se toma como "sin comprobantes": ARCA no disponible', async () => {
+    // Si se tomara como 0, la emisión numeraría desde 1 aunque ARCA ya tenga comprobantes.
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado('FECompUltimoAutorizado', '<PtoVta>5</PtoVta><CbteTipo>11</CbteTipo>'),
+    });
+
+    await expect(arca.ultimoAutorizado(5, 11)).rejects.toBeInstanceOf(ArcaNoDisponible);
+  });
+
+  it.each([
+    ['vacío', '<CbteNro></CbteNro>'],
+    ['negativo', '<CbteNro>-1</CbteNro>'],
+    ['con decimales', '<CbteNro>41.5</CbteNro>'],
+    ['no numérico', '<CbteNro>abc</CbteNro>'],
+  ])('un CbteNro %s → ARCA no disponible', async (_caso, nodo) => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado('FECompUltimoAutorizado', `<PtoVta>5</PtoVta><CbteTipo>11</CbteTipo>${nodo}`),
+    });
+
+    await expect(arca.ultimoAutorizado(5, 11)).rejects.toBeInstanceOf(ArcaNoDisponible);
+  });
+
+  it('último número 1 (el borde de "hay comprobantes"): consulta su fecha', async () => {
+    const arca = await cliente();
+    responder = (accion) => ({
+      status: 200,
+      xml:
+        accion === 'FECompUltimoAutorizado'
+          ? resultado('FECompUltimoAutorizado', '<CbteNro>1</CbteNro>')
+          : resultado(
+              'FECompConsultar',
+              '<ResultGet><CbteDesde>1</CbteDesde><CbteFch>20261101</CbteFch><ImpTotal>10</ImpTotal>' +
+                '<CodAutorizacion>76451234567800</CodAutorizacion><FchVto>20261111</FchVto></ResultGet>',
+            ),
+    });
+
+    expect(await arca.ultimoAutorizado(5, 11)).toEqual({ numero: 1, fecha: '2026-11-01' });
+    expect(pedidos.map((p) => p.accion)).toEqual(['FECompUltimoAutorizado', 'FECompConsultar']);
+  });
+
+  it('FECompUltimoAutorizado con Errors → ArcaRechazo con el código, sin el token', async () => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado(
+        'FECompUltimoAutorizado',
+        `<Errors><Err><Code>600</Code><Msg>ValidacionDeToken: No validaron las credenciales ${TOKEN.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</Msg></Err></Errors>`,
+      ),
+    });
+
+    const error = await arca.ultimoAutorizado(5, 11).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ArcaRechazo);
+    expect(error).toMatchObject({ codigo: '600' });
+    expect((error as Error).message).not.toContain('secreto');
+  });
+
+  it.each([
+    ['3300', '3300.00'],
+    ['3300.5', '3300.50'],
+    ['0.01', '0.01'],
+    ['99999999.99', '99999999.99'],
+  ])('consultar con ImpTotal %s → importe "%s"', async (impTotal, importe) => {
+    const arca = await cliente();
+    responder = () => ({
+      status: 200,
+      xml: resultado(
+        'FECompConsultar',
+        `<ResultGet><CbteDesde>42</CbteDesde><CbteFch>20261110</CbteFch><ImpTotal>${impTotal}</ImpTotal>` +
+          '<CodAutorizacion>76451234567890</CodAutorizacion><FchVto>20261120</FchVto></ResultGet>',
+      ),
+    });
+
+    expect((await arca.consultar(5, 11, 42))?.importe).toBe(importe);
   });
 
   it('consultar un número que ARCA no tiene (602) → null', async () => {

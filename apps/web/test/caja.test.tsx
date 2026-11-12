@@ -438,7 +438,9 @@ describe('turnos para el admin', () => {
     expect(screen.getByRole('list', { name: 'Movimientos' })).toHaveTextContent(
       'Gasto · Servicios · Mercado Pago: luz',
     );
-    expect(efectivo).toHaveTextContent('Devoluciones de anulaciones');
+    // Desde cobro-mercado-pago la línea también suma las devoluciones de cobros.
+    expect(efectivo).toHaveTextContent('Devoluciones');
+    expect(efectivo).not.toHaveTextContent('Devoluciones de anulaciones');
   });
 
   it('un empleado no entra a los turnos', async () => {

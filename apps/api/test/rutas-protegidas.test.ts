@@ -9,8 +9,15 @@ import {
   sesionDe,
 } from './ayudas.js';
 
-/** Las únicas rutas de la API que se pueden usar sin sesión. */
-const RUTAS_ABIERTAS = ['POST /api/auth/ingresar', 'GET /api/health'];
+/**
+ * Las únicas rutas de la API que se pueden usar sin sesión. El webhook de Mercado Pago
+ * se protege con la firma (ver `cobro-mp.test.ts`).
+ */
+const RUTAS_ABIERTAS = [
+  'POST /api/auth/ingresar',
+  'GET /api/health',
+  'POST /api/mercado-pago/webhook',
+];
 
 /** Módulos solo para el admin, salvo las rutas indicadas que también usa el empleado. */
 const PREFIJOS_ADMIN = [
@@ -43,6 +50,9 @@ const RUTAS_DEL_EMPLEADO = [
   'POST /api/pedidos/:id/carga',
   'POST /api/pedidos/:id/pago',
   'GET /api/mercado-pago/saldo',
+  // cobro-mercado-pago: la devolución en efectivo la confirma quien opera el turno.
+  'POST /api/mercado-pago/cobros/:id/devolucion',
+  'POST /api/mercado-pago/cobros/:id/sin-devolver',
 ];
 
 const ID_CUALQUIERA = '0198a5b0-0000-7000-8000-000000000000';
@@ -102,7 +112,8 @@ describe('acceso a la API según sesión', () => {
     const deAdmin = rutasDeApi(app).filter(
       ({ m, url }) =>
         PREFIJOS_ADMIN.some((p) => url === p || url.startsWith(`${p}/`)) &&
-        !RUTAS_DEL_EMPLEADO.includes(`${m} ${url}`),
+        !RUTAS_DEL_EMPLEADO.includes(`${m} ${url}`) &&
+        !RUTAS_ABIERTAS.includes(`${m} ${url}`),
     );
 
     expect(deAdmin.map(({ m, url }) => `${m} ${url}`)).toEqual(
@@ -176,6 +187,57 @@ describe('saldo de Mercado Pago', () => {
     const cookies = await sesionDe(app, 'juan');
     const empleado = await app.inject({ method: 'GET', url: '/api/mercado-pago/saldo', cookies });
     expect(empleado.statusCode).toBe(200);
+  });
+});
+
+describe('rutas del cobro con el Point (cobro-mercado-pago)', () => {
+  // Se registran siempre, aunque el Point no esté configurado.
+  it('están registradas; el webhook es la única abierta y los cobros a revisar son del admin', async () => {
+    const { app } = await crearAppDePrueba();
+    await crearUsuarioDePrueba('juan');
+    await app.ready();
+
+    expect(rutasDeApi(app).map(({ m, url }) => `${m} ${url}`)).toEqual(
+      expect.arrayContaining([
+        'POST /api/mercado-pago/webhook',
+        'GET /api/mercado-pago/cobros-a-revisar',
+        'POST /api/mercado-pago/cobros/:id/revisado',
+        'POST /api/mercado-pago/cobros/:id/devolucion',
+        'POST /api/mercado-pago/cobros/:id/sin-devolver',
+        'GET /api/ventas/en-espera',
+        'GET /api/ventas/:id/cobro',
+        'POST /api/ventas/:id/cobro/reintentar',
+        'POST /api/ventas/:id/cancelar',
+      ]),
+    );
+
+    // Sin sesión, el webhook no pide login: sin clave configurada responde 401 por la
+    // firma, nunca NO_AUTENTICADO.
+    const webhook = await app.inject({
+      method: 'POST',
+      url: '/api/mercado-pago/webhook',
+      payload: {},
+    });
+    expect(webhook.statusCode).toBe(401);
+    expect(webhook.json().error?.codigo).not.toBe('NO_AUTENTICADO');
+
+    const cookies = await sesionDe(app, 'juan');
+    for (const [method, url] of [
+      ['GET', '/api/mercado-pago/cobros-a-revisar'],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/revisado`],
+    ] as const) {
+      const res = await app.inject({ method, url, cookies, payload: method === 'POST' ? {} : undefined });
+      expect(res.statusCode, `${method} ${url}`).toBe(403);
+    }
+    for (const [method, url] of [
+      ['GET', '/api/ventas/en-espera'],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/devolucion`],
+      ['POST', `/api/mercado-pago/cobros/${ID_CUALQUIERA}/sin-devolver`],
+      ['POST', `/api/ventas/${ID_CUALQUIERA}/cancelar`],
+    ] as const) {
+      const res = await app.inject({ method, url, cookies });
+      expect([401, 403], `${method} ${url}`).not.toContain(res.statusCode);
+    }
   });
 });
 

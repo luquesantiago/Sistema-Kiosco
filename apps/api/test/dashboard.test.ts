@@ -10,6 +10,7 @@ import {
   type Cookies,
 } from './ayudas.js';
 import { crearProductoDePrueba, verificarStockConsistente } from './stock-ayudas.js';
+import { crearAppConPoint, revisar } from './cobro-mp-ayudas.js';
 
 beforeEach(async () => {
   await limpiarBase();
@@ -351,5 +352,123 @@ describe('serie, medios y más vendidos', () => {
       ['Gaseosa', '1500.00'],
       ['Alfajor', '600.00'],
     ]);
+  });
+});
+
+/*
+ * cobro-mercado-pago: las ventas en espera y las canceladas no cuentan en ningún número
+ * del dashboard (el servicio ya filtra `pagada`; estos tests dejan cubierto el spec). La
+ * app con el Point y el cliente falso de MP están en `cobro-mp-ayudas.ts`.
+ */
+describe('ventas en espera y canceladas fuera del dashboard', () => {
+  async function prepararConPoint(inicio = JUEVES_1500) {
+    const ctx = await crearAppConPoint(inicio);
+    await crearUsuarioDePrueba('ana', 'admin');
+    await crearUsuarioDePrueba('juan');
+    const admin = await sesionDe(ctx.app, 'ana');
+    const empleado = await sesionDe(ctx.app, 'juan');
+    const heladera = await crearProductoDePrueba('Heladera de telgopor', {
+      precio: '10000',
+      costo: '6000',
+    });
+    const parlante = await crearProductoDePrueba('Parlante', { precio: '5000', costo: '3000' });
+    await abrirTurnoDePrueba(ctx.app, empleado);
+    return { ...ctx, admin, empleado, heladera, parlante };
+  }
+
+  type CtxPoint = Awaited<ReturnType<typeof prepararConPoint>>;
+
+  /** $100.000 en efectivo: 10 heladeras de $10.000. */
+  async function ventasPagadas(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+      payload: {
+        items: [{ productoId: ctx.heladera.id, cantidad: 10 }],
+        pagos: [{ medio: 'efectivo', monto: '100000' }],
+        totalEsperado: '100000',
+      },
+    });
+    expect(res.json().estado).toBe('pagada');
+  }
+
+  /** Un parlante de $5.000 con débito por el Point: queda en espera. */
+  async function ventaEnEspera(ctx: CtxPoint) {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/ventas',
+      cookies: ctx.empleado,
+      payload: {
+        items: [{ productoId: ctx.parlante.id, cantidad: 1 }],
+        pagos: [{ medio: 'debito', monto: '5000' }],
+        totalEsperado: '5000',
+      },
+    });
+    expect(res.json().estado).toBe('pendiente');
+    return res.json() as { id: string };
+  }
+
+  async function datosDe(ctx: CtxPoint, query = '') {
+    const res = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/dashboard${query}`,
+      cookies: ctx.admin,
+    });
+    expect(res.statusCode).toBe(200);
+    return dashboardSchema.parse(res.json());
+  }
+
+  function esperarSinElParlante(d: Awaited<ReturnType<typeof datosDe>>) {
+    expect(d.ventas).toMatchObject({ total: '100000.00', cantidad: 1 });
+    expect(d.ganancia.total).toBe('40000.00');
+    expect(d.medios).toEqual({
+      efectivo: '100000.00',
+      debito: '0.00',
+      credito: '0.00',
+      mercado_pago: '0.00',
+    });
+    for (const lista of [d.masVendidos.unidades, d.masVendidos.importe, d.masVendidos.ganancia]) {
+      expect(lista.map((p) => p.nombre)).toEqual(['Heladera de telgopor']);
+    }
+    expect(d.movimientos.anuladas).toEqual({ cantidad: 0, total: '0.00' });
+  }
+
+  it('venta en espera: las ventas de hoy son $100.000 y no suma en medios ni en los más vendidos', async () => {
+    const ctx = await prepararConPoint();
+    await ventasPagadas(ctx);
+    await ventaEnEspera(ctx);
+
+    esperarSinElParlante(await datosDe(ctx));
+  });
+
+  it('venta cancelada: las ventas de hoy son $100.000 y las anuladas no cambian', async () => {
+    const ctx = await prepararConPoint();
+    await ventasPagadas(ctx);
+    const venta = await ventaEnEspera(ctx);
+    const cancelacion = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/ventas/${venta.id}/cancelar`,
+      cookies: ctx.empleado,
+    });
+    expect(cancelacion.statusCode).toBe(200);
+
+    esperarSinElParlante(await datosDe(ctx));
+  });
+
+  it('registrada en espera a las 23:59:58 del 10/11 y aprobada a las 00:00:03 del 11/11: cuenta el 10/11', async () => {
+    const ctx = await prepararConPoint(new Date('2026-11-10T23:59:58-03:00'));
+    await ventaEnEspera(ctx);
+    ctx.falso.aprobar(ctx.falso.ultimaOrden().id);
+    ctx.fijarHora(new Date('2026-11-11T00:00:03-03:00'));
+
+    await revisar(ctx);
+
+    const dia10 = await datosDe(ctx, '?desde=2026-11-10&hasta=2026-11-10');
+    const dia11 = await datosDe(ctx, '?desde=2026-11-11&hasta=2026-11-11');
+    expect(dia10.ventas).toMatchObject({ total: '5000.00', cantidad: 1 });
+    expect(dia10.medios.debito).toBe('5000.00');
+    expect(dia11.ventas).toMatchObject({ total: '0.00', cantidad: 0 });
+    expect(dia11.medios.debito).toBe('0.00');
   });
 });

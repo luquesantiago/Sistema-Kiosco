@@ -70,6 +70,56 @@ describe('despertar', () => {
     expect(estado.maximo).toBe(1);
   });
 
+  // Bordes agregados en la revisión.
+  it('despertar() 1 ms antes del intervalo: corre una pasada y la que estaba agendada no se suma', async () => {
+    const pasada = vi.fn(async () => {});
+    ciclo = iniciarCiclo({ nombre: 'prueba', pasada, intervaloMs: INTERVALO, log });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(INTERVALO - 1);
+    ciclo.despertar();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pasada).toHaveBeenCalledTimes(2);
+
+    // Donde estaba la pasada original (1 ms después) ya no hay ninguna.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(pasada).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(INTERVALO - 1);
+    expect(pasada).toHaveBeenCalledTimes(3);
+  });
+
+  it('dos despertar() seguidos entre pasadas corren una sola pasada', async () => {
+    const pasada = vi.fn(async () => {});
+    ciclo = iniciarCiclo({ nombre: 'prueba', pasada, intervaloMs: INTERVALO, log });
+    await vi.advanceTimersByTimeAsync(0);
+
+    ciclo.despertar();
+    ciclo.despertar();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(INTERVALO - 1);
+
+    expect(pasada).toHaveBeenCalledTimes(2);
+  });
+
+  it('despertar() durante una pasada que falla: la que se agenda corre igual y el error va al log', async () => {
+    const error = vi.fn();
+    const conLog = { error, warn: vi.fn(), info: vi.fn() } as unknown as FastifyBaseLogger;
+    let llamadas = 0;
+    const pasada = async () => {
+      llamadas++;
+      await new Promise((listo) => setTimeout(listo, 500));
+      if (llamadas === 1) throw new Error('falló');
+    };
+    ciclo = iniciarCiclo({ nombre: 'prueba', pasada, intervaloMs: INTERVALO, log: conLog });
+    await vi.advanceTimersByTimeAsync(100);
+
+    ciclo.despertar();
+    await vi.advanceTimersByTimeAsync(450);
+
+    expect(llamadas).toBe(2);
+    expect(error).toHaveBeenCalledTimes(1);
+  });
+
   it('después de detener() no hace nada', async () => {
     const pasada = vi.fn(async () => {});
     const c = iniciarCiclo({ nombre: 'prueba', pasada, intervaloMs: INTERVALO, log });
