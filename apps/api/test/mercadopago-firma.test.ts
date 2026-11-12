@@ -38,12 +38,13 @@ function hmac(texto: string, secreto = SECRETO) {
 }
 
 /** Encabezado `x-signature` firmado como lo haría MP. */
-function firmar({
-  ts = String(AHORA_S - 10),
-  dataId = DATA_ID as string | undefined,
-  requestId = REQUEST_ID as string | undefined,
-  secreto = SECRETO,
-} = {}) {
+function firmar(
+  opciones: { ts?: string; dataId?: string; requestId?: string; secreto?: string } = {},
+) {
+  const { ts = String(AHORA_S - 10), secreto = SECRETO } = opciones;
+  // Un `undefined` explícito significa "no vino": no se reemplaza por el valor por defecto.
+  const dataId = 'dataId' in opciones ? opciones.dataId : DATA_ID;
+  const requestId = 'requestId' in opciones ? opciones.requestId : REQUEST_ID;
   return `ts=${ts},v1=${hmac(manifest({ dataId, requestId, ts }), secreto)}`;
 }
 
