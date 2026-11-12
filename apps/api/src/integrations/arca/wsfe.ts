@@ -102,12 +102,11 @@ async function llamar(
     timeoutMs: opciones.timeoutMs,
   });
   if ('fault' in respuesta) {
+    // Primero se sacan las credenciales del texto completo y después se recorta:
+    // al revés, un token cortado por el recorte sobreviviría a medias.
     throw new ArcaNoDisponible(
       'caido',
-      sinCredenciales(
-        `ARCA respondió con un error del servidor: ${respuesta.fault.mensaje}`,
-        credenciales,
-      ),
+      `ARCA respondió con un error del servidor: ${recortar(sinCredenciales(respuesta.fault.mensaje, credenciales))}`,
     );
   }
   const resultado = hijo(hijo(respuesta.cuerpo, `${metodo}Response`), `${metodo}Result`);
@@ -177,8 +176,10 @@ export async function feCompUltimoAutorizado(
   );
   const errores = mensajes(hijo(resultado, 'Errors'), 'Err');
   if (errores.length > 0) throw rechazo(errores, credenciales);
-  const numero = Number(texto(hijo(resultado, 'CbteNro')));
-  if (!Number.isInteger(numero) || numero < 0) {
+  // Ausente o vacío no es "sin comprobantes" (eso es un 0 explícito): numeraría desde 1.
+  const valor = texto(hijo(resultado, 'CbteNro'));
+  const numero = Number(valor);
+  if (!/^\d+$/.test(valor) || !Number.isSafeInteger(numero)) {
     throw new ArcaNoDisponible('caido', 'ARCA no informó el último número autorizado.');
   }
   return numero;

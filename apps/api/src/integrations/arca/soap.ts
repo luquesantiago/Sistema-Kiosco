@@ -55,6 +55,7 @@ export function recortar(mensaje: string, largo = 200): string {
 
 export interface FaultSoap {
   codigo: string;
+  /** Completo: quien lo use le saca las credenciales y después lo recorta. */
   mensaje: string;
 }
 
@@ -98,7 +99,7 @@ export async function enviarSoap(
     return {
       fault: {
         codigo: texto(hijo(fault, 'faultcode')),
-        mensaje: recortar(texto(hijo(fault, 'faultstring'))),
+        mensaje: texto(hijo(fault, 'faultstring')),
       },
     };
   }

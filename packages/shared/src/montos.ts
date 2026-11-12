@@ -13,10 +13,13 @@ export function textoAMonto(texto: string): string | null {
     .replace(/\s/g, '');
   if (limpio.includes(',')) {
     // Con coma, la coma es el decimal y los puntos son separadores de miles.
-    if (!/^\d{1,3}(\.\d{3})*(,\d*)?$/.test(limpio) && !/^\d+(,\d*)?$/.test(limpio)) return null;
+    // Un número con punto de miles no empieza con 0 ("0.005,00" no es $5).
+    if (!/^[1-9]\d{0,2}(\.\d{3})*(,\d*)?$/.test(limpio) && !/^\d+(,\d*)?$/.test(limpio)) {
+      return null;
+    }
     limpio = limpio.replace(/\./g, '').replace(',', '.');
-  } else if (/^\d{1,3}(\.\d{3})+$/.test(limpio)) {
-    // "1.000" o "12.500": punto de miles.
+  } else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(limpio)) {
+    // "1.000" o "12.500": punto de miles. "0.005" no: es un decimal de más de dos cifras.
     limpio = limpio.replace(/\./g, '');
   }
   const partes = /^(\d+)(?:\.(\d{0,2}))?$/.exec(limpio);

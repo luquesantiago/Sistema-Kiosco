@@ -1,6 +1,6 @@
 import forge from 'node-forge';
 import { ArcaNoDisponible } from './errores.js';
-import { enviarSoap, escaparXml, hijo, leerXml, texto } from './soap.js';
+import { enviarSoap, escaparXml, hijo, leerXml, recortar, texto } from './soap.js';
 
 /*
  * WSAA (`LoginCms`): pide el ticket de acceso con un TRA firmado en CMS/PKCS#7
@@ -92,7 +92,7 @@ export async function loginCms(cmsBase64: string, opciones: OpcionesWsaa): Promi
     // la factura, pero tampoco es culpa de ella. La pantalla muestra el motivo.
     throw new ArcaNoDisponible(
       'caido',
-      `ARCA no dio el ticket de acceso: ${respuesta.fault.mensaje}`,
+      `ARCA no dio el ticket de acceso: ${recortar(respuesta.fault.mensaje)}`,
     );
   }
 
