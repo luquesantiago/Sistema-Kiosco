@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { crearApp } from './app.js';
-import { cargarConfig, configArca } from './config.js';
+import { cargarConfig, configArca, configPoint } from './config.js';
 import { crearPrisma } from './db.js';
 import { clienteArca, leerCredenciales } from './integrations/arca/cliente.js';
 import { clienteMercadoPago } from './integrations/mercadopago/cliente.js';
 import { iniciarAvisoReposicion } from './jobs/aviso-reposicion.js';
+import { iniciarCobrosMp } from './jobs/cobros-mp.js';
 import { iniciarEmisionFacturas } from './jobs/emision-facturas.js';
 import type { Facturacion } from './modules/facturacion/tipos.js';
 import { esperarBase } from './lib/esperar-base.js';
@@ -25,6 +26,8 @@ const whatsapp =
     : undefined;
 // Sin token, el saldo de Mercado Pago queda "no configurado" y todo lo demás funciona.
 const mercadoPago = config.MP_ACCESS_TOKEN ? clienteMercadoPago(config.MP_ACCESS_TOKEN) : undefined;
+// Con MP_TERMINAL_ID, débito, crédito y Mercado Pago se cobran con el Point.
+const point = configPoint(config);
 
 // Facturación con ARCA: sin las variables ARCA_*, se vende igual sin facturar.
 // El certificado y la clave se leen al arrancar; la clave queda solo en memoria.
@@ -66,6 +69,7 @@ const app = await crearApp({
   prisma,
   whatsapp,
   mercadoPago,
+  point,
   facturacion,
   cookieSegura: config.NODE_ENV === 'production',
   // En producción solo se llega a la app a través de Caddy.
@@ -109,10 +113,31 @@ if (facturacion) {
   app.log.warn('La facturación con ARCA no está configurada (ARCA_*): las ventas no se facturan.');
 }
 
+// La consulta de respaldo de los cobros del Point corre solo acá y solo con el Point
+// configurado; nunca en los tests (que llaman a revisarCobros).
+if (point && mercadoPago) {
+  const cobros = iniciarCobrosMp({
+    prisma,
+    mercadoPago,
+    facturacion,
+    ahora: () => new Date(),
+    log: app.log,
+  });
+  app.addHook('onClose', () => cobros.detener());
+  app.log.info(
+    point.webhookSecret
+      ? 'Cobro con el Point activo, con notificaciones firmadas y consulta cada 3 s.'
+      : 'Cobro con el Point activo, sin notificaciones (MP_WEBHOOK_SECRET): solo consulta cada 3 s.',
+  );
+} else {
+  app.log.warn(
+    'El Point de Mercado Pago no está configurado (MP_TERMINAL_ID): las ventas con tarjeta o MP se registran sin pasar por la terminal.',
+  );
+}
+
 app.addHook('onClose', async () => {
   await prisma.$disconnect();
 });
-
 for (const senal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(senal, () => {
     void app.close().then(() => process.exit(0));

@@ -61,6 +61,9 @@ services:
       # Opcional, sin valor acá: si falta en infra/.env la app no la recibe (y no
       # llega vacía, que la haría no arrancar). Sin ella, el saldo dice "no configurado".
       MP_ACCESS_TOKEN:
+      # Cobro con el Point (opcionales, igual que el token): terminal y clave de webhooks.
+      MP_TERMINAL_ID:
+      MP_WEBHOOK_SECRET:
       # Factura electrónica con ARCA (opcional): igual que MP, sin valor acá. Van todas
       # juntas o ninguna; sin ellas, el sistema vende sin facturar. Las rutas del
       # certificado y la clave apuntan al montaje de solo lectura de abajo.

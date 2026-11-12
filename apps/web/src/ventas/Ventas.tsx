@@ -1,5 +1,6 @@
 import {
   comparar,
+  NOMBRE_ESTADO_VENTA,
   NOMBRE_MEDIO,
   restar,
   sumar,
@@ -20,11 +21,25 @@ import { formatearPesos } from '../lib/montos.js';
 import { useImpresionTicket } from '../pos/Ticket.js';
 
 function Estado({ venta }: { venta: VentaResumen }) {
-  return venta.estado === 'anulada' ? (
-    <span className="rounded bg-red-100 px-2 py-0.5 text-sm text-red-800">Anulada</span>
-  ) : (
-    <span className="text-sm text-slate-600">Pagada</span>
-  );
+  switch (venta.estado) {
+    case 'anulada':
+      return <span className="rounded bg-red-100 px-2 py-0.5 text-sm text-red-800">Anulada</span>;
+    // Cobro con el Point: esperando la aprobación, o no se llegó a cobrar.
+    case 'pendiente':
+      return (
+        <span className="rounded bg-amber-100 px-2 py-0.5 text-sm text-amber-900">
+          {NOMBRE_ESTADO_VENTA.pendiente}
+        </span>
+      );
+    case 'cancelada':
+      return (
+        <span className="rounded bg-slate-200 px-2 py-0.5 text-sm text-slate-700">
+          {NOMBRE_ESTADO_VENTA.cancelada}
+        </span>
+      );
+    default:
+      return <span className="text-sm text-slate-600">Pagada</span>;
+  }
 }
 
 function medios(venta: VentaResumen): string {
@@ -386,6 +401,11 @@ export function DetalleVenta() {
           <p className="text-slate-700">
             {formatearFechaHora(venta.creadaEn)} · Vendió {venta.usuario.nombre}
           </p>
+          {venta.cancelacion && (
+            <p className="rounded-lg bg-slate-100 p-3 text-slate-800">
+              {`No se cobró. Cancelada el ${formatearFechaHora(venta.cancelacion.en)}: ${venta.cancelacion.motivo}`}
+            </p>
+          )}
           {venta.anulacion && (
             <p className="rounded-lg bg-red-50 p-3 text-red-900">
               Anulada el {formatearFechaHora(venta.anulacion.en)} por {venta.anulacion.por.nombre}:{' '}
@@ -446,13 +466,16 @@ export function DetalleVenta() {
           <FacturasDeLaVenta venta={venta} />
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={() => void imprimirConFactura(venta)}
-            >
-              Reimprimir ticket
-            </button>
+            {/* Una venta en espera o cancelada no se cobró: no tiene ticket. */}
+            {(venta.estado === 'pagada' || venta.estado === 'anulada') && (
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={() => void imprimirConFactura(venta)}
+              >
+                Reimprimir ticket
+              </button>
+            )}
             {venta.estado === 'pagada' && <FormularioAnulacion venta={venta} />}
           </div>
         </>

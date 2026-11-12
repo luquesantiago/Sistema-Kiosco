@@ -1,5 +1,6 @@
 import {
   anulacionSchema,
+  cobroMpSchema,
   facturaVentaSchema,
   listadoVentasQuerySchema,
   ventaDetalleSchema,
@@ -12,7 +13,17 @@ import type { PrismaClient } from '../../generated/prisma/client.js';
 import { requiereSesion, usuarioActual } from '../../plugins/sesion.js';
 import { pedirFactura } from '../facturacion/servicio.js';
 import type { Facturacion } from '../facturacion/tipos.js';
-import { anularVenta, listarVentas, obtenerVenta, registrarVenta } from './servicio.js';
+import {
+  anularVenta,
+  cancelarVenta,
+  cobroDeVenta,
+  type CobroConPoint,
+  listarVentas,
+  obtenerVenta,
+  registrarVenta,
+  reintentarCobroDeVenta,
+  ventaEnEspera,
+} from './servicio.js';
 
 const paramsId = z.object({ id: z.uuid() });
 
@@ -22,7 +33,9 @@ export const rutasVentas: FastifyPluginAsyncZod<{
   prisma: PrismaClient;
   ahora: () => Date;
   facturacion?: Facturacion;
-}> = async (app, { prisma, ahora, facturacion }) => {
+  /** Con el Point configurado, débito, crédito y Mercado Pago se cobran con la terminal. */
+  conPoint?: CobroConPoint;
+}> = async (app, { prisma, ahora, facturacion, conPoint }) => {
   app.addHook('preValidation', requiereSesion);
 
   app.post(
@@ -35,6 +48,7 @@ export const rutasVentas: FastifyPluginAsyncZod<{
         usuarioActual(request),
         ahora(),
         facturacion,
+        conPoint,
       );
       // La factura ya quedó en la cola junto con la venta: que la emisión no espere al intervalo.
       facturacion?.despertar();
@@ -94,5 +108,43 @@ export const rutasVentas: FastifyPluginAsyncZod<{
       if (creada) facturacion?.despertar();
       return reply.status(creada ? 201 : 200).send(factura);
     },
+  );
+
+  // --- Cobro con el Point (cobro-mercado-pago) ---
+
+  // La venta en espera del turno, para retomar la pantalla de espera al recargar.
+  app.get(
+    '/en-espera',
+    { schema: { response: { 200: ventaDetalleSchema.nullable() } } },
+    async (request) => ventaEnEspera(prisma, usuarioActual(request), facturacion),
+  );
+
+  // Estado del último cobro, solo de la base: el mostrador lo pide cada 1 s.
+  app.get(
+    '/:id/cobro',
+    { schema: { params: paramsId, response: { 200: cobroMpSchema } } },
+    async (request) => cobroDeVenta(prisma, request.params.id, usuarioActual(request), ahora()),
+  );
+
+  app.post(
+    '/:id/cobro/reintentar',
+    { schema: { params: paramsId, response: { 200: cobroMpSchema } } },
+    async (request) =>
+      reintentarCobroDeVenta(prisma, request.params.id, usuarioActual(request), ahora, {
+        conPoint,
+        facturacion,
+      }),
+  );
+
+  // Cancelar una venta en espera (también "Cobrar de otra forma"): el empleado de su
+  // turno o el admin. Responde la venta, que puede seguir en espera hasta que MP confirme.
+  app.post(
+    '/:id/cancelar',
+    { schema: { params: paramsId, response: { 200: ventaDetalleSchema } } },
+    async (request) =>
+      cancelarVenta(prisma, request.params.id, usuarioActual(request), ahora, {
+        conPoint,
+        facturacion,
+      }),
   );
 };

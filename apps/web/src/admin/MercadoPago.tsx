@@ -3,10 +3,12 @@ import {
   comparar,
   MOVIMIENTOS_MP_POR_PAGINA,
   NOMBRE_CATEGORIA_GASTO,
+  NOMBRE_MEDIO,
   NOMBRE_MOVIMIENTO_CAJA,
   nombreMovimientoCaja,
   TIPOS_MOVIMIENTO_SUELTO,
   type CategoriaGasto,
+  type CobroARevisar,
   type MovimientoCaja,
   type MovimientoCajaEntrada,
   type TipoMovimientoSuelto,
@@ -32,6 +34,7 @@ export function MercadoPago() {
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Mercado Pago</h1>
       <TarjetaSaldo />
+      <CobrosARevisar />
       <NuevoMovimientoMp />
       <ListaMovimientosMp />
     </section>
@@ -62,6 +65,89 @@ function TarjetaSaldo() {
   );
 }
 
+const CLAVE_COBROS = ['mercado-pago', 'cobros-a-revisar'] as const;
+
+/**
+ * Cobros del Point para mirar: los que la terminal pidió revisar, las devoluciones en
+ * efectivo pendientes (se confirman desde la caja) y los que el cliente no esperó. Sin
+ * ninguno (o sin el Point), la sección no aparece.
+ */
+function CobrosARevisar() {
+  const { data: cobros } = useQuery({
+    queryKey: CLAVE_COBROS,
+    queryFn: () => pedir<CobroARevisar[]>('GET', '/mercado-pago/cobros-a-revisar'),
+  });
+  if (!cobros || cobros.length === 0) return null;
+  return (
+    <section className="space-y-2 rounded-lg bg-white p-4 shadow" aria-label="Cobros a revisar">
+      <h2 className="font-semibold">Cobros a revisar</h2>
+      <ul className="space-y-3">
+        {cobros.map((c) => (
+          <CobroParaRevisar key={c.id} cobro={c} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function CobroParaRevisar({ cobro }: { cobro: CobroARevisar }) {
+  const queryClient = useQueryClient();
+  const [nota, setNota] = useState('');
+  const revision = useMutation({
+    mutationFn: () =>
+      pedir<CobroARevisar>('POST', `/mercado-pago/cobros/${cobro.id}/revisado`, {
+        nota: nota.trim(),
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: CLAVE_COBROS }),
+  });
+  const notaValida = nota.trim().length >= 3 && nota.trim().length <= 200;
+
+  return (
+    <li className="space-y-2 border-b pb-3 last:border-0">
+      <p>
+        <span className="font-medium">
+          {formatearPesos(cobro.monto)} · {NOMBRE_MEDIO[cobro.medio]} · venta #{cobro.ventaNumero}
+        </span>
+        <span className="block text-sm text-slate-600">
+          {formatearFechaHora(cobro.creadoEn)} · {cobro.motivo}
+        </span>
+      </p>
+      {cobro.estado === 'a_devolver' ? (
+        <p className="text-sm text-amber-800">
+          Devolución en efectivo pendiente: se confirma desde la caja.
+        </p>
+      ) : (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (notaValida && !revision.isPending) revision.mutate();
+          }}
+        >
+          <label className="grow">
+            <span className="text-sm font-medium">Nota</span>
+            <input
+              className="campo"
+              autoComplete="off"
+              maxLength={200}
+              placeholder="Por ejemplo: devuelto por la app"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+            />
+          </label>
+          <button
+            type="submit"
+            className="boton-secundario"
+            disabled={!notaValida || revision.isPending}
+          >
+            Marcar revisado
+          </button>
+        </form>
+      )}
+      <MensajeError error={revision.error} />
+    </li>
+  );
+}
 function NuevoMovimientoMp() {
   const queryClient = useQueryClient();
   const [tipo, setTipo] = useState<TipoMovimientoSuelto>('gasto');

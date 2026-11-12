@@ -49,4 +49,13 @@ export const CODIGOS_ERROR = {
   facturaFueraDePlazo: 'FACTURA_FUERA_DE_PLAZO',
   facturaNoReintentable: 'FACTURA_NO_REINTENTABLE',
   facturaSinImporte: 'FACTURA_SIN_IMPORTE',
+  terminalOcupada: 'TERMINAL_OCUPADA',
+  unSoloMedioElectronico: 'UN_SOLO_MEDIO_ELECTRONICO',
+  ventaNoEnEspera: 'VENTA_NO_EN_ESPERA',
+  cobroEnEspera: 'COBRO_EN_ESPERA',
+  devolucionPendiente: 'DEVOLUCION_PENDIENTE',
+  devolucionYaConfirmada: 'DEVOLUCION_YA_CONFIRMADA',
+  mpNoDisponible: 'MP_NO_DISPONIBLE',
+  /** Notificación de Mercado Pago sin firma válida (o sin clave configurada). */
+  firmaInvalida: 'FIRMA_INVALIDA',
 } as const;

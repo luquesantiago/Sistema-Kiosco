@@ -12,7 +12,8 @@
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "usuarios:crear-admin": "node --env-file-if-exists=.env --import tsx src/cli/crear-admin.ts"
+    "usuarios:crear-admin": "node --env-file-if-exists=.env --import tsx src/cli/crear-admin.ts",
+    "mp:terminales": "node --env-file-if-exists=.env --import tsx src/cli/mp-terminales.ts"
   },
   "devDependencies": {
     "@types/node": "^24",

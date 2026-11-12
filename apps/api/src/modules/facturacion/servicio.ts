@@ -88,6 +88,20 @@ export async function pedirFactura(
   const resultado = await prisma.$transaction(async (tx) => {
     const venta = await tx.venta.findUnique({ where: { id: ventaId }, include: { pagos: true } });
     if (!venta) throw new ErrorHttp(404, CODIGOS_ERROR.noEncontrado, 'La venta no existe.');
+    // Las ventas en espera o canceladas (cobro con el Point) nunca se facturan.
+    if (venta.estado === 'pendiente' || venta.estado === 'cancelada') {
+      throw venta.estado === 'pendiente'
+        ? new ErrorHttp(
+            409,
+            CODIGOS_ERROR.cobroEnEspera,
+            `La venta #${venta.numero} está esperando el cobro: se factura cuando quede cobrada.`,
+          )
+        : new ErrorHttp(
+            409,
+            CODIGOS_ERROR.ventaYaAnulada,
+            `La venta #${venta.numero} no se cobró: no se puede facturar.`,
+          );
+    }
     if (venta.estado !== 'pagada') {
       throw new ErrorHttp(
         409,

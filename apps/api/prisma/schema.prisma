@@ -50,6 +50,7 @@ model Usuario {
   pedidosRecibidos  Pedido[]                @relation("PedidosRecibidos")
   pedidosCancelados Pedido[]                @relation("PedidosCancelados")
   facturasPedidas   Factura[]
+  cobrosRevisados   CobroMp[]
 
   @@map("usuarios")
 }
@@ -229,6 +230,10 @@ enum MedioPago {
 enum EstadoVenta {
   pagada
   anulada
+  /// Esperando que Mercado Pago apruebe el cobro del Point: sin stock ni caja.
+  pendiente
+  /// Venta en espera que no se cobró (cancelada en el mostrador o vencida).
+  cancelada
 }
 
 enum TipoNotificacion {
@@ -239,6 +244,8 @@ enum TipoNotificacion {
   pedido_cerrado
   reposicion
   factura
+  cobro_mp_a_revisar
+  devolucion_cobro_mp
 }
 
 enum EstadoNotificacion {
@@ -268,10 +275,18 @@ model Venta {
   /// Turno abierto al anular: de su caja sale la devolución en efectivo. Vacío si no había turno.
   anulacionTurnoId String?           @map("anulacion_turno_id") @db.Uuid
   anulacionTurno   Turno?            @relation("AnulacionesDelTurno", fields: [anulacionTurnoId], references: [id], onDelete: Restrict)
+  /// Cuándo se aprobó el cobro del Point. Vacío en las ventas que nacieron pagadas.
+  pagadaEn          DateTime?        @map("pagada_en") @db.Timestamptz
+  /// Solo en `pendiente`: 10 minutos después del último intento de cobro.
+  venceEn           DateTime?        @map("vence_en") @db.Timestamptz
+  canceladaEn       DateTime?        @map("cancelada_en") @db.Timestamptz
+  /// "Cancelada en el mostrador" o "Venció la espera". Se fija al pedir la cancelación.
+  motivoCancelacion String?          @map("motivo_cancelacion")
   items            ItemVenta[]
   pagos            PagoVenta[]
   movimientos      MovimientoStock[]
   facturas         Factura[]
+  cobrosMp         CobroMp[]
 
   @@index([creadaEn])
   @@index([turnoId])
@@ -350,6 +365,8 @@ enum TipoMovimientoCaja {
   ingreso
   /// Solo se crea al pagar un pedido.
   pago_proveedor
+  /// Devolución en efectivo de un cobro de MP aprobado después de cancelar la venta.
+  devolucion_cobro
 }
 
 /// De dónde sale o adónde entra la plata: el cajón o la cuenta de MP del kiosco.
@@ -383,8 +400,13 @@ model MovimientoCaja {
   /// El pago de un pedido (tipo pago_proveedor). Único: un pedido se paga una vez.
   pedidoId  String?            @unique @map("pedido_id") @db.Uuid
   pedido    Pedido?            @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  /// Cobro del Point de una venta cancelada: su ingreso en MP y su devolución en efectivo.
+  cobroMpId String?            @map("cobro_mp_id") @db.Uuid
+  cobroMp   CobroMp?           @relation(fields: [cobroMpId], references: [id], onDelete: Restrict)
   creadoEn  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
 
+  // Un cobro tiene como mucho un ingreso y una devolución (los NULL no chocan).
+  @@unique([cobroMpId, tipo])
   @@index([turnoId, creadoEn])
   @@map("movimientos_caja")
 }
@@ -541,6 +563,71 @@ model Factura {
   @@unique([puntoVenta, tipoComprobante, numero])
   @@index([estado, creadaEn])
   @@map("facturas")
+}
+
+/// Estado de un cobro del Point (ver la tabla del design de cobro-mercado-pago).
+enum EstadoCobroMp {
+  /// Guardado y sin respuesta de MP todavía (o MP no respondió).
+  creando
+  en_espera
+  /// Se pidió cancelar con la orden en la pantalla del Point.
+  cancelando
+  aprobado
+  rechazado
+  vencido
+  cancelado
+  /// La terminal pidió revisar el pago (o MP lo devolvió sin pedirlo).
+  a_revisar
+  /// Aprobado después de cancelar la venta: se devuelve en efectivo.
+  a_devolver
+  devuelto
+  /// El cliente se fue sin la devolución: lo resuelve el admin.
+  sin_devolver
+}
+
+/// Cobro de una venta en la terminal Point (una orden de la Orders API por intento).
+/// Como máximo uno activo a la vez: lo garantiza el índice único parcial
+/// `cobros_mp_uno_activo`, agregado a mano en la migración `cobro_mercado_pago`.
+model CobroMp {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  ventaId           String           @map("venta_id") @db.Uuid
+  venta             Venta            @relation(fields: [ventaId], references: [id], onDelete: Restrict)
+  intento           Int
+  /// El medio que eligió el empleado (lo que informa MP queda en `tipoInformado`).
+  medio             MedioPago
+  monto             Decimal          @db.Decimal(12, 2)
+  /// `X-Idempotency-Key`: se guarda antes de llamar a MP y se reusa al reintentar sin respuesta.
+  claveIdempotencia String           @unique @map("clave_idempotencia") @db.Uuid
+  /// `venta-{numero}-{intento}`.
+  referenciaExterna String           @unique @map("referencia_externa")
+  ordenId           String?          @unique @map("orden_id")
+  estado            EstadoCobroMp
+  /// `status_detail` de MP o el código del rechazo al crear.
+  detalle           String?
+  tipoInformado     String?          @map("tipo_informado")
+  cancelacionPedida Boolean          @default(false) @map("cancelacion_pedida")
+  creadoEn          DateTime         @map("creado_en") @db.Timestamptz
+  consultadoEn      DateTime?        @map("consultado_en") @db.Timestamptz
+  resueltoEn        DateTime?        @map("resuelto_en") @db.Timestamptz
+  revisadoPorId     String?          @map("revisado_por_id") @db.Uuid
+  revisadoPor       Usuario?         @relation(fields: [revisadoPorId], references: [id], onDelete: Restrict)
+  revisadoEn        DateTime?        @map("revisado_en") @db.Timestamptz
+  notaRevision      String?          @map("nota_revision")
+  movimientosCaja   MovimientoCaja[]
+
+  @@unique([ventaId, intento])
+  @@index([estado])
+  @@map("cobros_mp")
+}
+
+/// Notificaciones de Mercado Pago ya recibidas: la clave primaria evita procesar dos veces la misma.
+model AvisoMp {
+  /// `id` del cuerpo de la notificación, o `x-request-id` si no viene.
+  id         String   @id
+  ordenId    String?  @map("orden_id")
+  recibidoEn DateTime @map("recibido_en") @db.Timestamptz
+
+  @@map("avisos_mp")
 }
 
 /// Ticket de acceso del WSAA de ARCA. Dura unas 12 h y ARCA no da otro mientras

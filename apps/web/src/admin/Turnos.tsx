@@ -139,7 +139,7 @@ export function DetalleTurno() {
           <Fila nombre="Gastos" monto={r.gastos} signo="−" />
           <Fila nombre="Retiros" monto={r.retiros} signo="−" />
           <Fila nombre="Pagos a proveedores" monto={r.pagosProveedor} signo="−" />
-          <Fila nombre="Devoluciones de anulaciones" monto={r.devoluciones} signo="−" />
+          <Fila nombre="Devoluciones" monto={r.devoluciones} signo="−" />
           <div className="flex justify-between gap-2 py-1 text-lg font-semibold">
             <dt>Esperado</dt>
             <dd>{formatearPesos(r.esperado)}</dd>

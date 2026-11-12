@@ -22,6 +22,7 @@ import type { z } from 'zod';
 import { ErrorHttp } from '../../errores.js';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { fechaEnArgentina, rangoDelDiaEnArgentina } from '../../lib/fechas.js';
+import { formatearPesos } from '../../lib/formato.js';
 import { textoAvisoCierre, textoAvisoMovimiento } from './avisos.js';
 
 type Tx = Prisma.TransactionClient;
@@ -92,20 +93,27 @@ export async function turnoParaMovimiento(
 /**
  * Cómo se llega al efectivo esperado. Las ventas del turno cuentan aunque se
  * hayan anulado después: la devolución resta en el turno donde se anuló, por el
- * total de la venta, porque siempre se devuelve en efectivo. Los movimientos de
- * Mercado Pago no pasan por el cajón.
+ * total de la venta, porque siempre se devuelve en efectivo. Las ventas en espera
+ * (`pendiente`) y las canceladas no cuentan, ni siquiera su parte en efectivo. Las
+ * devoluciones suman también los cobros de Mercado Pago de ventas canceladas que
+ * se devolvieron en efectivo desde el turno. Los movimientos de Mercado Pago no
+ * pasan por el cajón.
  */
 export async function resumenDeCaja(
   db: Tx | PrismaClient,
   turno: { id: string; montoInicial: Prisma.Decimal },
 ): Promise<ResumenCaja> {
+  const ventasDelTurno = {
+    turnoId: turno.id,
+    estado: { in: ['pagada', 'anulada'] },
+  } satisfies Prisma.VentaWhereInput;
   const [porMedio, cantidadVentas, anulado, movimientos] = await Promise.all([
     db.pagoVenta.groupBy({
       by: ['medio'],
-      where: { venta: { turnoId: turno.id } },
+      where: { venta: ventasDelTurno },
       _sum: { monto: true },
     }),
-    db.venta.count({ where: { turnoId: turno.id } }),
+    db.venta.count({ where: ventasDelTurno }),
     db.venta.aggregate({
       where: { anulacionTurnoId: turno.id },
       _sum: { total: true },
@@ -125,7 +133,7 @@ export async function resumenDeCaja(
   const gastos = deTipo('gasto');
   const retiros = deTipo('retiro');
   const pagosProveedor = deTipo('pago_proveedor');
-  const devoluciones = monto(anulado._sum.total);
+  const devoluciones = sumar(monto(anulado._sum.total), deTipo('devolucion_cobro'));
   return {
     cantidadVentas,
     porMedio: Object.fromEntries(
@@ -157,9 +165,30 @@ async function montoSugerido(db: Tx | PrismaClient): Promise<string> {
 
 const incluirAbiertoPor = { abiertoPor: { select: { id: true, nombre: true } } } as const;
 
+/** Cobros de ventas canceladas que se aprobaron igual y hay que devolver en efectivo. */
+export async function devolucionesPendientes(
+  db: Tx | PrismaClient,
+): Promise<NonNullable<EstadoCaja['devolucionesPendientes']>> {
+  const cobros = await db.cobroMp.findMany({
+    where: { estado: 'a_devolver' },
+    include: { venta: { select: { numero: true } } },
+    orderBy: [{ creadoEn: 'asc' }, { id: 'asc' }],
+  });
+  return cobros.map((c) => ({
+    cobroId: c.id,
+    monto: c.monto.toFixed(2),
+    ventaNumero: c.venta.numero,
+  }));
+}
+
+/**
+ * Estado de la caja para el mostrador. Con el Point configurado (`conPoint`) suma
+ * `pointHabilitado` y las devoluciones pendientes; sin él la respuesta es la de siempre.
+ */
 export async function estadoDeCaja(
   prisma: PrismaClient,
   usuario: UsuarioSesion,
+  { conPoint = false }: { conPoint?: boolean } = {},
 ): Promise<EstadoCaja> {
   const abierto = await prisma.turno.findFirst({
     where: { cerradoEn: null },
@@ -173,6 +202,10 @@ export async function estadoDeCaja(
       esMio: abierto.abiertoPorId === usuario.id,
     },
     montoSugerido: await montoSugerido(prisma),
+    ...(conPoint && {
+      pointHabilitado: true,
+      devolucionesPendientes: await devolucionesPendientes(prisma),
+    }),
   };
 }
 
@@ -184,6 +217,7 @@ export async function abrirTurno(
   { montoInicial }: z.output<typeof aperturaSchema>,
   usuario: UsuarioSesion,
   ahora: Date,
+  opciones: { conPoint?: boolean } = {},
 ): Promise<EstadoCaja> {
   try {
     await prisma.turno.create({
@@ -199,7 +233,7 @@ export async function abrirTurno(
     if ((error as { code?: string }).code === 'P2002') throw yaHayTurno();
     throw error;
   }
-  return estadoDeCaja(prisma, usuario);
+  return estadoDeCaja(prisma, usuario, opciones);
 }
 
 const turnoNoEncontrado = () =>
@@ -223,6 +257,31 @@ export async function cerrarTurno(
       if (!turno) throw turnoNoEncontrado();
       if (turno.cerradoEn) {
         throw new ErrorHttp(409, CODIGOS_ERROR.turnoYaCerrado, 'Este turno ya está cerrado.');
+      }
+
+      // Con el turno bloqueado no entra otra venta ni otra devolución mientras se revisa.
+      const enEspera = await tx.venta.findFirst({
+        where: { turnoId: id, estado: 'pendiente' },
+        orderBy: { numero: 'asc' },
+        select: { numero: true },
+      });
+      if (enEspera) {
+        throw new ErrorHttp(
+          409,
+          CODIGOS_ERROR.cobroEnEspera,
+          `Hay un cobro con Mercado Pago en espera (venta #${enEspera.numero}): esperalo o cancelalo`,
+          { ventaNumero: enEspera.numero },
+        );
+      }
+      const pendientes = await devolucionesPendientes(tx);
+      if (pendientes.length > 0) {
+        const total = sumar(...pendientes.map((d) => d.monto));
+        throw new ErrorHttp(
+          409,
+          CODIGOS_ERROR.devolucionPendiente,
+          `Antes de cerrar, devolvé ${formatearPesos(total)} en efectivo de un cobro cancelado`,
+          { monto: total },
+        );
       }
 
       const resumen = await resumenDeCaja(tx, turno);

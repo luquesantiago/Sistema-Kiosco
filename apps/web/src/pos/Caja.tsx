@@ -1,11 +1,13 @@
 import {
   CATEGORIAS_GASTO,
+  CODIGOS_ERROR,
   comparar,
   CUENTAS,
   NOMBRE_CATEGORIA_GASTO,
   NOMBRE_CUENTA,
   NOMBRE_MOVIMIENTO_CAJA,
   nombreMovimientoCaja,
+  sumar,
   type CategoriaGasto,
   type CierreRespuesta,
   type Cuenta,
@@ -17,14 +19,14 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { pedir } from '../api/cliente.js';
+import { ErrorDeApi, pedir } from '../api/cliente.js';
 import { MensajeError } from '../app/MensajeError.js';
 import { OpcionesBoton } from '../app/OpcionesBoton.js';
 import { LineaSaldoMercadoPago } from '../app/SaldoMercadoPago.js';
 import { useSalir } from '../app/sesion.js';
 import { formatearHora } from '../lib/fechas.js';
 import { entradaAMonto, formatearPesos, montoParaEditar } from '../lib/montos.js';
-import { CLAVE_ESTADO_CAJA, esErrorDeTurno } from './estadoCaja.js';
+import { CLAVE_ESTADO_CAJA, esErrorDeTurno, useEstadoCaja } from './estadoCaja.js';
 import { Dialogo } from './Dialogos.js';
 
 type Responsable = NonNullable<EstadoCaja['turnoAbierto']>['responsable'];
@@ -143,6 +145,17 @@ export function DialogoCerrarTurno({
     mutationFn: (datos: { montoContado: string; retiro: string | null; motivoRetiro: string }) =>
       pedir<CierreRespuesta>('POST', `/caja/turnos/${turnoId}/cerrar`, datos),
   });
+  // Con un cobro del Point en espera o una devolución pendiente, el turno no se cierra.
+  const devoluciones = useEstadoCaja().data?.devolucionesPendientes ?? [];
+  const avisoDevolucion =
+    devoluciones.length > 0
+      ? `Antes de cerrar, devolvé ${formatearPesos(sumar(...devoluciones.map((d) => d.monto)))} en efectivo de un cobro cancelado`
+      : null;
+  const bloqueadoPorServidor =
+    cierre.error instanceof ErrorDeApi &&
+    (cierre.error.codigo === CODIGOS_ERROR.cobroEnEspera ||
+      cierre.error.codigo === CODIGOS_ERROR.devolucionPendiente);
+  const bloqueado = avisoDevolucion !== null || bloqueadoPorServidor;
   // El estado de la caja se refresca recién al salir del diálogo, para no
   // desmontarlo antes de mostrar lo que quedó.
   const continuar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_ESTADO_CAJA });
@@ -164,7 +177,7 @@ export function DialogoCerrarTurno({
       return;
     }
     setProblema(null);
-    if (!cierre.isPending) {
+    if (!cierre.isPending && !bloqueado) {
       cierre.mutate({ montoContado, retiro: montoRetiro, motivoRetiro: motivo.trim() });
     }
   };
@@ -213,6 +226,11 @@ export function DialogoCerrarTurno({
   return (
     <Dialogo titulo={titulo} alCerrar={alCancelar}>
       <form onSubmit={cerrar} className="space-y-4">
+        {avisoDevolucion && (
+          <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">
+            {avisoDevolucion}
+          </p>
+        )}
         <label className="block">
           <span className="text-sm font-medium">Efectivo contado en la caja</span>
           <input
@@ -251,7 +269,7 @@ export function DialogoCerrarTurno({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          <button type="submit" className="boton" disabled={cierre.isPending}>
+          <button type="submit" className="boton" disabled={cierre.isPending || bloqueado}>
             Cerrar turno (Enter)
           </button>
           <button type="button" className="boton-secundario" onClick={alCancelar}>

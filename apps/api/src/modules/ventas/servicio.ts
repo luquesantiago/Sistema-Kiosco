@@ -9,6 +9,7 @@ import {
   sumar,
   VENTAS_POR_PAGINA,
   type anulacionSchema,
+  type CobroMp as CobroMpRespuesta,
   type listadoVentasQuerySchema,
   type PreciosActuales,
   type UsuarioSesion,
@@ -17,8 +18,10 @@ import {
   type VentaResumen,
 } from '@kiosco/shared';
 import type { z } from 'zod';
+import type { ConfigPoint } from '../../config.js';
 import { ErrorHttp } from '../../errores.js';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import type { ClienteMercadoPago, MedioPoint } from '../../integrations/mercadopago/cliente.js';
 import { fechaEnArgentina, rangoDelDiaEnArgentina } from '../../lib/fechas.js';
 import { turnoAbiertoBloqueado, turnoParaOperar } from '../caja/servicio.js';
 import { encolarFacturaSiCorresponde, importePorParte } from '../facturacion/encolado.js';
@@ -26,6 +29,16 @@ import { aFacturaVenta, emisorDe } from '../facturacion/servicio.js';
 import type { Facturacion } from '../facturacion/tipos.js';
 import { registrarMovimiento } from '../stock/movimientos.js';
 import { textoAvisoAnulacion } from './aviso.js';
+import {
+  aCobro,
+  crearIntento,
+  enviarCobro,
+  ESPERA_VENTA_MS,
+  MOTIVO_CANCELADA_EN_MOSTRADOR,
+  pedirCancelacion,
+  reintentarCobro,
+  ultimoCobro,
+} from './cobro.js';
 
 const incluirResumen = {
   usuario: { select: { id: true, nombre: true } },
@@ -40,6 +53,8 @@ const incluirDetalle = {
   pagos: { orderBy: { medio: 'asc' } },
   // La automática (`electronica`) primero: es el orden del enum.
   facturas: { orderBy: { parte: 'asc' } },
+  // Solo el último intento de cobro con el Point.
+  cobrosMp: { orderBy: { intento: 'desc' }, take: 1 },
 } as const;
 
 type VentaConResumen = Prisma.VentaGetPayload<{ include: typeof incluirResumen }>;
@@ -95,6 +110,11 @@ function aDetalle(
       v.anuladaEn && v.anuladaPor && v.motivoAnulacion
         ? { en: v.anuladaEn.toISOString(), por: v.anuladaPor, motivo: v.motivoAnulacion }
         : null,
+    cancelacion:
+      v.estado === 'cancelada' && v.canceladaEn
+        ? { en: v.canceladaEn.toISOString(), motivo: v.motivoCancelacion ?? '' }
+        : null,
+    cobro: v.cobrosMp[0] ? aCobro(v.cobrosMp[0]) : null,
     facturas: v.facturas.map((f) => aFacturaVenta(f, facturacion)),
     sinFacturar: restar(resumen.total, resumen.importeFacturado),
     // Hay efectivo sin su factura: el cliente la puede pedir (F10 o desde Ventas).
@@ -110,10 +130,21 @@ function aDetalle(
 type Item = z.output<typeof ventaEntradaSchema>['items'][number];
 type ItemCatalogo = Extract<Item, { productoId: string }>;
 
+/** El Point configurado y su cliente: sin esto, toda venta nace pagada como siempre. */
+export interface CobroConPoint {
+  point: ConfigPoint;
+  mercadoPago: ClienteMercadoPago;
+}
+
 /**
  * Registra una venta en el turno abierto con precios del catálogo, sus pagos y
  * un movimiento `venta` por producto, todo en una transacción. El mostrador no
  * fija precios: `totalEsperado` solo detecta que el empleado vio otro precio.
+ *
+ * Con el Point configurado y una parte electrónica (como mucho una), la venta nace
+ * `pendiente` con todos sus pagos y sin mover stock, junto con su primer cobro en
+ * `creando`; el cobro se manda a MP después de la transacción (design "Registro de una
+ * venta con el Point").
  */
 export async function registrarVenta(
   prisma: PrismaClient,
@@ -121,8 +152,18 @@ export async function registrarVenta(
   usuario: UsuarioSesion,
   ahora: Date,
   facturacion?: Facturacion,
+  conPoint?: CobroConPoint,
 ): Promise<VentaDetalle> {
   const usuarioId = usuario.id;
+  const electronicos = pagos.filter((p) => p.medio !== 'efectivo');
+  const porElPoint = conPoint !== undefined && electronicos.length > 0;
+  if (porElPoint && electronicos.length > 1) {
+    throw new ErrorHttp(
+      400,
+      CODIGOS_ERROR.unSoloMedioElectronico,
+      'Solo una parte se puede cobrar con el Point: el resto, en efectivo.',
+    );
+  }
   // Agrupa los productos repetidos en la posición de su primera aparición.
   const agrupados: Item[] = [];
   const porProducto = new Map<string, ItemCatalogo>();
@@ -141,7 +182,7 @@ export async function registrarVenta(
     }
   }
 
-  const id = await prisma.$transaction(
+  const { id, cobroId } = await prisma.$transaction(
     async (tx) => {
       const turno = await turnoParaOperar(tx, usuario);
       const productos = await tx.producto.findMany({
@@ -208,6 +249,10 @@ export async function registrarVenta(
           turnoId: turno.id,
           total,
           creadaEn: ahora,
+          ...(porElPoint && {
+            estado: 'pendiente',
+            venceEn: new Date(ahora.getTime() + ESPERA_VENTA_MS),
+          }),
           items: { create: itemsData },
           pagos: {
             create: pagos.map((p) => ({
@@ -220,6 +265,19 @@ export async function registrarVenta(
         },
         include: { pagos: true },
       });
+
+      if (porElPoint) {
+        // Sin stock ni factura hasta que MP apruebe el pago (`confirmarCobroAprobado`).
+        const parte = electronicos[0]!;
+        const cobro = await crearIntento(tx, {
+          venta,
+          intento: 1,
+          medio: parte.medio as MedioPoint,
+          monto: parte.monto,
+          ahora,
+        });
+        return { id: venta.id, cobroId: cobro.id };
+      }
 
       for (const { productoId, cantidad } of porProducto.values()) {
         await registrarMovimiento(tx, {
@@ -234,10 +292,19 @@ export async function registrarVenta(
       // Enganche de la facturación: la venta nace `pagada`, así que su factura
       // automática se encola acá, en la misma transacción. No habla con ARCA.
       await encolarFacturaSiCorresponde(tx, venta, { facturacion, ahora });
-      return venta.id;
+      return { id: venta.id, cobroId: null };
     },
     { timeout: 30_000 },
   );
+
+  // Fuera de la transacción: MP puede tardar hasta 10 s y el turno no queda bloqueado.
+  if (conPoint && cobroId !== null) {
+    await enviarCobro(
+      { prisma, mercadoPago: conPoint.mercadoPago, facturacion, ahora: () => ahora },
+      conPoint.point,
+      cobroId,
+    );
+  }
 
   return aDetalle(
     await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
@@ -342,10 +409,15 @@ export async function anularVenta(
         },
       });
       if (count === 0) {
+        // Una venta en espera o cancelada no se cobró: no hay nada que anular.
         throw new ErrorHttp(
           409,
           CODIGOS_ERROR.ventaYaAnulada,
-          `La venta #${venta.numero} ya estaba anulada.`,
+          venta.estado === 'pendiente'
+            ? `La venta #${venta.numero} está esperando el cobro: cancelala en lugar de anularla.`
+            : venta.estado === 'cancelada'
+              ? `La venta #${venta.numero} no se cobró: no hay nada que anular.`
+              : `La venta #${venta.numero} ya estaba anulada.`,
         );
       }
 
@@ -407,4 +479,128 @@ export async function anularVenta(
     usuario,
     facturacion,
   );
+}
+
+// --- Ventas en espera de un cobro con el Point (cobro-mercado-pago) ---
+
+const sinPoint = () =>
+  new ErrorHttp(
+    409,
+    CODIGOS_ERROR.mpNoDisponible,
+    'El cobro con el Point no está configurado en el servidor.',
+  );
+
+/**
+ * El empleado opera solo las ventas en espera de su turno abierto; el admin, cualquiera.
+ * Devuelve la venta (404 si no existe).
+ */
+async function ventaQuePuedeOperar(prisma: PrismaClient, id: string, usuario: UsuarioSesion) {
+  const venta = await prisma.venta.findUnique({ where: { id } });
+  if (!venta) throw ventaNoEncontrada();
+  if (usuario.rol === 'admin') return venta;
+  const turno = await prisma.turno.findFirst({ where: { cerradoEn: null } });
+  if (!turno || turno.abiertoPorId !== usuario.id || venta.turnoId !== turno.id) {
+    throw new ErrorHttp(
+      403,
+      CODIGOS_ERROR.sinPermiso,
+      'Solo podés manejar los cobros de las ventas de tu turno. Pedíselo al admin.',
+    );
+  }
+  return venta;
+}
+
+const noEnEspera = (numero: number) =>
+  new ErrorHttp(
+    409,
+    CODIGOS_ERROR.ventaNoEnEspera,
+    `La venta #${numero} no está esperando un cobro.`,
+  );
+
+/**
+ * Cancela una venta en espera (`POST /api/ventas/:id/cancelar`, también "Cobrar de otra
+ * forma"). Si MP todavía tiene que confirmar, la venta sigue en espera con la
+ * cancelación pedida; si el pago ya se había procesado, queda pagada.
+ */
+export async function cancelarVenta(
+  prisma: PrismaClient,
+  id: string,
+  usuario: UsuarioSesion,
+  ahora: () => Date,
+  { conPoint, facturacion }: { conPoint?: CobroConPoint; facturacion?: Facturacion },
+): Promise<VentaDetalle> {
+  const venta = await ventaQuePuedeOperar(prisma, id, usuario);
+  if (venta.estado !== 'pendiente') throw noEnEspera(venta.numero);
+  if (!conPoint) throw sinPoint();
+  await pedirCancelacion(
+    { prisma, mercadoPago: conPoint.mercadoPago, facturacion, ahora },
+    id,
+    MOTIVO_CANCELADA_EN_MOSTRADOR,
+  );
+  return aDetalle(
+    await prisma.venta.findUniqueOrThrow({ where: { id }, include: incluirDetalle }),
+    usuario,
+    facturacion,
+  );
+}
+
+/** Reintenta el cobro de una venta en espera (`POST /api/ventas/:id/cobro/reintentar`). */
+export async function reintentarCobroDeVenta(
+  prisma: PrismaClient,
+  id: string,
+  usuario: UsuarioSesion,
+  ahora: () => Date,
+  { conPoint, facturacion }: { conPoint?: CobroConPoint; facturacion?: Facturacion },
+): Promise<CobroMpRespuesta> {
+  const venta = await ventaQuePuedeOperar(prisma, id, usuario);
+  if (venta.estado !== 'pendiente') throw noEnEspera(venta.numero);
+  if (!conPoint) throw sinPoint();
+  const cobro = await reintentarCobro(
+    { prisma, mercadoPago: conPoint.mercadoPago, facturacion, ahora },
+    conPoint.point,
+    id,
+  );
+  return aCobro(cobro);
+}
+
+/** Estado del último cobro de una venta, solo de la base (el mostrador lo pide cada 1 s). */
+export async function cobroDeVenta(
+  prisma: PrismaClient,
+  id: string,
+  usuario: UsuarioSesion,
+  ahora: Date,
+): Promise<CobroMpRespuesta> {
+  const venta = await prisma.venta.findUnique({ where: { id } });
+  if (!venta) throw ventaNoEncontrada();
+  if (usuario.rol !== 'admin' && !esDeHoy(venta, ahora)) {
+    throw fueraDePlazo('Solo podés ver las ventas de hoy.');
+  }
+  const cobro = await ultimoCobro(prisma, id);
+  if (!cobro) {
+    throw new ErrorHttp(
+      404,
+      CODIGOS_ERROR.noEncontrado,
+      'Esta venta no tiene un cobro con el Point.',
+    );
+  }
+  return aCobro(cobro);
+}
+
+/**
+ * La venta en espera del turno abierto, para retomar la pantalla de espera al recargar
+ * (`GET /api/ventas/en-espera`), o null. El empleado solo ve la de su turno.
+ */
+export async function ventaEnEspera(
+  prisma: PrismaClient,
+  usuario: UsuarioSesion,
+  facturacion?: Facturacion,
+): Promise<VentaDetalle | null> {
+  const turno = await prisma.turno.findFirst({ where: { cerradoEn: null } });
+  if (!turno) return null;
+  if (usuario.rol !== 'admin' && turno.abiertoPorId !== usuario.id) return null;
+  const venta = await prisma.venta.findFirst({
+    where: { turnoId: turno.id, estado: 'pendiente' },
+    orderBy: { numero: 'desc' },
+    include: incluirDetalle,
+  });
+  return venta ? aDetalle(venta, usuario, facturacion) : null;
 }

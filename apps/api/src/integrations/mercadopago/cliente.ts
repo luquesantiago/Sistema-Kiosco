@@ -1,7 +1,16 @@
 import { MercadoPagoNoDisponible, MercadoPagoRechazo } from './errores.js';
+import { crearOperacionesDeOrdenes, type PedirOrden } from './ordenes.js';
 import { crearLecturaDeSaldo } from './saldo-cuenta.js';
 
 export { MercadoPagoNoDisponible, MercadoPagoRechazo };
+export type {
+  EstadoOrden,
+  MedioPoint,
+  OrdenPoint,
+  PedidoOrden,
+  ResultadoCancelacion,
+} from './ordenes.js';
+import type { OrdenPoint, PedidoOrden, ResultadoCancelacion } from './ordenes.js';
 
 /** Saldo tal como lo informa Mercado Pago, con 2 decimales. */
 export interface SaldoLeido {
@@ -10,12 +19,15 @@ export interface SaldoLeido {
   aLiberar: string | null;
 }
 
-/**
- * Lo que el sistema usa de Mercado Pago. Los tests inyectan un cliente falso.
- * `cobro-mercado-pago` le suma las operaciones de órdenes.
- */
+/** Lo que el sistema usa de Mercado Pago. Los tests inyectan un cliente falso. */
 export interface ClienteMercadoPago {
   saldo(): Promise<SaldoLeido>;
+  /** `POST /v1/orders` (tipo `point`): manda el cobro a la terminal. */
+  crearOrden(pedido: PedidoOrden): Promise<OrdenPoint>;
+  /** `GET /v1/orders/{id}`: el estado real del cobro. */
+  consultarOrden(ordenId: string): Promise<OrdenPoint>;
+  /** `POST /v1/orders/{id}/cancel`, también con la orden en la pantalla del Point. */
+  cancelarOrden(ordenId: string): Promise<ResultadoCancelacion>;
 }
 
 /** GET autenticado a la API de Mercado Pago que devuelve el JSON de la respuesta. */
@@ -72,8 +84,49 @@ export function clienteMercadoPago(
 
   const leerSaldo = crearLecturaDeSaldo(pedir);
 
+  /** Pedido de órdenes: devuelve el estado HTTP y el JSON (o null), sin tirar por un 4xx. */
+  const pedirOrden: PedirOrden = async (metodo, ruta, { cuerpo, encabezados = {} } = {}) => {
+    const signal = AbortSignal.timeout(timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(`${base}${ruta}`, {
+        method: metodo,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          ...(cuerpo === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...encabezados,
+        },
+        body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+        signal,
+      });
+    } catch {
+      throw new MercadoPagoNoDisponible('Mercado Pago no responde.');
+    }
+    if (res.status >= 500) {
+      await descartar(res);
+      throw new MercadoPagoNoDisponible('Mercado Pago no responde.');
+    }
+    let texto: string;
+    try {
+      texto = await res.text();
+    } catch {
+      throw new MercadoPagoNoDisponible('Mercado Pago no responde.');
+    }
+    let datos: unknown = null;
+    if (texto) {
+      try {
+        datos = JSON.parse(texto);
+      } catch {
+        if (res.ok) throw new MercadoPagoRechazo(res.status, 'respuesta_invalida');
+      }
+    }
+    return { status: res.status, datos };
+  };
+
   return {
     // El límite de tiempo es para toda la lectura, aunque haga más de un pedido.
     saldo: () => leerSaldo(AbortSignal.timeout(timeoutMs)),
+    ...crearOperacionesDeOrdenes(pedirOrden),
   };
 }

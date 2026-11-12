@@ -84,7 +84,8 @@ export function textoAvisoCierre(d: DatosAvisoCierre): string {
     ['Gastos', r.gastos],
     ['Retiros', r.retiros],
     ['Pagos a proveedores', r.pagosProveedor],
-    ['Devoluciones de anulaciones', r.devoluciones],
+    // Anulaciones y cobros de Mercado Pago de ventas canceladas, devueltos en efectivo.
+    ['Devoluciones', r.devoluciones],
   ];
   for (const [nombre, monto] of movimientos) {
     if (!esCero(monto)) lineas.push(`${nombre}: ${formatearPesos(monto)}`);

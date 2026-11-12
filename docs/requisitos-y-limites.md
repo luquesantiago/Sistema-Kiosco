@@ -69,13 +69,20 @@
 - Ítem **"Varios"** con precio libre (y descripción opcional) para lo que no está cargado; no mueve stock.
 - Modificar cantidades y quitar ítems antes de cobrar. El carrito sobrevive a una recarga accidental de la página.
 - **Atajos de teclado** (siempre visibles al pie): F1 efectivo, F2 débito, F3 crédito, F4 Mercado Pago, F6 pago mixto, F7 "Varios", flechas para elegir un ítem, + y − para la cantidad, Supr para quitar, Ctrl+Supr para vaciar (con confirmación) y F9 para imprimir el ticket.
-- Medios de pago: **efectivo**, **débito**, **crédito** y **Mercado Pago**. Las transferencias se reciben por Mercado Pago y se registran con ese medio.
+- Medios de pago: **efectivo**, **débito**, **crédito** y **Mercado Pago** (QR en la pantalla del Point). **No se aceptan transferencias por alias**: todo cobro de Mercado Pago pasa por el sistema.
 - **Pago mixto:** el total se puede repartir entre varios medios (un pago por medio); no se confirma hasta que lo asignado sume exactamente el total.
 - **Vuelto opcional:** en efectivo, el empleado puede escribir con cuánto paga el cliente y ve el vuelto; si lo deja vacío, se cobra el total justo.
 - **Precios definidos por el servidor:** el precio de cada producto se toma del catálogo al registrar la venta. Si cambió mientras se armaba el carrito, la venta se rechaza, el carrito muestra los precios nuevos y se vuelve a cobrar.
 - Cada venta tiene un número correlativo, y la venta, sus pagos y el descuento de stock se guardan juntos o nada.
 - **Costo de lo vendido:** cada ítem guarda el costo que tenía el producto al venderse, para calcular la ganancia. Si el producto no tenía costo (o es "Varios"), el ítem queda sin costo y no se completa después. Solo el admin ve los costos en el detalle de la venta.
-- Con **Mercado Pago**: el sistema genera el cobro mediante la API de MP y **espera la confirmación del pago** antes de cerrar la venta (Etapa 5; antes se registra a mano).
+- **Cobro con el Point integrado** (Point Smart en modo integrado, PDV; cambio `cobro-mercado-pago`): con F2 (débito), F3 (crédito) o F4 (Mercado Pago, QR en la pantalla del Point) el sistema le manda a la terminal el monto exacto; el empleado no tipea nada. La terminal acepta solo el medio elegido y el cobro vence en MP a los 3 minutos si nadie paga.
+  - La venta nace **en espera** (`pendiente`): no descuenta stock ni cuenta en la caja ni en el dashboard, y pasa a `pagada` (con el stock y la factura automática) cuando Mercado Pago aprueba el pago. El estado se toma siempre de la consulta a MP: cada 3 s mientras el cobro está activo y, con el servidor con HTTPS, también al llegar una notificación firmada.
+  - **Pantalla de espera:** monto, medio y estado, actualizados solos. Ante un rechazo (con el motivo), un vencimiento o la falta de respuesta: **Reintentar** (Enter), **Cobrar de otra forma** (vuelve al carrito intacto) y **Cancelar** (Esc, con confirmación). Si se recarga la página, la espera se retoma. Un cobro a la vez.
+  - **Pago mixto:** una sola parte por el Point, el resto en efectivo. Primero se cobra el Point; al aprobarse, la pantalla dice "Cobrá $X en efectivo · vuelto $Y".
+  - **Vencimiento:** una venta en espera se cancela sola 10 minutos después del último intento ("Venció la espera"). Las canceladas conservan su número y figuran como "Cobro no realizado".
+  - **Mercado Pago caído:** no hay registro manual. Mientras MP no responde solo se cobra en efectivo, y el mostrador lo dice: "Mercado Pago no responde. Por ahora cobrá solo en efectivo (F1) o reintentá en un rato."
+  - **Pago aprobado después de cancelar:** la venta no revive (sigue cancelada, sin stock ni factura). Lo cobrado entra como ingreso en la cuenta de MP y se le devuelve al cliente **en efectivo desde la caja abierta**: el mostrador muestra un aviso que bloquea la venta con **Ya devolví $X** (sale del turno, baja el esperado y avisa al admin) y **El cliente ya se fue** (lo resuelve el admin en Administración → Mercado Pago → Cobros a revisar).
+  - Sin el Point configurado (`MP_TERMINAL_ID`), F2, F3 y F4 registran la venta pagada en el momento, como antes.
 - No hay descuentos.
 - **Ticket solo a pedido:** después de cobrar (F9 o botón) o desde el detalle de una venta. Papel de 58 u 80 mm, con la leyenda "No válido como factura".
 - **Listado de ventas:** el empleado ve las del día; el admin, cualquier rango de fechas.
@@ -92,8 +99,9 @@
 - **Quién opera:** el empleado vende y mueve la caja solo en el turno que abrió; el admin, en el turno abierto de cualquiera.
 - **Apertura:** el monto inicial sale precargado con lo que quedó en la caja al cerrar el turno anterior. Quien abre puede corregirlo con lo que contó, y la diferencia de apertura queda registrada.
 - **Cierre ciego:** quien cierra cuenta el efectivo sin ver cuánto debería haber. Opcionalmente registra un retiro al cierre, con motivo; lo que queda en la caja es lo contado menos ese retiro.
-- **Dos cuentas:** el **efectivo** del cajón y la **cuenta de Mercado Pago del kiosco**, donde caen las ventas con débito, crédito (Point), transferencias por alias y MP. Es una cuenta distinta de la cuenta personal del admin.
-- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − pagos a proveedores en efectivo − total de las ventas anuladas durante el turno. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Dos cuentas:** el **efectivo** del cajón y la **cuenta de Mercado Pago del kiosco**, donde caen las ventas con débito, crédito y MP cobradas con el Point. Es una cuenta distinta de la cuenta personal del admin.
+- **Efectivo esperado** = monto inicial + ventas en efectivo + ingresos en efectivo − gastos en efectivo − retiros en efectivo − pagos a proveedores en efectivo − devoluciones (total de las ventas anuladas durante el turno y cobros de MP de ventas canceladas devueltos en efectivo). Solo cuentan las ventas pagadas y anuladas: las que están en espera o canceladas, no. El vuelto no cuenta, y las tarjetas, Mercado Pago y los movimientos de la cuenta de MP no afectan el efectivo. El esperado y la diferencia los ve solo el admin.
+- **Cierre bloqueado:** el turno no se puede cerrar con un cobro del Point en espera ("esperalo o cancelalo") ni con una devolución en efectivo pendiente.
 - **Turno olvidado:** si alguien se fue sin cerrar, el siguiente cierra ese turno contando la caja. Queda registrado quién lo abrió (el responsable) y quién lo cerró.
 - **Movimientos de caja** con monto y motivo obligatorio: el empleado registra gastos y retiros; los ingresos son solo del admin. No se editan ni se borran.
 - **Cuenta de cada movimiento:** al registrar un gasto se elige si sale del **Efectivo** (lo preseleccionado) o de **Mercado Pago**. Los retiros e ingresos de Mercado Pago (por ejemplo, la plata que el admin pasa a su cuenta personal) son solo del admin, que los registra desde **Administración → Mercado Pago** aunque no haya un turno abierto. El retiro al cierre es siempre en efectivo.
@@ -185,7 +193,7 @@
 
 - **WAHA no es la API oficial de WhatsApp.** Usa una sesión de WhatsApp Web vinculada por QR y el número puede ser bloqueado. Por eso se usa un chip dedicado, que solo le escribe al número del admin y con pausa entre mensajes.
 - **ARCA:** requiere certificado digital, un punto de venta habilitado para web services y pruebas en el entorno de homologación antes de producción.
-- **Mercado Pago:** requiere credenciales de la cuenta del kiosco y una URL pública para recibir notificaciones (webhooks).
+- **Mercado Pago:** requiere credenciales de la cuenta del kiosco y el Point Smart en modo integrado. Las notificaciones (webhooks) necesitan la URL HTTPS del servidor; hasta tenerla, la consulta cada 3 s alcanza sola. La firma de las notificaciones se implementó con el formato de los SDK de MP y hay que confirmarla con "Simular notificación" del panel.
 - **Dependencia de internet:** al estar hosteado, sin conexión en el kiosco no se puede usar el sistema. No hay modo sin conexión (ver abajo).
 
 ## Corte de internet o de luz
@@ -199,7 +207,7 @@ No hay modo sin conexión. Durante un corte:
 ## Preguntas abiertas
 
 - [x] ¿Qué pasa si se corta internet en el kiosco? → No hay modo sin conexión; se anota en papel y se carga después (ver "Corte de internet o de luz").
-- [ ] ¿Qué modalidad de Mercado Pago: QR dinámico, QR estático o terminal Point?
+- [x] ¿Qué modalidad de Mercado Pago: QR dinámico, QR estático o terminal Point? → Point Smart en modo integrado (PDV), con tarjeta o con el QR que muestra la propia terminal. Sin QR generado por el sistema ni transferencias por alias (confirmado por el dueño el 2026-11-11).
 - [x] ¿Qué otros medios de pago hay además de efectivo y MP? → Débito y crédito. Las transferencias entran por Mercado Pago.
 - [x] ¿Se facturan las ventas con débito y crédito, o solo si el cliente lo pide? → Se factura sola la parte cobrada con débito, crédito o Mercado Pago; el efectivo, solo si el cliente lo pide (ver "Facturación").
 - [x] ¿Hay productos sin código de barras? → Sí: el código es opcional, se buscan por nombre y hay un ítem "Varios" con precio libre.

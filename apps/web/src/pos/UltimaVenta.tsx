@@ -42,6 +42,9 @@ export function UltimaVenta({
   alImprimir: () => void;
 }) {
   const facturas = (venta.facturas ?? []).map(estadoFactura).filter((t) => t !== null);
+  // Pago mixto con el Point: el Point ya cobró su parte; ahora se cobra el efectivo.
+  const efectivo = venta.pagos.find((p) => p.medio === 'efectivo');
+  const efectivoACobrar = venta.cobro && efectivo ? efectivo : null;
   return (
     <div
       role="region"
@@ -51,8 +54,14 @@ export function UltimaVenta({
       <div>
         <p>
           <strong>Venta #{venta.numero} cobrada</strong> · {formatearPesos(venta.total)}
+          {efectivoACobrar && (
+            <span className="ml-2 block text-xl font-bold">
+              {`Cobrá ${formatearPesos(efectivoACobrar.monto)} en efectivo`}
+              {efectivoACobrar.vuelto ? ` · vuelto ${formatearPesos(efectivoACobrar.vuelto)}` : ''}
+            </span>
+          )}
           {venta.pagos.map((p) =>
-            p.vuelto ? (
+            p.vuelto && !efectivoACobrar ? (
               <span key={p.medio} className="ml-2 text-xl font-bold">
                 Vuelto: {formatearPesos(p.vuelto)}
               </span>

@@ -44,8 +44,17 @@ export const cierreSchema = z
   });
 export type Cierre = z.input<typeof cierreSchema>;
 
-/** `pago_proveedor` solo lo crea el pago de un pedido; no se registra suelto. */
-export const TIPOS_MOVIMIENTO_CAJA = ['gasto', 'retiro', 'ingreso', 'pago_proveedor'] as const;
+/**
+ * `pago_proveedor` solo lo crea el pago de un pedido y `devolucion_cobro` la devolución en
+ * efectivo de un cobro de Mercado Pago de una venta cancelada; no se registran sueltos.
+ */
+export const TIPOS_MOVIMIENTO_CAJA = [
+  'gasto',
+  'retiro',
+  'ingreso',
+  'pago_proveedor',
+  'devolucion_cobro',
+] as const;
 export const tipoMovimientoCajaSchema = z.enum(TIPOS_MOVIMIENTO_CAJA);
 /** Los que se registran sueltos, desde F8 o la pantalla de Mercado Pago. */
 export const TIPOS_MOVIMIENTO_SUELTO = ['gasto', 'retiro', 'ingreso'] as const;
@@ -57,6 +66,7 @@ export const NOMBRE_MOVIMIENTO_CAJA: Record<TipoMovimientoCaja, string> = {
   retiro: 'Retiro',
   ingreso: 'Ingreso',
   pago_proveedor: 'Pago a proveedor',
+  devolucion_cobro: 'Devolución de cobro de Mercado Pago',
 };
 
 /** Lista fija: los pagos a proveedor no son gastos (van por pedidos). */
@@ -152,8 +162,18 @@ export const estadoCajaSchema = z.object({
    * facturación con ARCA está configurada; sin configuración no se manda.
    */
   facturacionHabilitada: z.boolean().optional(),
+  /**
+   * El cobro con débito, crédito o Mercado Pago pasa por el Point. Solo viene, en `true`,
+   * con el Point configurado; sin él no se manda (y tampoco `devolucionesPendientes`).
+   */
+  pointHabilitado: z.boolean().optional(),
+  /** Cobros de ventas canceladas que se aprobaron igual: devolverlos en efectivo. */
+  devolucionesPendientes: z
+    .array(z.object({ cobroId: z.uuid(), monto: montoSalidaSchema, ventaNumero: z.number().int() }))
+    .optional(),
 });
 export type EstadoCaja = z.infer<typeof estadoCajaSchema>;
+export type DevolucionPendiente = NonNullable<EstadoCaja['devolucionesPendientes']>[number];
 
 /** Respuesta del cierre. El empleado no recibe `esperado` ni `diferencia` (cierre ciego). */
 export const cierreRespuestaSchema = z.object({

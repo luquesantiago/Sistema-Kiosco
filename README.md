@@ -29,7 +29,11 @@ Sistema de gestión para un kiosco familiar: ventas con lector de código de bar
    - ✅ `dashboard`: ventas, ganancia, gastos, resultado, más vendidos, efectivo en caja y pendiente de pagar.
 4. 🚧 **Reposición** (rama `etapa-4`):
    - 🚧 `aviso-reposicion-diario`: aviso de las 12:00 por WhatsApp con lo que hay que reponer, agrupado por proveedor, con recuperación hasta las 19:00 y uno solo por día. Está implementado; falta probarlo con el chip.
-5. Facturación electrónica ARCA e integración con Mercado Pago
+5. 🚧 **Facturación y cobro con Mercado Pago** (rama `etapa-4`):
+   - ✅ `saldo-mercado-pago`: saldo de la cuenta de MP leído de la API.
+   - ✅ `facturacion-arca`: Factura C electrónica automática por la parte electrónica y a pedido por el efectivo. Falta probarla en homologación con el certificado del dueño.
+   - 🚧 `cobro-mercado-pago`: débito, crédito y Mercado Pago cobrados con el Point Smart en modo integrado; la venta queda en espera hasta que MP aprueba el pago (consulta cada 3 s y webhooks firmados), con cancelación, reintento, vencimiento a los 10 minutos, pago mixto y devolución en efectivo de un pago que entra después de cancelar. Está implementado y probado con un Mercado Pago simulado; falta probarlo con las credenciales de prueba y el Point del dueño (y los webhooks, con el servidor con HTTPS).
+     - **Lo que tiene que aportar el dueño:** la aplicación en Mercado Pago Developers con Point habilitado, sus credenciales de prueba y de producción y los usuarios de prueba, el Point Smart vinculado a la cuenta del kiosco y actualizado, y (cuando esté el servidor) la clave secreta de webhooks del evento Order. Ver `infra/README.md`.
 
 ## Desarrollo
 

@@ -134,8 +134,19 @@ export function DialogoCobro({
   );
 }
 
-/** Pago mixto: el total repartido entre varios medios, hasta que no falte nada. */
-export function DialogoPagoMixto({ total, enviando, error, alConfirmar, alCerrar }: PropsCobro) {
+/**
+ * Pago mixto: el total repartido entre varios medios, hasta que no falte nada. Con el
+ * Point (`conPoint`) se permite una sola parte electrónica (va primero a la terminal) y el
+ * efectivo puede llevar "Paga con" para el vuelto.
+ */
+export function DialogoPagoMixto({
+  total,
+  enviando,
+  error,
+  alConfirmar,
+  alCerrar,
+  conPoint = false,
+}: PropsCobro & { conPoint?: boolean }) {
   const [montos, setMontos] = useState<Record<MedioPago, string>>({
     efectivo: '',
     debito: '',
@@ -147,12 +158,32 @@ export function DialogoPagoMixto({ total, enviando, error, alConfirmar, alCerrar
   const hayInvalidos = valores.some((v) => v === null || comparar(v, '0') <= 0);
   const asignado = sumar(...valores.filter((v): v is string => v !== null));
   const falta = restar(total, asignado);
-  const completo = !hayInvalidos && cargados.length > 0 && sonIguales(falta, '0');
+  const [pagaCon, setPagaCon] = useState('');
+  // Con el Point, el primer medio electrónico con monto deja a los otros deshabilitados.
+  const electronico = conPoint
+    ? MEDIOS_PAGO.find((m) => m !== 'efectivo' && montos[m].trim() !== '')
+    : undefined;
+  const deshabilitado = (medio: MedioPago) =>
+    electronico !== undefined && medio !== 'efectivo' && medio !== electronico;
+  const efectivo = montos.efectivo.trim() === '' ? null : entradaAMonto(montos.efectivo);
+  const recibido = conPoint && pagaCon.trim() !== '' ? entradaAMonto(pagaCon) : null;
+  const recibidoInvalido =
+    conPoint &&
+    pagaCon.trim() !== '' &&
+    (recibido === null || efectivo === null || comparar(recibido, efectivo) < 0);
+  const completo =
+    !hayInvalidos && !recibidoInvalido && cargados.length > 0 && sonIguales(falta, '0');
 
   const confirmar = (e: FormEvent) => {
     e.preventDefault();
     if (!completo || enviando) return;
-    alConfirmar(cargados.map((medio) => ({ medio, monto: entradaAMonto(montos[medio])! })));
+    alConfirmar(
+      cargados.map((medio) => ({
+        medio,
+        monto: entradaAMonto(montos[medio])!,
+        ...(medio === 'efectivo' && recibido ? { montoRecibido: recibido } : {}),
+      })),
+    );
   };
 
   return (
@@ -168,12 +199,35 @@ export function DialogoPagoMixto({ total, enviando, error, alConfirmar, alCerrar
                 inputMode="decimal"
                 autoFocus={i === 0}
                 autoComplete="off"
+                disabled={deshabilitado(medio)}
                 value={montos[medio]}
                 onChange={(e) => setMontos({ ...montos, [medio]: e.target.value })}
               />
             </label>
           ))}
         </div>
+        {electronico && (
+          <p className="text-sm text-slate-600">
+            Solo una parte se cobra con el Point: el resto, en efectivo.
+          </p>
+        )}
+        {conPoint && (
+          <label className="block">
+            <span className="text-sm font-medium">Paga con (opcional)</span>
+            <input
+              className="campo"
+              inputMode="decimal"
+              autoComplete="off"
+              value={pagaCon}
+              onChange={(e) => setPagaCon(e.target.value)}
+            />
+          </label>
+        )}
+        {recibidoInvalido && (
+          <p role="alert" className="text-sm text-red-700">
+            Lo que paga el cliente no alcanza para la parte en efectivo.
+          </p>
+        )}
         <p role="status" className="text-center text-lg font-semibold">
           {hayInvalidos
             ? 'Revisá los montos.'

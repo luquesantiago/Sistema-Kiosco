@@ -37,7 +37,9 @@ export const rutasCaja: FastifyPluginAsyncZod<{
   prisma: PrismaClient;
   ahora: () => Date;
   facturacion?: Facturacion;
-}> = async (app, { prisma, ahora, facturacion }) => {
+  /** Con el Point configurado, el estado suma `pointHabilitado` y las devoluciones pendientes. */
+  conPoint?: boolean;
+}> = async (app, { prisma, ahora, facturacion, conPoint = false }) => {
   // El mostrador ofrece pedir factura (F10) solo si la facturación está configurada.
   const conFacturacion = <T extends object>(estado: T) =>
     facturacion ? { ...estado, facturacionHabilitada: true } : estado;
@@ -45,7 +47,8 @@ export const rutasCaja: FastifyPluginAsyncZod<{
   app.get(
     '/estado',
     { ...conSesion, schema: { response: { 200: estadoCajaSchema } } },
-    async (request) => conFacturacion(await estadoDeCaja(prisma, usuarioActual(request))),
+    async (request) =>
+      conFacturacion(await estadoDeCaja(prisma, usuarioActual(request), { conPoint })),
   );
 
   app.post(
@@ -55,7 +58,9 @@ export const rutasCaja: FastifyPluginAsyncZod<{
       reply
         .status(201)
         .send(
-          conFacturacion(await abrirTurno(prisma, request.body, usuarioActual(request), ahora())),
+          conFacturacion(
+            await abrirTurno(prisma, request.body, usuarioActual(request), ahora(), { conPoint }),
+          ),
         ),
   );
 

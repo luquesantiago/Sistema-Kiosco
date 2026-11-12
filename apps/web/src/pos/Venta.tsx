@@ -1,6 +1,7 @@
 import {
   CODIGOS_ERROR,
   preciosActualesSchema,
+  type DevolucionPendiente,
   type FacturaVenta,
   type MedioPago,
   type PagoEntrada,
@@ -26,6 +27,7 @@ import {
 } from './carrito.js';
 import { CLAVE_ESTADO_CAJA, esErrorDeTurno, useEstadoCaja } from './estadoCaja.js';
 import { AbrirTurno, DialogoCaja, DialogoCerrarTurno, TurnoDeOtro } from './Caja.js';
+import { DialogoDevolucionCobro, DialogoEsperaCobro } from './CobroPoint.js';
 import { DialogoCobro, DialogoPagoMixto, DialogoVarios } from './Dialogos.js';
 import { sonarError } from './sonido.js';
 import { useImpresionTicket } from './Ticket.js';
@@ -80,7 +82,7 @@ let contadorVarios = 0;
  */
 export function Venta() {
   const { data: sesion } = useSesion();
-  const { data: estado, error } = useEstadoCaja();
+  const { data: estado, error } = useEstadoCaja({ sondear: true });
 
   if (error) return <MensajeError error={error} />;
   if (!estado || !sesion) return <p>Cargando caja…</p>;
@@ -96,6 +98,8 @@ export function Venta() {
       esMio={turno.esMio}
       esAdmin={sesion.rol === 'admin'}
       facturacionHabilitada={estado.facturacionHabilitada === true}
+      pointHabilitado={estado.pointHabilitado === true}
+      devolucion={estado.devolucionesPendientes?.[0] ?? null}
     />
   );
 }
@@ -107,6 +111,8 @@ function PuntoDeVenta({
   esMio,
   esAdmin,
   facturacionHabilitada,
+  pointHabilitado,
+  devolucion,
 }: {
   turnoId: string;
   responsable: { id: string; nombre: string };
@@ -114,11 +120,18 @@ function PuntoDeVenta({
   esAdmin: boolean;
   /** La API tiene ARCA configurado: se ofrece pedir factura (F10). */
   facturacionHabilitada: boolean;
+  /** Débito, crédito y Mercado Pago se cobran con la terminal Point. */
+  pointHabilitado: boolean;
+  /** Un pago que entró después de cancelar: bloquea la venta hasta resolverlo. */
+  devolucion: DevolucionPendiente | null;
 }) {
   const [carrito, despachar] = useReducer(reducirCarrito, undefined, cargarCarrito);
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   const [ultimaVenta, setUltimaVenta] = useState<VentaDetalle | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  /** Venta esperando el cobro en el Point: el carrito queda intacto hasta que se resuelve. */
+  const [enEspera, setEnEspera] = useState<VentaDetalle | null>(null);
+  const bloqueada = enEspera !== null || devolucion !== null;
   const campo = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { imprimirConFactura, ticket } = useImpresionTicket();
@@ -129,12 +142,34 @@ function PuntoDeVenta({
 
   // Al cerrar un diálogo, el foco vuelve al campo de escaneo.
   useEffect(() => {
-    if (dialogo === null) campo.current?.focus();
-  }, [dialogo]);
+    if (dialogo === null && !bloqueada) campo.current?.focus();
+  }, [dialogo, bloqueada]);
+
+  // Con el Point, al entrar se retoma la venta que quedó esperando el cobro (recarga).
+  useEffect(() => {
+    if (!pointHabilitado) return;
+    let vigente = true;
+    pedir<VentaDetalle | null>('GET', '/ventas/en-espera').then(
+      (venta) => {
+        if (vigente && venta) setEnEspera((actual) => actual ?? venta);
+      },
+      () => {},
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [pointHabilitado]);
 
   const cobro = useMutation({
     mutationFn: (datos: VentaEntrada) => pedir<VentaDetalle>('POST', '/ventas', datos),
     onSuccess: (venta) => {
+      if (venta.estado === 'pendiente') {
+        // El cobro fue al Point: el carrito se guarda hasta que se apruebe o se cancele.
+        setAviso(null);
+        setDialogo(null);
+        setEnEspera(venta);
+        return;
+      }
       setUltimaVenta(venta);
       setAviso(null);
       despachar({ tipo: 'vaciar' });
@@ -181,7 +216,8 @@ function PuntoDeVenta({
 
   // F9: si la factura está en trámite, espera hasta 5 s a que se autorice.
   const imprimirUltima = () => {
-    if (!ultimaVenta) return;
+    // Solo de una venta cobrada: una en espera o cancelada no tiene ticket.
+    if (ultimaVenta?.estado !== 'pagada') return;
     void imprimirConFactura(ultimaVenta).then((impresa) =>
       setUltimaVenta((actual) => (actual?.id === impresa.id ? impresa : actual)),
     );
@@ -202,6 +238,14 @@ function PuntoDeVenta({
     const alPresionar = (e: KeyboardEvent) => {
       const medio = ATAJOS_COBRO[e.key];
       const esAtajoF = medio !== undefined || ['F6', 'F7', 'F8', 'F9', 'F10'].includes(e.key);
+      if (bloqueada) {
+        // La espera del cobro y el aviso de devolución manejan sus teclas.
+        if (esAtajoF) e.preventDefault();
+        if (enEspera && (medio || e.key === 'F6')) {
+          setAviso('Primero hay que terminar o cancelar el cobro en espera.');
+        }
+        return;
+      }
       if (dialogo !== null) {
         // El diálogo maneja Enter y Esc; las F no tienen que llegar al navegador (F1 = ayuda).
         if (esAtajoF) e.preventDefault();
@@ -286,15 +330,17 @@ function PuntoDeVenta({
       </div>
       <RecordatoriosPedidos />
       <div className="rounded-lg bg-white p-4 shadow">
-        <EscanerDeProductos<ProductoVenta>
-          campoRef={campo}
-          alElegir={(producto) => {
-            setAviso(null);
-            despachar({ tipo: 'agregar', producto });
-          }}
-          alNoEncontrar={sonarError}
-          avisoInexistente="Revisá el código o usá F7 para cobrarlo como Varios."
-        />
+        <fieldset disabled={bloqueada} className="contents">
+          <EscanerDeProductos<ProductoVenta>
+            campoRef={campo}
+            alElegir={(producto) => {
+              setAviso(null);
+              despachar({ tipo: 'agregar', producto });
+            }}
+            alNoEncontrar={sonarError}
+            avisoInexistente="Revisá el código o usá F7 para cobrarlo como Varios."
+          />
+        </fieldset>
       </div>
 
       {aviso && (
@@ -388,7 +434,26 @@ function PuntoDeVenta({
       )}
 
       {dialogo?.tipo === 'cobro' && <DialogoCobro medio={dialogo.medio} {...propsCobro} />}
-      {dialogo?.tipo === 'mixto' && <DialogoPagoMixto {...propsCobro} />}
+      {dialogo?.tipo === 'mixto' && <DialogoPagoMixto conPoint={pointHabilitado} {...propsCobro} />}
+      {enEspera && (
+        <DialogoEsperaCobro
+          key={enEspera.id}
+          venta={enEspera}
+          alAprobar={(venta, llegoAPagar) => {
+            setEnEspera(null);
+            setUltimaVenta(venta);
+            setAviso(llegoAPagar ? 'El cliente llegó a pagar: la venta quedó cobrada' : null);
+            despachar({ tipo: 'vaciar' });
+            void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+          }}
+          alVolverAlCarrito={(avisoAlVolver) => {
+            setEnEspera(null);
+            setAviso(avisoAlVolver);
+            void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+          }}
+        />
+      )}
+      {devolucion && !enEspera && <DialogoDevolucionCobro devolucion={devolucion} />}
       {dialogo?.tipo === 'caja' && (
         <DialogoCaja esAdmin={esAdmin} alCerrar={() => setDialogo(null)} />
       )}

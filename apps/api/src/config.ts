@@ -40,6 +40,10 @@ const configSchema = z
     WAHA_API_KEY: z.string().min(1).optional(),
     // Mercado Pago es opcional: sin token el saldo aparece como "no configurado".
     MP_ACCESS_TOKEN: z.string().min(1).optional(),
+    // Con la terminal, débito, crédito y Mercado Pago se cobran con el Point (exige el token).
+    MP_TERMINAL_ID: z.string().min(1).optional(),
+    // Clave de las notificaciones (webhooks): sin ella solo se consulta (exige la terminal).
+    MP_WEBHOOK_SECRET: z.string().min(1).optional(),
     // Sin ARCA el sistema vende igual, sin facturar.
     ...VARIABLES_ARCA,
   })
@@ -56,6 +60,14 @@ const configSchema = z
     };
     todasONinguna(['WAHA_URL', 'WAHA_API_KEY']);
     todasONinguna(Object.keys(VARIABLES_ARCA) as (keyof typeof VARIABLES_ARCA)[]);
+    // El Point necesita el token, y las notificaciones necesitan el Point.
+    const exige = (variable: keyof typeof config, requerida: keyof typeof config) => {
+      if (config[variable] !== undefined && config[requerida] === undefined) {
+        ctx.addIssue({ code: 'custom', path: [requerida], message: 'falta' });
+      }
+    };
+    exige('MP_TERMINAL_ID', 'MP_ACCESS_TOKEN');
+    exige('MP_WEBHOOK_SECRET', 'MP_TERMINAL_ID');
   });
 
 export type Config = z.infer<typeof configSchema>;
@@ -70,6 +82,21 @@ export function configArca(config: Config): ConfigArca | undefined {
   );
   if (Object.values(valores).some((v) => v === undefined)) return undefined;
   return valores as ConfigArca;
+}
+
+/** La terminal Point configurada (token y terminal), o `undefined`: entonces nada pasa por el Point. */
+export interface ConfigPoint {
+  terminalId: string;
+  /** Sin clave, las notificaciones de MP se rechazan y solo se consulta. */
+  webhookSecret?: string;
+}
+
+export function configPoint(config: Config): ConfigPoint | undefined {
+  if (!config.MP_ACCESS_TOKEN || !config.MP_TERMINAL_ID) return undefined;
+  return {
+    terminalId: config.MP_TERMINAL_ID,
+    ...(config.MP_WEBHOOK_SECRET ? { webhookSecret: config.MP_WEBHOOK_SECRET } : {}),
+  };
 }
 
 export type ResultadoConfig = { ok: true; config: Config } | { ok: false; errores: string[] };

@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // El comando de crear admin también se compila: en producción no hay tsx.
-  entry: ['src/server.ts', 'src/cli/crear-admin.ts'],
+  // Los comandos de consola también se compilan: en producción no hay tsx.
+  entry: ['src/server.ts', 'src/cli/crear-admin.ts', 'src/cli/mp-terminales.ts'],
   format: 'esm',
   platform: 'node',
   target: 'node24',

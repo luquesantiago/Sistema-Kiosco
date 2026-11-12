@@ -77,6 +77,17 @@ Sin `WAHA_URL`, la API funciona igual: los avisos quedan pendientes y la pantall
 
 Para leer el saldo real hace falta el **Access Token** de la aplicación del kiosco (Mercado Pago Developers → Tus integraciones → la aplicación → Credenciales). Descomentar `MP_ACCESS_TOKEN` en `apps/api/.env` con el token de prueba (o el de producción, para comparar con la app de MP) y reiniciar `pnpm dev`. El token nunca se sube al repositorio ni se pasa por chat. Sin `MP_ACCESS_TOKEN`, la API funciona igual y el saldo dice "Mercado Pago no configurado"; definida y vacía, la API no arranca.
 
+### Cobro con el Point en desarrollo
+
+Sin `MP_TERMINAL_ID`, F2, F3 y F4 registran la venta pagada en el momento (como antes): así se trabaja sin credenciales. Para probar con el Point hacen falta las **credenciales de prueba** y los **usuarios de prueba** (vendedor y comprador) de la aplicación, y la terminal encendida, con sesión iniciada y vinculada a la cuenta:
+
+```bash
+pnpm --filter api mp:terminales                  # lista las terminales (id y modo)
+pnpm --filter api mp:terminales --pdv <id>       # pasa esa terminal a modo integrado (PDV)
+```
+
+Después, descomentar `MP_TERMINAL_ID=<id>` en `apps/api/.env` y reiniciar `pnpm dev`. Sin URL HTTPS no hay notificaciones: el sistema consulta cada cobro cada 3 s y alcanza. El comando nunca muestra el token.
+
 ## ARCA de desarrollo (homologación)
 
 Para probar la factura electrónica hace falta el **certificado de homologación** del CUIT del dueño (ARCA → "Autogestión Certificados Homologación", WSASS), con el servicio `wsfe` asociado, y la clave privada con la que se pidió (ver [Facturación con ARCA](#facturación-con-arca)). Guardar los dos archivos en `infra/arca/` (está en el `.gitignore`), descomentar **todas** las variables `ARCA_*` de `apps/api/.env` con `ARCA_ENTORNO=homologacion` y reiniciar `pnpm dev`. El log de arranque dice el entorno y el punto de venta, y las facturas impresas dicen "HOMOLOGACIÓN – SIN VALIDEZ FISCAL".
@@ -350,6 +361,23 @@ docker compose -f infra/docker-compose.prod.yml up -d app   # recrea la app con 
 - El token queda solo en `infra/.env` (fuera del repositorio): la app no lo manda a la web, no lo guarda en la base ni lo escribe en los logs.
 - Sin el token, todo funciona y el saldo dice "Mercado Pago no configurado". Si la línea queda descomentada pero vacía, la app no arranca: dejarla comentada.
 - Si el saldo dice "Mercado Pago rechazó las credenciales", el token está mal copiado o se renovó en Mercado Pago: cargar el actual y repetir.
+
+#### Activar el cobro con el Point
+
+Con el Point configurado, débito, crédito y Mercado Pago se cobran con la terminal (Point Smart en modo integrado) y la venta queda en espera hasta que MP aprueba el pago. Hace falta el token de producción ya cargado (paso anterior) y la terminal encendida, con sesión iniciada. **Como `kiosco`**, en `/opt/kiosco`:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml exec app node dist/cli/mp-terminales.js
+docker compose -f infra/docker-compose.prod.yml exec app node dist/cli/mp-terminales.js --pdv <id>
+nano infra/.env   # descomentar MP_TERMINAL_ID=<id>
+docker compose -f infra/docker-compose.prod.yml up -d app
+```
+
+Notificaciones (más rápidas; sin ellas el sistema consulta cada 3 s): en Mercado Pago Developers → la aplicación → **Webhooks**, modo productivo, URL `https://<dominio>/api/mercado-pago/webhook` y evento **Order**. Al guardar, MP muestra la **clave secreta**: cargarla como `MP_WEBHOOK_SECRET` en `infra/.env` y reiniciar la app como arriba. Con **Simular notificación** se prueba la firma: tiene que responder `200`.
+
+- `MP_TERMINAL_ID` exige `MP_ACCESS_TOKEN`, y `MP_WEBHOOK_SECRET` exige `MP_TERMINAL_ID`: si falta la otra, la app no arranca y dice cuál.
+- **Vuelta atrás:** comentar `MP_TERMINAL_ID` y reiniciar. Antes, cancelar las ventas que estén en espera (Ventas → "En espera").
+- Mientras MP no responde, el mostrador solo deja cobrar en efectivo. Los cobros raros (la terminal pidió revisar, el cliente se fue sin la devolución) aparecen en **Administración → Mercado Pago → Cobros a revisar**.
 
 #### Facturación con ARCA
 
