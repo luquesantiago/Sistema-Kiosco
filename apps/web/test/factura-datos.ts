@@ -70,6 +70,14 @@ export function ventaDetalle({
   puedePedirFactura = false,
   emisor = EMISOR as typeof EMISOR | null,
   estado = 'pagada',
+}: {
+  total?: string;
+  pagos?: Pago[];
+  facturas?: unknown[];
+  sinFacturar?: string;
+  puedePedirFactura?: boolean;
+  emisor?: typeof EMISOR | null;
+  estado?: string;
 } = {}) {
   return {
     id: VENTA_ID,
